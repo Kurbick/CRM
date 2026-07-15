@@ -38,6 +38,10 @@
                        class="text-sm font-medium {{ request()->routeIs('invoices.*') ? 'text-blue-600' : 'text-gray-500 hover:text-gray-900' }}">
                         Инвойсы
                     </a>
+                    <a href="{{ route('contracts.index') }}"
+                        class="text-sm font-medium {{ request()->routeIs('contracts.*') ? 'text-blue-600' : 'text-gray-500 hover:text-gray-900' }}">
+                        Договора
+                    </a>
                 </div>
 
             </div>

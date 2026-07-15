@@ -7,6 +7,8 @@ use App\Http\Controllers\Web\InvoiceController;
 use App\Http\Controllers\Web\PaymentController;
 use App\Http\Controllers\Web\CompanyContactController;
 use App\Http\Controllers\Web\ContractController;
+use App\Http\Controllers\Web\OrderController;
+use App\Http\Controllers\Web\SubscriptionController;
 
 Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 
@@ -37,3 +39,37 @@ Route::put('contracts/{contract}', [ContractController::class, 'update'])
     ->name('contracts.update');
 Route::delete('contracts/{contract}', [ContractController::class, 'destroy'])
     ->name('contracts.destroy');
+Route::get('contracts', [ContractController::class, 'index'])
+    ->name('contracts.index');
+    Route::get('contracts/{contract}', [ContractController::class, 'show'])
+    ->name('contracts.show');
+
+// Заказы
+Route::get('contracts/{contract}/orders/create', [OrderController::class, 'create'])
+    ->name('contracts.orders.create');
+Route::post('contracts/{contract}/orders', [OrderController::class, 'store'])
+    ->name('contracts.orders.store');
+Route::get('orders/{order}/edit', [OrderController::class, 'edit'])
+    ->name('orders.edit');
+Route::put('orders/{order}', [OrderController::class, 'update'])
+    ->name('orders.update');
+Route::delete('orders/{order}', [OrderController::class, 'destroy'])
+    ->name('orders.destroy');
+
+// Подписки
+Route::get('contracts/{contract}/subscriptions/create', [SubscriptionController::class, 'create'])
+    ->name('contracts.subscriptions.create');
+Route::post('contracts/{contract}/subscriptions', [SubscriptionController::class, 'store'])
+    ->name('contracts.subscriptions.store');
+Route::get('subscriptions/{subscription}/edit', [SubscriptionController::class, 'edit'])
+    ->name('subscriptions.edit');
+Route::put('subscriptions/{subscription}', [SubscriptionController::class, 'update'])
+    ->name('subscriptions.update');
+Route::delete('subscriptions/{subscription}', [SubscriptionController::class, 'destroy'])
+    ->name('subscriptions.destroy');
+
+// AJAX эндпоинты для формы инвойса
+Route::get('ajax/companies/{company}/contracts', [InvoiceController::class, 'getContracts'])
+    ->name('ajax.contracts');
+Route::get('ajax/contracts/{contract}/items', [InvoiceController::class, 'getContractItems'])
+    ->name('ajax.items');

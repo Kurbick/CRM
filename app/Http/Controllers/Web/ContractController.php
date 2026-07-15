@@ -13,6 +13,15 @@ class ContractController extends Controller
     {
         return view('contracts.create', compact('company'));
     }
+    
+    public function index()
+    {
+        $contracts = \App\Models\Contract::with('company')
+            ->orderBy('created_at', 'desc')
+            ->paginate(15);
+
+        return view('contracts.index', compact('contracts'));
+    }
 
     public function store(Request $request, Company $company)
     {
@@ -28,6 +37,17 @@ class ContractController extends Controller
 
         return redirect()->route('companies.show', $company)
             ->with('success', 'Договор успешно добавлен.');
+    }
+
+    public function show(Contract $contract)
+    {
+        $contract->load([
+            'company',
+            'orders.serviceType',
+            'subscriptions.serviceType',
+        ]);
+
+        return view('contracts.show', compact('contract'));
     }
 
     public function edit(Contract $contract)
