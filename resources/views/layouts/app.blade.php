@@ -25,23 +25,40 @@
                 </a>
 
                 {{-- Навигационные ссылки --}}
-                <div class="flex items-center gap-6">
-                    <a href="{{ route('dashboard') }}"
-                       class="text-sm font-medium {{ request()->routeIs('dashboard') ? 'text-blue-600' : 'text-gray-500 hover:text-gray-900' }}">
-                        Дашборд
-                    </a>
-                    <a href="{{ route('companies.index') }}"
-                       class="text-sm font-medium {{ request()->routeIs('companies.*') ? 'text-blue-600' : 'text-gray-500 hover:text-gray-900' }}">
-                        Компании
-                    </a>
-                    <a href="{{ route('invoices.index') }}"
-                       class="text-sm font-medium {{ request()->routeIs('invoices.*') ? 'text-blue-600' : 'text-gray-500 hover:text-gray-900' }}">
-                        Инвойсы
-                    </a>
-                    <a href="{{ route('contracts.index') }}"
-                        class="text-sm font-medium {{ request()->routeIs('contracts.*') ? 'text-blue-600' : 'text-gray-500 hover:text-gray-900' }}">
-                        Договора
-                    </a>
+                <div class="flex items-center gap-2">
+
+                <a href="{{ route('dashboard') }}"
+                class="px-3 py-2 rounded-lg text-sm font-medium transition
+                {{ request()->routeIs('dashboard')
+                        ? 'bg-blue-50 text-blue-600'
+                        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900' }}">
+                    Дашборд
+                </a>
+
+                <a href="{{ route('companies.index') }}"
+                class="px-3 py-2 rounded-lg text-sm font-medium transition
+                {{ request()->routeIs('companies.*')
+                        ? 'bg-blue-50 text-blue-600'
+                        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900' }}">
+                    Компании
+                </a>
+
+                <a href="{{ route('contracts.index') }}"
+                class="px-3 py-2 rounded-lg text-sm font-medium transition
+                {{ request()->routeIs('contracts.*')
+                        ? 'bg-blue-50 text-blue-600'
+                        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900' }}">
+                    Договоры
+                </a>
+
+                <a href="{{ route('invoices.index') }}"
+                class="px-3 py-2 rounded-lg text-sm font-medium transition
+                {{ request()->routeIs('invoices.*')
+                        ? 'bg-blue-50 text-blue-600'
+                        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900' }}">
+                    Инвойсы
+                </a>
+
                 </div>
 
             </div>

@@ -13,35 +13,41 @@
         @csrf
 
         <div>
-            <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Услуга <span class="text-red-500">*</span></label>
-            <select name="service_type_id"
-                    class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition"
-                    required>
-                <option value="">— Выберите услугу —</option>
-                @foreach($serviceTypes as $serviceType)
-                    <option value="{{ $serviceType->id }}" {{ old('service_type_id') == $serviceType->id ? 'selected' : '' }}>
-                        {{ $serviceType->name }} 
-                    </option>
-                @endforeach
-            </select>
-            @error('service_type_id')<p class="text-xs text-red-500 mt-1">{{ $message }}</p>@enderror
+        <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">
+            Название услуги <span class="text-red-500">*</span>
+        </label>
+
+        <input
+            type="text"
+            name="service_name"
+            value="{{ old('service_name') }}"
+            placeholder="Например: ежемесячная техническая поддержка"
+            maxlength="255"
+            class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition"
+            required
+        >
+
+        @error('service_name')
+            <p class="text-xs text-red-500 mt-1">{{ $message }}</p>
+        @enderror
         </div>
 
-        <div class="grid grid-cols-2 gap-4">
-            <div>
-                <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Дата начала <span class="text-red-500">*</span></label>
-                <input type="date" name="start_date" value="{{ old('start_date', now()->toDateString()) }}"
-                       class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition"
-                       required>
-                @error('start_date')<p class="text-xs text-red-500 mt-1">{{ $message }}</p>@enderror
-            </div>
-            <div>
-                <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">След. списание <span class="text-red-500">*</span></label>
-                <input type="date" name="next_billing_date" value="{{ old('next_billing_date') }}"
-                       class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition"
-                       required>
-                @error('next_billing_date')<p class="text-xs text-red-500 mt-1">{{ $message }}</p>@enderror
-            </div>
+        <div>
+        <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">
+            Дата начала <span class="text-red-500">*</span>
+        </label>
+
+        <input
+            type="date"
+            name="start_date"
+            value="{{ old('start_date', now()->toDateString()) }}"
+            class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition"
+            required
+        >
+
+        @error('start_date')
+            <p class="text-xs text-red-500 mt-1">{{ $message }}</p>
+        @enderror
         </div>
 
         <div class="grid grid-cols-2 gap-4">

@@ -9,6 +9,8 @@ use App\Http\Controllers\Web\CompanyContactController;
 use App\Http\Controllers\Web\ContractController;
 use App\Http\Controllers\Web\OrderController;
 use App\Http\Controllers\Web\SubscriptionController;
+use App\Http\Controllers\Web\ContractSubjectController;
+use App\Http\Controllers\Web\ContractDocumentController;
 
 Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 
@@ -31,18 +33,53 @@ Route::delete('contacts/{contact}', [CompanyContactController::class, 'destroy']
 // Договоры компании
 Route::get('companies/{company}/contracts/create', [ContractController::class, 'create'])
     ->name('companies.contracts.create');
-Route::post('companies/{company}/contracts', [ContractController::class, 'store'])
-    ->name('companies.contracts.store');
-Route::get('contracts/{contract}/edit', [ContractController::class, 'edit'])
-    ->name('contracts.edit');
-Route::put('contracts/{contract}', [ContractController::class, 'update'])
-    ->name('contracts.update');
-Route::delete('contracts/{contract}', [ContractController::class, 'destroy'])
-    ->name('contracts.destroy');
+
 Route::get('contracts', [ContractController::class, 'index'])
     ->name('contracts.index');
-    Route::get('contracts/{contract}', [ContractController::class, 'show'])
+
+Route::get('contracts/create', [ContractController::class, 'create'])
+    ->name('contracts.create');
+
+Route::post('contracts', [ContractController::class, 'store'])
+    ->name('contracts.store');
+
+Route::get(
+    'contracts/{contract}/subjects/create',
+    [ContractSubjectController::class, 'create']
+)->name('contracts.subjects.create');
+
+Route::post(
+    'contracts/{contract}/subjects',
+    [ContractSubjectController::class, 'store']
+)->name('contracts.subjects.store');
+
+Route::get('contracts/{contract}', [ContractController::class, 'show'])
     ->name('contracts.show');
+
+Route::get('contracts/{contract}/edit', [ContractController::class, 'edit'])
+    ->name('contracts.edit');
+
+Route::put('contracts/{contract}', [ContractController::class, 'update'])
+    ->name('contracts.update');
+
+Route::delete('contracts/{contract}', [ContractController::class, 'destroy'])
+    ->name('contracts.destroy');
+
+// Документы договора
+Route::post(
+    'contracts/{contract}/documents',
+    [ContractDocumentController::class, 'store']
+)->name('contracts.documents.store');
+
+Route::get(
+    'contract-documents/{document}/download',
+    [ContractDocumentController::class, 'download']
+)->name('contract-documents.download');
+
+Route::delete(
+    'contract-documents/{document}',
+    [ContractDocumentController::class, 'destroy']
+)->name('contract-documents.destroy');
 
 // Заказы
 Route::get('contracts/{contract}/orders/create', [OrderController::class, 'create'])

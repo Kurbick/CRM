@@ -12,63 +12,85 @@ class OrderController extends Controller
 {
     public function create(Contract $contract)
     {
-        $serviceTypes = ServiceType::where('type', 'one_time')->orderBy('name')->get();
-        return view('orders.create', compact('contract', 'serviceTypes'));
+        return view('orders.create', compact('contract'));
     }
 
     public function store(Request $request, Contract $contract)
     {
-        $request->validate([
-            'service_type_id' => 'required|exists:service_types,id',
-            'order_date'      => 'required|date',
-            'deadline'        => 'nullable|date|after:order_date',
-            'price'           => 'required|numeric|min:0',
-            'payment_terms'   => 'nullable|integer|min:1|max:365',
-            'status'          => 'required|in:in_progress,completed,cancelled',
-            'comment'         => 'nullable|string',
+        $validated = $request->validate([
+            'service_name'  => 'required|string|max:255',
+            'order_date'    => 'required|date',
+            'deadline'      => 'nullable|date|after:order_date',
+            'price'         => 'required|numeric|min:0',
+            'payment_terms' => 'nullable|integer|min:1|max:365',
+            'status'        => 'required|in:in_progress,completed,cancelled',
+            'comment'       => 'nullable|string',
         ]);
 
-        $contract->orders()->create($request->all());
+        $serviceType = ServiceType::firstOrCreate(
+            [
+                'name' => trim($validated['service_name']),
+                'type' => 'one_time',
+            ],
+            [
+                'base_price' => $validated['price'],
+            ]
+        );
 
-        return redirect()->route('contracts.show', $contract)
-            ->with('success', 'Заказ успешно добавлен.');
+        unset($validated['service_name']);
+
+        $validated['service_type_id'] = $serviceType->id;
+
+        $contract->orders()->create($validated);
+
+        return redirect()
+            ->route('contracts.show', $contract)
+            ->with('success', 'Разовая услуга успешно добавлена.');
     }
 
     public function edit(Order $order)
     {
         $contract = $order->contract;
-        $serviceTypes = ServiceType::where('type', 'one_time')->orderBy('name')->get();
-        return view('orders.edit', compact('order', 'contract', 'serviceTypes'));
+
+        return view('orders.edit', compact('order', 'contract'));
     }
 
     public function update(Request $request, Order $order)
     {
-        $request->validate([
-            'service_type_id' => 'required|exists:service_types,id',
-            'order_date'      => 'required|date',
-            'deadline'        => 'nullable|date|after:order_date',
-            'price'           => 'required|numeric|min:0',
-            'payment_terms'   => 'nullable|integer|min:1|max:365',
-            'status'          => 'required|in:in_progress,completed,cancelled',
-            'comment'         => 'nullable|string',
+        $validated = $request->validate([
+            'title'         => 'required|string|max:255',
+            'order_date'    => 'required|date',
+            'deadline'      => 'nullable|date|after:order_date',
+            'price'         => 'required|numeric|min:0',
+            'payment_terms' => 'nullable|integer|min:1|max:365',
+            'status'        => 'required|in:in_progress,completed,cancelled',
+            'comment'       => 'nullable|string',
         ]);
 
-        $order->update($request->all());
+        $validated['title'] = trim($validated['title']);
+        $validated['service_type_id'] = null;
 
-        return redirect()->route('contracts.show', $order->contract)
-            ->with('success', 'Заказ обновлён.');
+        $order->update($validated);
+
+        return redirect()
+            ->route('contracts.show', $order->contract)
+            ->with('success', 'Разовая услуга обновлена.');
     }
 
     public function destroy(Order $order)
     {
         $contract = $order->contract;
+
         try {
             $order->delete();
-            return redirect()->route('contracts.show', $contract)
-                ->with('success', 'Заказ удалён.');
+
+            return redirect()
+                ->route('contracts.show', $contract)
+                ->with('success', 'Разовая услуга удалена.');
         } catch (\Exception $e) {
-            return redirect()->route('contracts.show', $contract)
-                ->with('error', 'Невозможно удалить — заказ включён в инвойс.');
+            return redirect()
+                ->route('contracts.show', $contract)
+                ->with('error', 'Невозможно удалить — услуга включена в инвойс.');
         }
     }
 }
