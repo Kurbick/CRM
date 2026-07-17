@@ -128,21 +128,17 @@
                 </div>
             </div>
 
-            <div class="mt-5 pt-5 border-t border-gray-100">
-                <p class="text-xs font-semibold text-gray-400 uppercase">
-                    Комментарий
-                </p>
+            @if (filled($contract->comment))
+                <div class="mt-5 pt-5 border-t border-gray-100">
+                    <p class="text-xs font-semibold text-gray-400 uppercase">
+                        Комментарий
+                    </p>
 
-                @if ($contract->comment)
                     <p class="mt-2 text-sm text-gray-700 whitespace-pre-line">
                         {{ $contract->comment }}
                     </p>
-                @else
-                    <p class="mt-2 text-sm text-gray-400">
-                        Комментарий не указан.
-                    </p>
-                @endif
-            </div>
+                </div>
+            @endif
         </div>
     </div>
 
@@ -300,7 +296,7 @@
                                         text-blue-600 flex items-center justify-center">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M14 2H6a2 2 0 0 0-2 2v16a2 2
-                                                         0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                                             0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M14 2v6h6" />
                                 </svg>
                             </div>
@@ -343,8 +339,8 @@
                                        text-blue-600 hover:text-blue-800 transition">
                                 <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 0 0 2 2h12a2
-                                                         2 0 0 0 2-2v-2M8 12l4 4
-                                                         4-4m-4 4V4" />
+                                                             2 0 0 0 2-2v-2M8 12l4 4
+                                                             4-4m-4 4V4" />
                                 </svg>
 
                                 Скачать
@@ -502,9 +498,9 @@
                         stroke="currentColor" stroke-width="1.5">
 
                         <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 9.75h16.5m-15 0 1.5-4.5h10.5
-                                             l1.5 4.5m-13.5 0v7.5a1.5 1.5 0 0 0
-                                             1.5 1.5h10.5a1.5 1.5 0 0 0
-                                             1.5-1.5v-7.5m-9 4.5h3" />
+                                                 l1.5 4.5m-13.5 0v7.5a1.5 1.5 0 0 0
+                                                 1.5 1.5h10.5a1.5 1.5 0 0 0
+                                                 1.5-1.5v-7.5m-9 4.5h3" />
                     </svg>
                 </div>
 

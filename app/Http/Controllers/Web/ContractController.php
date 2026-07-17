@@ -15,20 +15,36 @@ class ContractController extends Controller
         $query = Contract::query()
             ->with('company');
 
-        // Поиск по номеру договора или названию компании
+        /*
+     * Поиск по номеру договора
+     * или названию компании.
+     */
         if ($request->filled('search')) {
             $search = trim($request->input('search'));
 
             $query->where(function ($query) use ($search) {
                 $query
-                    ->where('contract_number', 'like', "%{$search}%")
-                    ->orWhereHas('company', function ($companyQuery) use ($search) {
-                        $companyQuery->where('name', 'like', "%{$search}%");
-                    });
+                    ->where(
+                        'contract_number',
+                        'like',
+                        "%{$search}%"
+                    )
+                    ->orWhereHas(
+                        'company',
+                        function ($companyQuery) use ($search) {
+                            $companyQuery->where(
+                                'name',
+                                'like',
+                                "%{$search}%"
+                            );
+                        }
+                    );
             });
         }
 
-        // Фильтр по фактическому статусу договора
+        /*
+     * Фильтрация по фактическому статусу.
+     */
         if ($request->filled('status')) {
             switch ($request->input('status')) {
                 case 'active':
@@ -37,24 +53,40 @@ class ContractController extends Controller
                         ->where(function ($query) {
                             $query
                                 ->whereNull('end_date')
-                                ->orWhereDate('end_date', '>=', today());
+                                ->orWhereDate(
+                                    'end_date',
+                                    '>=',
+                                    today()
+                                );
                         });
+
                     break;
 
                 case 'expired':
                     $query
                         ->where('status', 'active')
                         ->whereNotNull('end_date')
-                        ->whereDate('end_date', '<', today());
+                        ->whereDate(
+                            'end_date',
+                            '<',
+                            today()
+                        );
+
                     break;
 
                 case 'terminated':
-                    $query->where('status', 'terminated');
+                    $query->where(
+                        'status',
+                        'terminated'
+                    );
+
                     break;
             }
         }
 
-        // Фильтр по компании
+        /*
+     * Фильтрация по компании.
+     */
         if ($request->filled('company_id')) {
             $query->where(
                 'company_id',
@@ -62,14 +94,9 @@ class ContractController extends Controller
             );
         }
 
-        // Сортировка по дате создания
         /*
- * Сортировка по датам договора.
- *
- * Разрешаем только известные столбцы и направления,
- * чтобы параметры запроса нельзя было использовать
- * для произвольной SQL-сортировки.
- */
+     * Разрешённые параметры сортировки.
+     */
         $allowedSortColumns = [
             'start_date',
             'end_date',
@@ -90,31 +117,72 @@ class ContractController extends Controller
             'desc'
         );
 
-        if (!in_array($sortBy, $allowedSortColumns, true)) {
+        if (
+            !in_array(
+                $sortBy,
+                $allowedSortColumns,
+                true
+            )
+        ) {
             $sortBy = 'start_date';
         }
 
-        if (!in_array($sortDirection, $allowedSortDirections, true)) {
+        if (
+            !in_array(
+                $sortDirection,
+                $allowedSortDirections,
+                true
+            )
+        ) {
             $sortDirection = 'desc';
         }
 
         /*
- * Бессрочные договоры при сортировке
- * по дате окончания всегда показываем внизу.
- */
+     * Сортировка по выбранной дате.
+     *
+     * При сортировке по окончанию
+     * бессрочные договоры всегда находятся внизу.
+     */
         if ($sortBy === 'end_date') {
             $query
                 ->orderByRaw('end_date IS NULL')
-                ->orderBy('end_date', $sortDirection);
+                ->orderBy(
+                    'end_date',
+                    $sortDirection
+                );
         } else {
-            $query->orderBy('start_date', $sortDirection);
+            $query->orderBy(
+                'start_date',
+                $sortDirection
+            );
         }
 
         /*
- * Стабильная дополнительная сортировка,
- * если даты нескольких договоров совпадают.
- */
+     * Стабильный порядок при одинаковых датах.
+     */
         $query->orderByDesc('id');
+
+        /*
+     * Эти строки были случайно удалены.
+     */
+        $contracts = $query
+            ->paginate(15)
+            ->withQueryString();
+
+        $companies = Company::query()
+            ->orderBy('name')
+            ->get([
+                'id',
+                'name',
+            ]);
+
+        return view(
+            'contracts.index',
+            compact(
+                'contracts',
+                'companies'
+            )
+        );
     }
 
     public function create(?Company $company = null)

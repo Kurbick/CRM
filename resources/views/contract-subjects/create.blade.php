@@ -94,12 +94,8 @@
 
             {{-- Разовая услуга --}}
             <div x-show="subjectType === 'one_time'" x-cloak class="space-y-4">
-                <div class="border-t border-gray-100 pt-5">
-                    <h3 class="text-sm font-semibold text-gray-800">
-                        Данные разовой услуги
-                    </h3>
+                <div class="border-t border-gray-100 pt-0">
                 </div>
-
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">
@@ -151,10 +147,7 @@
 
             {{-- Подписка --}}
             <div x-show="subjectType === 'subscription'" x-cloak class="space-y-4">
-                <div class="border-t border-gray-100 pt-5">
-                    <h3 class="text-sm font-semibold text-gray-800">
-                        Данные подписки
-                    </h3>
+                <div class="border-t border-gray-100 pt-0">
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
