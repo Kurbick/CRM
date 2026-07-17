@@ -78,7 +78,10 @@ class InvoiceController extends Controller
             'period_start' => 'nullable|date',
             'period_end' => 'nullable|date|after_or_equal:period_start',
 
-            'status' => 'required|in:draft,issued,partially_paid,paid,cancelled',
+            'status' => [
+                'required',
+                'in:draft,issued',
+            ],
 
             'seller_name' => 'nullable|string|max:255',
             'seller_voen' => 'nullable|string|max:20',
@@ -463,33 +466,45 @@ class InvoiceController extends Controller
                 }
             }
 
-            // Автоматически применяем кредитный баланс компании
-            $creditBalance = $company->creditBalance;
+            /*
+            * Кредитный баланс применяется только
+            * к выставленному счёту.
+            *
+            * Черновик не должен резервировать или списывать деньги.
+            */
+            if ($invoice->status === 'issued') {
+                $creditBalance = $company->creditBalance;
 
-            if ($creditBalance && $creditBalance->amount > 0) {
-                $applied = $creditBalance->apply(
-                    $invoice->total_amount,
-                    $invoice
-                );
+                if ($creditBalance && $creditBalance->amount > 0) {
+                    $applied = $creditBalance->apply(
+                        $invoice->total_amount,
+                        $invoice
+                    );
 
-                if ($applied > 0) {
-                    $invoice->payments()->create([
-                        'company_id' => $company->id,
-                        'payment_date' => now()->toDateString(),
-                        'amount' => $applied,
-                        'payment_method' => 'transfer',
-                        'status' => 'confirmed',
-                        'comment' => "Автоматически применён Credit Balance ({$applied} ₼)",
-                    ]);
+                    if ($applied > 0) {
+                        $invoice->payments()->create([
+                            'company_id' => $company->id,
+                            'payment_date' => now()->toDateString(),
+                            'amount' => $applied,
+                            'payment_method' => 'transfer',
+                            'status' => 'confirmed',
+                            'comment' =>
+                            "Автоматически применён Credit Balance ({$applied} ₼)",
+                        ]);
+                    }
                 }
             }
 
             return $invoice;
         });
 
+        $message = $invoice->status === 'draft'
+            ? 'Черновик инвойса успешно сохранён.'
+            : 'Инвойс успешно выставлен.';
+
         return redirect()
             ->route('invoices.show', $invoice)
-            ->with('success', 'Инвойс успешно выставлен.');
+            ->with('success', $message);
     }
 
     /**
@@ -513,62 +528,650 @@ class InvoiceController extends Controller
      */
     public function edit(Invoice $invoice)
     {
-        $invoice->load('lines');
-        $companies = Company::where('status', '!=', 'archived')->orderBy('name')->get();
+        if ($invoice->status !== 'draft') {
+            return redirect()
+                ->route('invoices.show', $invoice)
+                ->with(
+                    'error',
+                    'Редактировать можно только черновик инвойса.'
+                );
+        }
 
-        return view('invoices.edit', compact('invoice', 'companies'));
+        if (
+            $invoice->payments()
+            ->where('status', 'confirmed')
+            ->exists()
+        ) {
+            return redirect()
+                ->route('invoices.show', $invoice)
+                ->with(
+                    'error',
+                    'Нельзя редактировать инвойс с подтверждёнными платежами.'
+                );
+        }
+
+        $invoice->load([
+            'lines',
+            'company',
+            'contract',
+        ]);
+
+        $companies = Company::query()
+            ->whereKey($invoice->company_id)
+            ->get();
+
+        return view(
+            'invoices.edit',
+            compact('invoice', 'companies')
+        );
     }
 
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, Invoice $invoice)
-    {
+    public function update(
+        Request $request,
+        Invoice $invoice
+    ) {
+        if ($invoice->status !== 'draft') {
+            return redirect()
+                ->route('invoices.show', $invoice)
+                ->with(
+                    'error',
+                    'Изменять можно только черновик инвойса.'
+                );
+        }
+
+        if (
+            $invoice->payments()
+            ->where('status', 'confirmed')
+            ->exists()
+        ) {
+            return redirect()
+                ->route('invoices.show', $invoice)
+                ->with(
+                    'error',
+                    'Нельзя изменять инвойс с подтверждёнными платежами.'
+                );
+        }
+
         $validated = $request->validate([
-            'company_id' => 'required|exists:companies,id',
-            'invoice_number' => 'required|string|max:50|unique:invoices,invoice_number,' . $invoice->id,
-            'issue_date' => 'required|date',
-            'due_date' => 'required|date|after_or_equal:issue_date',
-            'period_start' => 'nullable|date',
-            'period_end' => 'nullable|date|after_or_equal:period_start',
-            'status' => 'required|in:draft,issued,partially_paid,paid,cancelled',
-            'seller_name' => 'nullable|string|max:255',
-            'seller_voen' => 'nullable|string|max:20',
-            'seller_bank_name' => 'nullable|string|max:255',
-            'seller_iban' => 'nullable|string|max:50',
-            'seller_bank_code' => 'nullable|string|max:20',
-            'seller_bank_voen' => 'nullable|string|max:20',
-            'seller_swift' => 'nullable|string|max:20',
-            'payer_name' => 'required|string|max:255',
-            'payer_voen' => 'nullable|string|max:20',
-            'contract_reference' => 'nullable|string|max:50',
-            'comment' => 'nullable|string',
-            'lines' => 'required|array|min:1',
-            'lines.*.description' => 'required|string|max:255',
-            'lines.*.amount' => 'required|numeric|min:0.01',
+            'company_id' => [
+                'required',
+                'exists:companies,id',
+            ],
+
+            'invoice_number' => [
+                'required',
+                'string',
+                'max:50',
+                'unique:invoices,invoice_number,' . $invoice->id,
+            ],
+
+            'issue_date' => [
+                'required',
+                'date',
+            ],
+
+            'due_date' => [
+                'required',
+                'date',
+                'after_or_equal:issue_date',
+            ],
+
+            'period_start' => [
+                'nullable',
+                'date',
+            ],
+
+            'period_end' => [
+                'nullable',
+                'date',
+                'after_or_equal:period_start',
+            ],
+
+            /*
+         * Через обычное редактирование статус
+         * пока остаётся только draft.
+         */
+            'status' => [
+                'required',
+                'in:draft',
+            ],
+
+            'seller_name' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
+
+            'seller_voen' => [
+                'nullable',
+                'string',
+                'max:20',
+            ],
+
+            'seller_bank_name' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
+
+            'seller_iban' => [
+                'nullable',
+                'string',
+                'max:50',
+            ],
+
+            'seller_bank_code' => [
+                'nullable',
+                'string',
+                'max:20',
+            ],
+
+            'seller_bank_voen' => [
+                'nullable',
+                'string',
+                'max:20',
+            ],
+
+            'seller_swift' => [
+                'nullable',
+                'string',
+                'max:20',
+            ],
+
+            'payer_name' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
+
+            'payer_voen' => [
+                'nullable',
+                'string',
+                'max:20',
+            ],
+
+            'contract_reference' => [
+                'nullable',
+                'string',
+                'max:50',
+            ],
+
+            'comment' => [
+                'nullable',
+                'string',
+            ],
+
+            'lines' => [
+                'required',
+                'array',
+                'min:1',
+            ],
+
+            'lines.*.id' => [
+                'nullable',
+                'integer',
+            ],
+
+            'lines.*.description' => [
+                'required',
+                'string',
+                'max:255',
+            ],
+
+            'lines.*.amount' => [
+                'required',
+                'numeric',
+                'min:0.01',
+            ],
         ]);
 
-        DB::transaction(function () use ($request, $invoice) {
-            $lines = $request->input('lines');
-            $totalAmount = collect($lines)->sum('amount');
+        /*
+     * Компания черновика не должна меняться,
+     * потому что инвойс уже связан с договором.
+     */
+        if (
+            (int) $validated['company_id']
+            !== (int) $invoice->company_id
+        ) {
+            throw ValidationException::withMessages([
+                'company_id' =>
+                'Нельзя изменить компанию существующего инвойса.',
+            ]);
+        }
 
-            $invoiceData = $request->except('lines');
-            $invoiceData['total_amount'] = $totalAmount;
+        DB::transaction(function () use (
+            $invoice,
+            $validated
+        ) {
+            $originalLines = $invoice->lines()
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
 
-            $invoice->update($invoiceData);
+            $submittedExistingIds = [];
 
-            // Delete old lines and re-insert
-            $invoice->lines()->delete();
-            foreach ($lines as $line) {
+            foreach ($validated['lines'] as $index => $line) {
+                $lineId = !empty($line['id'])
+                    ? (int) $line['id']
+                    : null;
+
+                /*
+             * Существующая строка:
+             * меняем только описание и сумму.
+             *
+             * subscription_id, order_id и периоды
+             * остаются прежними.
+             */
+                if ($lineId) {
+                    $existingLine = $originalLines->get($lineId);
+
+                    if (!$existingLine) {
+                        throw ValidationException::withMessages([
+                            "lines.{$index}.id" =>
+                            'Позиция не принадлежит этому инвойсу.',
+                        ]);
+                    }
+
+                    $existingLine->update([
+                        'description' => $line['description'],
+                        'amount' => $line['amount'],
+                    ]);
+
+                    $submittedExistingIds[] = $lineId;
+
+                    continue;
+                }
+
+                /*
+             * Новая строка из формы редактирования
+             * создаётся как ручная позиция.
+             */
                 $invoice->lines()->create([
                     'description' => $line['description'],
                     'amount' => $line['amount'],
+                    'subscription_id' => null,
+                    'order_id' => null,
+                    'period_start' => null,
+                    'period_end' => null,
                 ]);
+            }
+
+            /*
+         * Удаляем только старые строки,
+         * которые пользователь убрал из формы.
+         */
+            $lineIdsToDelete = $originalLines
+                ->keys()
+                ->diff($submittedExistingIds);
+
+            if ($lineIdsToDelete->isNotEmpty()) {
+                $invoice->lines()
+                    ->whereIn(
+                        'id',
+                        $lineIdsToDelete->all()
+                    )
+                    ->delete();
+            }
+
+            $totalAmount = collect($validated['lines'])
+                ->sum(fn($line) => (float) $line['amount']);
+
+            /*
+         * Снимок компании и договора не изменяем.
+         */
+            $invoiceData = collect($validated)
+                ->except([
+                    'lines',
+                    'company_id',
+                    'status',
+                    'payer_name',
+                    'payer_voen',
+                    'contract_reference',
+                ])
+                ->toArray();
+
+            $invoiceData['status'] = 'draft';
+            $invoiceData['total_amount'] = $totalAmount;
+
+            $invoice->update($invoiceData);
+        });
+
+        return redirect()
+            ->route('invoices.show', $invoice)
+            ->with(
+                'success',
+                'Черновик инвойса успешно обновлён.'
+            );
+    }
+
+    public function issue(Invoice $invoice)
+    {
+        DB::transaction(function () use ($invoice) {
+            /*
+         * Блокируем инвойс, чтобы его нельзя было
+         * выставить одновременно двумя запросами.
+         */
+            $invoice = Invoice::query()
+                ->whereKey($invoice->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($invoice->status !== 'draft') {
+                throw ValidationException::withMessages([
+                    'issue' => 'Выставить можно только черновик инвойса.',
+                ]);
+            }
+
+            if (
+                $invoice->payments()
+                ->where('status', 'confirmed')
+                ->exists()
+            ) {
+                throw ValidationException::withMessages([
+                    'issue' =>
+                    'Нельзя выставить черновик с подтверждёнными платежами.',
+                ]);
+            }
+
+            $contract = $invoice->contract;
+
+            if (!$contract) {
+                throw ValidationException::withMessages([
+                    'issue' =>
+                    'Инвойс не связан с договором.',
+                ]);
+            }
+
+            $lines = $invoice->lines()
+                ->lockForUpdate()
+                ->get();
+
+            if ($lines->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'issue' =>
+                    'В инвойсе должна быть хотя бы одна позиция.',
+                ]);
+            }
+
+            /*
+         * Блокируем все используемые подписки.
+         */
+            $subscriptionIds = $lines
+                ->pluck('subscription_id')
+                ->filter()
+                ->unique()
+                ->sort()
+                ->values();
+
+            $subscriptions = Subscription::query()
+                ->whereIn('id', $subscriptionIds)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+
+            $monthsByBillingPeriod = [
+                'monthly' => 1,
+                'quarterly' => 3,
+                'semiannual' => 6,
+                'annual' => 12,
+            ];
+
+            $nextBillingDates = [];
+            $seenSubscriptions = [];
+
+            foreach ($lines as $index => $line) {
+                /*
+             * Разовые и ручные позиции
+             * не изменяют next_billing_date.
+             */
+                if (!$line->subscription_id) {
+                    continue;
+                }
+
+                if (isset($seenSubscriptions[$line->subscription_id])) {
+                    throw ValidationException::withMessages([
+                        'issue' =>
+                        'Одна подписка не может быть добавлена в инвойс несколько раз.',
+                    ]);
+                }
+
+                $seenSubscriptions[$line->subscription_id] = true;
+
+                $subscription = $subscriptions->get(
+                    $line->subscription_id
+                );
+
+                if (!$subscription) {
+                    throw ValidationException::withMessages([
+                        'issue' =>
+                        'Одна из подписок больше не существует.',
+                    ]);
+                }
+
+                if (
+                    (int) $subscription->contract_id
+                    !== (int) $invoice->contract_id
+                ) {
+                    throw ValidationException::withMessages([
+                        'issue' =>
+                        'Одна из подписок не принадлежит договору инвойса.',
+                    ]);
+                }
+
+                if ($subscription->status !== 'active') {
+                    throw ValidationException::withMessages([
+                        'issue' =>
+                        "Подписка «{$line->description}» больше не активна.",
+                    ]);
+                }
+
+                if (!$line->period_start || !$line->period_end) {
+                    throw ValidationException::withMessages([
+                        'issue' =>
+                        "У позиции «{$line->description}» не указан расчётный период.",
+                    ]);
+                }
+
+                $periodStart = Carbon::parse(
+                    $line->period_start
+                )->startOfDay();
+
+                $periodEnd = Carbon::parse(
+                    $line->period_end
+                )->startOfDay();
+
+                if ($periodEnd->lt($periodStart)) {
+                    throw ValidationException::withMessages([
+                        'issue' =>
+                        "У позиции «{$line->description}» неверный расчётный период.",
+                    ]);
+                }
+
+                $subscriptionStart = Carbon::parse(
+                    $subscription->start_date
+                )->startOfDay();
+
+                if ($periodStart->lt($subscriptionStart)) {
+                    throw ValidationException::withMessages([
+                        'issue' =>
+                        "Период позиции «{$line->description}» начинается раньше подписки.",
+                    ]);
+                }
+
+                $contractStart = Carbon::parse(
+                    $contract->start_date
+                )->startOfDay();
+
+                if ($periodStart->lt($contractStart)) {
+                    throw ValidationException::withMessages([
+                        'issue' =>
+                        "Период позиции «{$line->description}» начинается раньше договора.",
+                    ]);
+                }
+
+                if ($contract->end_date) {
+                    $contractEnd = Carbon::parse(
+                        $contract->end_date
+                    )->startOfDay();
+
+                    if ($periodEnd->gt($contractEnd)) {
+                        throw ValidationException::withMessages([
+                            'issue' =>
+                            "Период позиции «{$line->description}» выходит за срок договора.",
+                        ]);
+                    }
+                }
+
+                /*
+             * Проверяем, что другой действующий инвойс
+             * не содержит эту подписку за тот же период.
+             *
+             * Текущий черновик исключаем из проверки.
+             */
+                $periodAlreadyInvoiced = InvoiceLine::query()
+                    ->where('subscription_id', $subscription->id)
+                    ->where('invoice_id', '!=', $invoice->id)
+                    ->whereDate(
+                        'period_start',
+                        $periodStart->toDateString()
+                    )
+                    ->whereDate(
+                        'period_end',
+                        $periodEnd->toDateString()
+                    )
+                    ->whereHas('invoice', function ($query) {
+                        $query->where(
+                            'status',
+                            '!=',
+                            'cancelled'
+                        );
+                    })
+                    ->exists();
+
+                if ($periodAlreadyInvoiced) {
+                    throw ValidationException::withMessages([
+                        'issue' =>
+                        "По подписке «{$line->description}» уже есть инвойс за этот период.",
+                    ]);
+                }
+
+                /*
+             * Для custom-периода даты остаются ручными,
+             * а next_billing_date пока не изменяем.
+             */
+                if ($subscription->billing_period === 'custom') {
+                    continue;
+                }
+
+                $months = $monthsByBillingPeriod[$subscription->billing_period] ?? null;
+
+                if (!$months) {
+                    throw ValidationException::withMessages([
+                        'issue' =>
+                        "У подписки «{$line->description}» неизвестная периодичность.",
+                    ]);
+                }
+
+                if (!$subscription->next_billing_date) {
+                    throw ValidationException::withMessages([
+                        'issue' =>
+                        "У подписки «{$line->description}» не указана следующая дата выставления.",
+                    ]);
+                }
+
+                $expectedPeriodStart = Carbon::parse(
+                    $subscription->next_billing_date
+                )->startOfDay();
+
+                $expectedPeriodEnd = $expectedPeriodStart
+                    ->copy()
+                    ->addMonthsNoOverflow($months)
+                    ->subDay();
+
+                if (!$periodStart->equalTo($expectedPeriodStart)) {
+                    throw ValidationException::withMessages([
+                        'issue' =>
+                        "Начало периода позиции «{$line->description}» больше не соответствует графику подписки.",
+                    ]);
+                }
+
+                if (!$periodEnd->equalTo($expectedPeriodEnd)) {
+                    throw ValidationException::withMessages([
+                        'issue' =>
+                        "Окончание периода позиции «{$line->description}» не соответствует графику подписки.",
+                    ]);
+                }
+
+                $nextBillingDates[$subscription->id] = $periodEnd
+                    ->copy()
+                    ->addDay()
+                    ->toDateString();
+            }
+
+            /*
+         * Только после всех проверок
+         * меняем статус инвойса.
+         */
+            $invoice->update([
+                'status' => 'issued',
+            ]);
+
+            /*
+         * Переводим подписки на следующие периоды.
+         */
+            foreach ($nextBillingDates as $subscriptionId => $date) {
+                $subscriptions
+                    ->get($subscriptionId)
+                    ?->update([
+                        'next_billing_date' => $date,
+                    ]);
+            }
+
+            /*
+         * Применяем кредитный баланс только после
+         * успешного выставления черновика.
+         */
+            $company = $invoice->company()
+                ->firstOrFail();
+
+            $creditBalance = $company
+                ->creditBalance()
+                ->lockForUpdate()
+                ->first();
+
+            if ($creditBalance && $creditBalance->amount > 0) {
+                $applied = $creditBalance->apply(
+                    $invoice->total_amount,
+                    $invoice
+                );
+
+                if ($applied > 0) {
+                    $invoice->payments()->create([
+                        'company_id' => $company->id,
+                        'payment_date' => now()->toDateString(),
+                        'amount' => $applied,
+                        'payment_method' => 'transfer',
+                        'status' => 'confirmed',
+                        'comment' =>
+                        "Автоматически применён Credit Balance ({$applied} ₼)",
+                    ]);
+                }
             }
         });
 
-        return redirect()->route('invoices.show', $invoice)
-            ->with('success', 'Инвойс успешно обновлен.');
+        $invoice->refresh();
+
+        $message = $invoice->status === 'paid'
+            ? 'Инвойс выставлен и полностью оплачен кредитным балансом.'
+            : 'Инвойс успешно выставлен.';
+
+        return redirect()
+            ->route('invoices.show', $invoice)
+            ->with('success', $message);
     }
 
     /**

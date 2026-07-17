@@ -15,7 +15,14 @@ use App\Http\Controllers\Web\ContractDocumentController;
 Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 
 Route::resource('companies', CompanyController::class);
+
+Route::post(
+    'invoices/{invoice}/issue',
+    [InvoiceController::class, 'issue']
+)->name('invoices.issue');
+
 Route::resource('invoices', InvoiceController::class);
+
 Route::post('invoices/{invoice}/payments', [PaymentController::class, 'store'])->name('payments.store');
 
 // Контакты компании

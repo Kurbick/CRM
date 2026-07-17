@@ -63,24 +63,58 @@ class ContractController extends Controller
         }
 
         // Сортировка по дате создания
-        if ($request->input('sort') === 'oldest') {
-            $query->orderBy('created_at');
-        } else {
-            $query->orderByDesc('created_at');
+        /*
+ * Сортировка по датам договора.
+ *
+ * Разрешаем только известные столбцы и направления,
+ * чтобы параметры запроса нельзя было использовать
+ * для произвольной SQL-сортировки.
+ */
+        $allowedSortColumns = [
+            'start_date',
+            'end_date',
+        ];
+
+        $allowedSortDirections = [
+            'asc',
+            'desc',
+        ];
+
+        $sortBy = $request->input(
+            'sort_by',
+            'start_date'
+        );
+
+        $sortDirection = $request->input(
+            'sort_direction',
+            'desc'
+        );
+
+        if (!in_array($sortBy, $allowedSortColumns, true)) {
+            $sortBy = 'start_date';
         }
 
-        $contracts = $query
-            ->paginate(15)
-            ->withQueryString();
+        if (!in_array($sortDirection, $allowedSortDirections, true)) {
+            $sortDirection = 'desc';
+        }
 
-        $companies = Company::query()
-            ->orderBy('name')
-            ->get(['id', 'name']);
+        /*
+ * Бессрочные договоры при сортировке
+ * по дате окончания всегда показываем внизу.
+ */
+        if ($sortBy === 'end_date') {
+            $query
+                ->orderByRaw('end_date IS NULL')
+                ->orderBy('end_date', $sortDirection);
+        } else {
+            $query->orderBy('start_date', $sortDirection);
+        }
 
-        return view(
-            'contracts.index',
-            compact('contracts', 'companies')
-        );
+        /*
+ * Стабильная дополнительная сортировка,
+ * если даты нескольких договоров совпадают.
+ */
+        $query->orderByDesc('id');
     }
 
     public function create(?Company $company = null)

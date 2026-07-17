@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,7 +9,13 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     {{-- Alpine.js — для интерактивности (модалки, дропдауны) без написания JS --}}
+    <style>
+        [x-cloak] {
+            display: none !important;
+        }
+    </style>
 </head>
+
 <body class="bg-gray-50 text-gray-900">
 
     {{-- Навигация --}}
@@ -27,37 +34,37 @@
                 {{-- Навигационные ссылки --}}
                 <div class="flex items-center gap-2">
 
-                <a href="{{ route('dashboard') }}"
-                class="px-3 py-2 rounded-lg text-sm font-medium transition
+                    <a href="{{ route('dashboard') }}"
+                        class="px-3 py-2 rounded-lg text-sm font-medium transition
                 {{ request()->routeIs('dashboard')
-                        ? 'bg-blue-50 text-blue-600'
-                        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900' }}">
-                    Дашборд
-                </a>
+                    ? 'bg-blue-50 text-blue-600'
+                    : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900' }}">
+                        Дашборд
+                    </a>
 
-                <a href="{{ route('companies.index') }}"
-                class="px-3 py-2 rounded-lg text-sm font-medium transition
+                    <a href="{{ route('companies.index') }}"
+                        class="px-3 py-2 rounded-lg text-sm font-medium transition
                 {{ request()->routeIs('companies.*')
-                        ? 'bg-blue-50 text-blue-600'
-                        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900' }}">
-                    Компании
-                </a>
+                    ? 'bg-blue-50 text-blue-600'
+                    : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900' }}">
+                        Компании
+                    </a>
 
-                <a href="{{ route('contracts.index') }}"
-                class="px-3 py-2 rounded-lg text-sm font-medium transition
+                    <a href="{{ route('contracts.index') }}"
+                        class="px-3 py-2 rounded-lg text-sm font-medium transition
                 {{ request()->routeIs('contracts.*')
-                        ? 'bg-blue-50 text-blue-600'
-                        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900' }}">
-                    Договоры
-                </a>
+                    ? 'bg-blue-50 text-blue-600'
+                    : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900' }}">
+                        Договоры
+                    </a>
 
-                <a href="{{ route('invoices.index') }}"
-                class="px-3 py-2 rounded-lg text-sm font-medium transition
+                    <a href="{{ route('invoices.index') }}"
+                        class="px-3 py-2 rounded-lg text-sm font-medium transition
                 {{ request()->routeIs('invoices.*')
-                        ? 'bg-blue-50 text-blue-600'
-                        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900' }}">
-                    Инвойсы
-                </a>
+                    ? 'bg-blue-50 text-blue-600'
+                    : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900' }}">
+                        Инвойсы
+                    </a>
 
                 </div>
 
@@ -66,7 +73,7 @@
     </nav>
 
     {{-- Flash сообщения --}}
-    @if(session('success'))
+    @if (session('success'))
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
             <div class="bg-green-50 border border-green-200 text-green-800 rounded-lg px-4 py-3 text-sm">
                 {{ session('success') }}
@@ -74,7 +81,7 @@
         </div>
     @endif
 
-    @if(session('error'))
+    @if (session('error'))
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
             <div class="bg-red-50 border border-red-200 text-red-800 rounded-lg px-4 py-3 text-sm">
                 {{ session('error') }}
@@ -95,4 +102,5 @@
     </footer>
 
 </body>
+
 </html>

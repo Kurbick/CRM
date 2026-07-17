@@ -4,6 +4,33 @@
 
 @section('content')
 
+    @php
+        $currentSortBy = request('sort_by', 'start_date');
+        $currentSortDirection = request('sort_direction', 'desc');
+
+        $startSortDirection = $currentSortBy === 'start_date' && $currentSortDirection === 'desc' ? 'asc' : 'desc';
+
+        $endSortDirection = $currentSortBy === 'end_date' && $currentSortDirection === 'desc' ? 'asc' : 'desc';
+
+        $preservedFilters = request()->except(['page', 'sort_by', 'sort_direction']);
+
+        $startSortUrl = route(
+            'contracts.index',
+            array_merge($preservedFilters, [
+                'sort_by' => 'start_date',
+                'sort_direction' => $startSortDirection,
+            ]),
+        );
+
+        $endSortUrl = route(
+            'contracts.index',
+            array_merge($preservedFilters, [
+                'sort_by' => 'end_date',
+                'sort_direction' => $endSortDirection,
+            ]),
+        );
+    @endphp
+
     {{-- Заголовок страницы --}}
     <div class="mb-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
@@ -46,8 +73,9 @@
 
                     <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0
-                                                                                 7 7 0 0114 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M21 21l-6-6m2-5a7 7 0 11-14 0
+                                                                                                                     7 7 0 0114 0z" />
                     </svg>
                 </span>
 
@@ -108,27 +136,6 @@
                 </select>
             </div>
 
-            {{-- Сортировка --}}
-            <div class="w-full md:w-44">
-
-                <select name="sort" onchange="this.form.submit()"
-                    class="w-full px-3 py-2 border border-gray-200
-                   rounded-lg text-sm focus:border-blue-500
-                   focus:ring-1 focus:ring-blue-500
-                   outline-none transition">
-
-                    <option value="newest" {{ request('sort', 'newest') === 'newest' ? 'selected' : '' }}>
-                        Сначала новые
-                    </option>
-
-                    <option value="oldest" {{ request('sort') === 'oldest' ? 'selected' : '' }}>
-                        Сначала старые
-                    </option>
-
-                </select>
-
-            </div>
-
             {{-- Кнопки --}}
             <div class="flex gap-2">
 
@@ -139,7 +146,7 @@
                     Найти
                 </button>
 
-                @if (request('search') || request('status') || request('company_id') || request('sort'))
+                @if (request('search') || request('status') || request('company_id') || request('sort_by') || request('sort_direction'))
                     <a href="{{ route('contracts.index') }}"
                         class="px-4 py-2 border border-gray-200 hover:bg-gray-50
                               text-gray-500 text-sm font-medium rounded-lg
@@ -174,16 +181,44 @@
                             Компания
                         </th>
 
-                        <th
-                            class="px-6 py-3.5 text-xs font-semibold
-                                   uppercase tracking-wider">
-                            Дата начала
+                        <th class="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">
+                            <a href="{{ $startSortUrl }}"
+                                class="inline-flex items-center gap-1.5 hover:text-blue-600 transition"
+                                title="{{ $currentSortBy === 'start_date' && $currentSortDirection === 'desc'
+                                    ? 'Показать сначала старые даты'
+                                    : 'Показать сначала новые даты' }}">
+
+                                <span>Дата начала</span>
+
+                                <span class="{{ $currentSortBy === 'start_date' ? 'text-blue-600' : 'text-gray-300' }}">
+
+                                    @if ($currentSortBy === 'start_date')
+                                        {{ $currentSortDirection === 'asc' ? '↑' : '↓' }}
+                                    @else
+                                        ↕
+                                    @endif
+                                </span>
+                            </a>
                         </th>
 
-                        <th
-                            class="px-6 py-3.5 text-xs font-semibold
-                                   uppercase tracking-wider">
-                            Дата окончания
+                        <th class="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">
+                            <a href="{{ $endSortUrl }}"
+                                class="inline-flex items-center gap-1.5 hover:text-blue-600 transition"
+                                title="{{ $currentSortBy === 'end_date' && $currentSortDirection === 'desc'
+                                    ? 'Показать сначала ранние даты окончания'
+                                    : 'Показать сначала поздние даты окончания' }}">
+
+                                <span>Дата окончания</span>
+
+                                <span class="{{ $currentSortBy === 'end_date' ? 'text-blue-600' : 'text-gray-300' }}">
+
+                                    @if ($currentSortBy === 'end_date')
+                                        {{ $currentSortDirection === 'asc' ? '↑' : '↓' }}
+                                    @else
+                                        ↕
+                                    @endif
+                                </span>
+                            </a>
                         </th>
 
                         <th
@@ -283,9 +318,9 @@
 
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                 d="M15.232 5.232l3.536 3.536
-                                                                                                     m-2.036-5.036a2.5 2.5 0
-                                                                                                     113.536 3.536L6.5 21.036
-                                                                                                     H3v-3.572L16.732 3.732z" />
+                                                                                                                                         m-2.036-5.036a2.5 2.5 0
+                                                                                                                                         113.536 3.536L6.5 21.036
+                                                                                                                                         H3v-3.572L16.732 3.732z" />
                                         </svg>
                                     </a>
                                 </div>
@@ -299,7 +334,7 @@
 
                                 Договоров не найдено.
 
-                                @if (request('search') || request('status') || request('company_id') || request('sort'))
+                                @if (request('search') || request('status') || request('company_id') || request('sort_by') || request('sort_direction'))
                                     <a href="{{ route('contracts.index') }}" class="text-blue-600 hover:underline ml-1">
                                         Сбросить фильтры
                                     </a>
