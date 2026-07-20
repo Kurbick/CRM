@@ -19,7 +19,7 @@ class StoreSubscriptionRequest extends FormRequest
             'next_billing_date' => 'required|date|after_or_equal:start_date',
             'billing_period'    => 'required|in:monthly,quarterly,semiannual,annual',
             'amount'            => 'required|numeric|min:0',
-            'payment_terms'     => 'nullable|integer|min:1|max:365',
+            'payment_terms'     => 'required|integer|min:1|max:365',
             'status'            => 'nullable|in:active,suspended,completed,cancelled',
             'comment'           => 'nullable|string',
         ];

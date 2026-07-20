@@ -80,10 +80,12 @@
 
         <div class="grid grid-cols-2 gap-4">
             <div>
-                <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Срок оплаты (дней)</label>
-                <input type="number" name="payment_terms" value="{{ old('payment_terms', 14) }}"
+                <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Срок оплаты (дней) <span class="text-red-500">*</span></label>
+                <input type="number" name="payment_terms" value="{{ old('payment_terms', 30) }}"
                        min="1" max="365"
-                       class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:border-blue-500 outline-none transition">
+                       class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:border-blue-500 outline-none transition"
+                       required>
+                @error('payment_terms')<p class="text-xs text-red-500 mt-1">{{ $message }}</p>@enderror
             </div>
             <div>
                 <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Статус <span class="text-red-500">*</span></label>

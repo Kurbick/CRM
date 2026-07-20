@@ -31,7 +31,7 @@ class ContractSubjectController extends Controller
             'billing_period_custom' => 'nullable|required_if:billing_period,custom|string|max:255',
             'amount' => 'nullable|required_if:subject_type,subscription|numeric|min:0',
 
-            'payment_terms' => 'nullable|integer|min:1|max:365',
+            'payment_terms' => 'exclude_unless:subject_type,subscription|required|integer|min:1|max:365',
             'comment' => 'nullable|string',
         ]);
 
@@ -42,7 +42,6 @@ class ContractSubjectController extends Controller
                 'order_date' => $validated['order_date'],
                 'deadline' => $validated['deadline'] ?? null,
                 'price' => $validated['price'],
-                'payment_terms' => $validated['payment_terms'] ?? null,
                 'status' => 'in_progress',
                 'comment' => $validated['comment'] ?? null,
             ]);
@@ -56,7 +55,7 @@ class ContractSubjectController extends Controller
                     ? ($validated['billing_period_custom'] ?? null)
                     : null,
                 'amount' => $validated['amount'],
-                'payment_terms' => $validated['payment_terms'] ?? null,
+                'payment_terms' => $validated['payment_terms'],
                 'next_billing_date' => $validated['start_date'],
                 'status' => 'active',
                 'comment' => $validated['comment'] ?? null,

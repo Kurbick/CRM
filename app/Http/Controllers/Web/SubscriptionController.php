@@ -23,7 +23,7 @@ class SubscriptionController extends Controller
             'billing_period'        => 'required|in:monthly,quarterly,semiannual,annual,custom',
             'billing_period_custom' => 'nullable|required_if:billing_period,custom|string|max:255',
             'amount'                => 'required|numeric|min:0',
-            'payment_terms'         => 'nullable|integer|min:1|max:365',
+            'payment_terms'         => 'required|integer|min:1|max:365',
             'status'                => 'required|in:active,suspended,completed,cancelled',
             'comment'               => 'nullable|string',
         ]);
@@ -40,10 +40,6 @@ class SubscriptionController extends Controller
 
         unset($validated['service_name']);
 
-        /*
-         * Поле пока существует в базе и является обязательным.
-         * Пользователь его больше не заполняет.
-         */
         $validated['next_billing_date'] = $validated['start_date'];
         $validated['service_type_id'] = $serviceType->id;
 
@@ -69,7 +65,7 @@ class SubscriptionController extends Controller
             'billing_period' => 'required|in:monthly,quarterly,semiannual,annual,custom',
             'billing_period_custom' => 'nullable|required_if:billing_period,custom|string|max:255',
             'amount' => 'required|numeric|min:0',
-            'payment_terms' => 'nullable|integer|min:1|max:365',
+            'payment_terms' => 'required|integer|min:1|max:365',
             'status' => 'required|in:active,suspended,completed,cancelled',
             'comment' => 'nullable|string',
         ]);
