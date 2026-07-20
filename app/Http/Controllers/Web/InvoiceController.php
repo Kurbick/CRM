@@ -338,7 +338,8 @@ class InvoiceController extends Controller
 
             /*
      * Не допускаем повторное выставление подписки
-     * за тот же период в другом неотменённом инвойсе.
+     * за тот же период в уже выставленном инвойсе.
+     * Черновики расчётный период не занимают.
      */
             $periodAlreadyInvoiced = InvoiceLine::query()
                 ->where('subscription_id', $subscription->id)
@@ -351,7 +352,11 @@ class InvoiceController extends Controller
                     $periodEnd->toDateString()
                 )
                 ->whereHas('invoice', function ($query) {
-                    $query->where('status', '!=', 'cancelled');
+                    $query->whereIn('status', [
+                        'issued',
+                        'partially_paid',
+                        'paid',
+                    ]);
                 })
                 ->exists();
 
@@ -1027,10 +1032,10 @@ class InvoiceController extends Controller
                 }
 
                 /*
-             * Проверяем, что другой действующий инвойс
+             * Проверяем, что другой выставленный инвойс
              * не содержит эту подписку за тот же период.
              *
-             * Текущий черновик исключаем из проверки.
+             * Текущий и другие черновики период не занимают.
              */
                 $periodAlreadyInvoiced = InvoiceLine::query()
                     ->where('subscription_id', $subscription->id)
@@ -1044,11 +1049,11 @@ class InvoiceController extends Controller
                         $periodEnd->toDateString()
                     )
                     ->whereHas('invoice', function ($query) {
-                        $query->where(
-                            'status',
-                            '!=',
-                            'cancelled'
-                        );
+                        $query->whereIn('status', [
+                            'issued',
+                            'partially_paid',
+                            'paid',
+                        ]);
                     })
                     ->exists();
 
@@ -1246,10 +1251,9 @@ class InvoiceController extends Controller
 
                 /*
              * Если после отменяемого периода уже существует
-             * другой инвойс или черновик, откатывать дату нельзя.
+             * другой выставленный инвойс, откатывать дату нельзя.
              *
-             * Сначала необходимо удалить последующий черновик
-             * либо отменить более поздний выставленный инвойс.
+             * Черновики расчётный период не занимают.
              */
                 $hasLaterPeriod = InvoiceLine::query()
                     ->where('subscription_id', $subscription->id)
@@ -1261,11 +1265,11 @@ class InvoiceController extends Controller
                             ->toDateString()
                     )
                     ->whereHas('invoice', function ($query) {
-                        $query->where(
-                            'status',
-                            '!=',
-                            'cancelled'
-                        );
+                        $query->whereIn('status', [
+                            'issued',
+                            'partially_paid',
+                            'paid',
+                        ]);
                     })
                     ->exists();
 
@@ -1273,7 +1277,7 @@ class InvoiceController extends Controller
                     throw ValidationException::withMessages([
                         'cancel' =>
                         "Нельзя отменить позицию «{$line->description}»: "
-                            . 'по подписке уже существует более поздний инвойс или черновик.',
+                            . 'по подписке уже существует более поздний выставленный инвойс.',
                     ]);
                 }
             }
