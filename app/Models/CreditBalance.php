@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 class CreditBalance extends Model
 {
@@ -24,14 +25,53 @@ class CreditBalance extends Model
      */
     public function topUp(float $amount, Payment $payment): void
     {
-        $this->entries()->create([
-            'type'        => 'top_up',
-            'amount'      => $amount,
-            'payment_id'  => $payment->id,
-            'description' => "Переплата по платежу #{$payment->id}",
-        ]);
+        $amount = round($amount, 2);
 
-        $this->increment('amount', $amount);
+        if ($amount <= 0) {
+            return;
+        }
+
+        DB::transaction(function () use ($amount, $payment) {
+            /*
+         * Блокируем баланс компании, чтобы два запроса
+         * не могли одновременно начислить одну переплату.
+         */
+            $balance = self::query()
+                ->whereKey($this->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            /*
+         * Один платёж может пополнить Credit Balance
+         * только один раз.
+         */
+            $alreadyRecorded = $balance->entries()
+                ->where('type', 'top_up')
+                ->where('payment_id', $payment->id)
+                ->exists();
+
+            if ($alreadyRecorded) {
+                return;
+            }
+
+            $balance->entries()->create([
+                'type' => 'top_up',
+                'amount' => $amount,
+                'payment_id' => $payment->id,
+                'description' => "Переплата по платежу #{$payment->id}",
+            ]);
+
+            $balance->increment('amount', $amount);
+
+            /*
+         * Обновляем текущий экземпляр модели,
+         * чтобы в памяти не оставалась старая сумма.
+         */
+            $this->setAttribute(
+                'amount',
+                (float) $balance->fresh()->amount
+            );
+        });
     }
 
     /**
@@ -41,22 +81,71 @@ class CreditBalance extends Model
      */
     public function apply(float $amount, Invoice $invoice): float
     {
-        // Сколько реально можем применить — не больше чем есть на балансе
-        $toApply = min($amount, $this->amount);
+        $amount = round($amount, 2);
 
-        if ($toApply <= 0) {
+        if ($amount <= 0) {
             return 0;
         }
 
-        $this->entries()->create([
-            'type'        => 'applied',
-            'amount'      => $toApply,
-            'invoice_id'  => $invoice->id,
-            'description' => "Применён к инвойсу #{$invoice->invoice_number}",
-        ]);
+        return DB::transaction(function () use ($amount, $invoice) {
+            /*
+         * Блокируем баланс на время списания.
+         */
+            $balance = self::query()
+                ->whereKey($this->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        $this->decrement('amount', $toApply);
+            /*
+         * На один инвойс Credit Balance может быть
+         * применён только один раз.
+         */
+            $alreadyApplied = $balance->entries()
+                ->where('type', 'applied')
+                ->where('invoice_id', $invoice->id)
+                ->exists();
 
-        return $toApply; // возвращаем сколько реально применили
+            if ($alreadyApplied) {
+                return 0;
+            }
+
+            /*
+         * Не списываем больше суммы инвойса
+         * и больше доступного баланса.
+         */
+            $availableAmount = round(
+                (float) $balance->amount,
+                2
+            );
+
+            $toApply = min(
+                $amount,
+                $availableAmount
+            );
+
+            if ($toApply <= 0) {
+                return 0;
+            }
+
+            $balance->entries()->create([
+                'type' => 'applied',
+                'amount' => $toApply,
+                'invoice_id' => $invoice->id,
+                'description' =>
+                "Применён к инвойсу #{$invoice->invoice_number}",
+            ]);
+
+            $balance->decrement(
+                'amount',
+                $toApply
+            );
+
+            $this->setAttribute(
+                'amount',
+                (float) $balance->fresh()->amount
+            );
+
+            return $toApply;
+        });
     }
 }

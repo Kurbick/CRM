@@ -28,6 +28,22 @@
             </div>
         @enderror
 
+        @error('cancel')
+            <div class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+                <p class="text-sm text-red-700">
+                    {{ $message }}
+                </p>
+            </div>
+        @enderror
+
+        @error('payment_confirm')
+            <div class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+                <p class="text-sm text-red-700">
+                    {{ $message }}
+                </p>
+            </div>
+        @enderror
+
         <div class="flex items-center gap-2">
             {{-- Кнопка Печать --}}
             <button onclick="window.print()"
@@ -59,21 +75,38 @@
                         Выставить счёт
                     </button>
                 </form>
-            @endif
 
-            <form action="{{ route('invoices.destroy', $invoice) }}" method="POST"
-                onsubmit="return confirm('Вы уверены, что хотите удалить этот счет? Действие необратимо.')">
-                @csrf
-                @method('DELETE')
-                <button type="submit"
-                    class="inline-flex items-center text-sm bg-red-50 hover:bg-red-100 text-red-700 px-4 py-2 rounded-lg font-medium transition border border-red-200">
-                    <svg class="w-4 h-4 mr-1.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                    Удалить
-                </button>
-            </form>
+                <form action="{{ route('invoices.destroy', $invoice) }}" method="POST"
+                    onsubmit="return confirm('Вы уверены, что хотите удалить этот счет? Действие необратимо.')">
+                    @csrf
+                    @method('DELETE')
+                    <button type="submit"
+                        class="inline-flex items-center text-sm bg-red-50 hover:bg-red-100 text-red-700 px-4 py-2 rounded-lg font-medium transition border border-red-200">
+                        <svg class="w-4 h-4 mr-1.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        Удалить
+                    </button>
+                </form>
+            @endif
+            @if ($invoice->status === 'issued')
+                <form action="{{ route('invoices.cancel', $invoice) }}" method="POST"
+                    onsubmit="return confirm('Отменить выставленный инвойс? График подписок будет восстановлен.')">
+
+                    @csrf
+                    @method('PATCH')
+
+                    <button type="submit"
+                        class="inline-flex items-center px-4 py-2
+                   rounded-lg border border-red-200
+                   bg-red-50 text-sm font-medium text-red-700
+                   hover:bg-red-100 transition">
+
+                        Отменить счёт
+                    </button>
+                </form>
+            @endif
         </div>
     </div>
 
@@ -96,7 +129,8 @@
                     <div class="space-y-1">
                         <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Поставщик услуг</div>
                         <h2 class="text-lg font-bold text-gray-900">{{ $invoice->seller_name ?? 'IT Solutions MMC' }}</h2>
-                        <div class="text-sm text-gray-600 font-mono">VÖEN: {{ $invoice->seller_voen ?? '9900123456' }}</div>
+                        <div class="text-sm text-gray-600 font-mono">VÖEN: {{ $invoice->seller_voen ?? '9900123456' }}
+                        </div>
                         <div class="text-sm text-gray-600 mt-2">
                             <span class="font-medium text-gray-800">Банк:</span>
                             {{ $invoice->seller_bank_name ?? 'Pasha Bank OJSC' }}
@@ -194,17 +228,41 @@
                 <div class="border-t border-gray-100 pt-6 flex flex-col items-end gap-2 text-sm text-gray-600">
                     <div class="flex justify-between w-64">
                         <span>Итого сумма счета:</span>
-                        <span class="font-bold text-gray-900 font-mono">{{ number_format($invoice->total_amount, 2) }}
-                            ₼</span>
+
+                        <span class="font-bold text-gray-900 font-mono">
+                            {{ number_format($invoice->total_amount, 2) }} ₼
+                        </span>
                     </div>
+
                     <div class="flex justify-between w-64 text-green-600">
                         <span>Оплачено:</span>
-                        <span class="font-bold font-mono">- {{ number_format($invoice->paid_amount, 2) }} ₼</span>
+
+                        <span class="font-bold font-mono">
+                            - {{ number_format($invoice->applied_amount, 2) }} ₼
+                        </span>
                     </div>
+
+                    @if ($invoice->overpayment_amount > 0)
+                        <div class="flex justify-between w-64 text-blue-600">
+                            <span>Переплата:</span>
+
+                            <span class="font-bold font-mono">
+                                {{ number_format($invoice->overpayment_amount, 2) }} ₼
+                            </span>
+                        </div>
+                    @endif
+
                     <div
-                        class="flex justify-between w-64 border-t border-gray-100 pt-2 text-base {{ $invoice->remaining_amount > 0 ? 'text-red-600' : 'text-gray-900' }}">
-                        <span class="font-semibold">К оплате (Остаток):</span>
-                        <span class="font-bold font-mono">{{ number_format($invoice->remaining_amount, 2) }} ₼</span>
+                        class="flex justify-between w-64 border-t border-gray-100 pt-2 text-base
+        {{ $invoice->remaining_amount > 0 ? 'text-red-600' : 'text-gray-900' }}">
+
+                        <span class="font-semibold">
+                            К оплате (Остаток):
+                        </span>
+
+                        <span class="font-bold font-mono">
+                            {{ number_format($invoice->remaining_amount, 2) }} ₼
+                        </span>
                     </div>
                 </div>
 
@@ -320,35 +378,203 @@
             <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
                 <h3
                     class="font-bold text-gray-900 mb-4 pb-2 border-b border-gray-100 text-sm uppercase tracking-wider text-gray-500">
-                    История платежей</h3>
+                    История платежей
+                </h3>
 
                 <div class="space-y-4">
-                    @forelse($invoice->payments as $payment)
-                        <div class="border-b border-gray-50 last:border-0 pb-3 last:pb-0 text-sm">
-                            <div class="flex items-center justify-between">
-                                <span class="font-semibold text-gray-900">{{ number_format($payment->amount, 2) }}
-                                    ₼</span>
-                                @include('partials.badge', ['status' => $payment->status])
+                    @forelse ($invoice->payments as $payment)
+                        @php
+                            /*
+                             * Платёж, автоматически созданный из Credit Balance,
+                             * нельзя отменять как обычный банковский/наличный платёж.
+                             * Сервер дополнительно проверяет это в PaymentController.
+                             */
+                            $isCreditBalancePayment = str_starts_with(
+                                (string) $payment->comment,
+                                'Автоматически применён Credit Balance',
+                            );
+
+                            /*
+                             * После ошибки валидации повторно открываем форму
+                             * именно того платежа, который пользователь отменял.
+                             */
+                            $shouldOpenCancellation =
+                                $errors->has('cancel_reason') &&
+                                (string) old('cancel_payment_id') === (string) $payment->id;
+                        @endphp
+
+                        <div x-data="{ cancelOpen: @js($shouldOpenCancellation) }"
+                            class="border-b border-gray-100 last:border-0 pb-4 last:pb-0 text-sm">
+
+                            <div class="flex items-center justify-between gap-3">
+                                <span
+                                    class="font-semibold font-mono
+                                        {{ $payment->status === 'cancelled' ? 'text-gray-400 line-through' : 'text-gray-900' }}">
+
+                                    {{ number_format($payment->amount, 2) }} ₼
+                                </span>
+
+                                @include('partials.badge', [
+                                    'status' => $payment->status,
+                                ])
                             </div>
-                            <div class="flex justify-between text-xs text-gray-400 mt-1">
-                                <span>{{ $payment->payment_date }}</span>
+
+                            <div class="flex justify-between gap-3 text-xs text-gray-400 mt-1">
+                                <span>
+                                    {{ $payment->payment_date }}
+                                </span>
+
                                 <span class="font-medium">
                                     @if ($payment->payment_method === 'transfer')
                                         Безналичный
-                                    @elseif($payment->payment_method === 'card')
+                                    @elseif ($payment->payment_method === 'card')
                                         Карта
                                     @else
                                         Наличные
                                     @endif
                                 </span>
                             </div>
+
+                            @if ($isCreditBalancePayment)
+                                <div
+                                    class="mt-2 inline-flex items-center rounded-md bg-blue-50 px-2 py-1
+                                           text-[11px] font-medium text-blue-700">
+
+                                    Оплата из Credit Balance
+                                </div>
+                            @endif
+
                             @if ($payment->comment)
-                                <p class="text-xs text-gray-500 italic mt-1.5 bg-gray-50 rounded p-1.5">
-                                    {{ $payment->comment }}</p>
+                                <p class="text-xs text-gray-500 italic mt-2 bg-gray-50 rounded-lg p-2">
+                                    {{ $payment->comment }}
+                                </p>
+                            @endif
+
+                            {{-- Данные отменённого платежа --}}
+                            @if ($payment->status === 'cancelled')
+                                <div class="mt-3 rounded-lg border border-red-100 bg-red-50 p-3">
+                                    <div class="flex items-center justify-between gap-3">
+                                        <span class="text-xs font-semibold text-red-700">
+                                            Платёж отменён
+                                        </span>
+
+                                        @if ($payment->cancelled_at)
+                                            <span class="text-[11px] text-red-500">
+                                                {{ \Illuminate\Support\Carbon::parse($payment->cancelled_at)->format('Y-m-d H:i') }}
+                                            </span>
+                                        @endif
+                                    </div>
+
+                                    @if ($payment->cancel_reason)
+                                        <p class="mt-1.5 text-xs text-red-700 whitespace-pre-line">
+                                            Причина: {{ $payment->cancel_reason }}
+                                        </p>
+                                    @endif
+                                </div>
+                            @endif
+
+                            {{-- Подтверждение ожидающего платежа --}}
+                            @if ($payment->status === 'pending')
+                                <div class="mt-3">
+                                    <form action="{{ route('payments.confirm', $payment) }}" method="POST"
+                                        onsubmit="return confirm('Подтвердить этот платёж? После подтверждения сумма оплаты, статус инвойса и Credit Balance будут пересчитаны.')">
+
+                                        @csrf
+                                        @method('PATCH')
+
+                                        <button type="submit"
+                                            class="inline-flex items-center rounded-lg
+                       border border-green-200 bg-green-50
+                       px-3 py-2 text-xs font-medium text-green-700
+                       hover:bg-green-100 transition">
+
+                                            <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor"
+                                                viewBox="0 0 24 24">
+
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M5 13l4 4L19 7" />
+                                            </svg>
+
+                                            Подтвердить платёж
+                                        </button>
+                                    </form>
+                                </div>
+                            @endif
+
+                            {{-- Отмена обычного подтверждённого платежа --}}
+                            @if ($payment->status === 'confirmed' && !$isCreditBalancePayment)
+                                <div class="mt-3">
+                                    <button type="button" @click="cancelOpen = !cancelOpen"
+                                        class="text-xs font-medium text-red-600 hover:text-red-800 transition">
+
+                                        <span x-show="!cancelOpen">
+                                            Отменить платёж
+                                        </span>
+
+                                        <span x-show="cancelOpen" x-cloak>
+                                            Закрыть форму отмены
+                                        </span>
+                                    </button>
+
+                                    <form x-show="cancelOpen" x-cloak action="{{ route('payments.cancel', $payment) }}"
+                                        method="POST"
+                                        class="mt-3 space-y-3 rounded-lg border border-red-100 bg-red-50 p-3"
+                                        onsubmit="return confirm('Отменить этот платёж? Он останется в истории, а суммы инвойса и Credit Balance будут пересчитаны.')">
+
+                                        @csrf
+                                        @method('PATCH')
+
+                                        <input type="hidden" name="cancel_payment_id" value="{{ $payment->id }}">
+
+                                        <div>
+                                            <label for="cancel_reason_{{ $payment->id }}"
+                                                class="block text-xs font-semibold text-red-700 mb-1">
+
+                                                Причина отмены
+                                                <span class="text-red-500">*</span>
+                                            </label>
+
+                                            <textarea id="cancel_reason_{{ $payment->id }}" name="cancel_reason" rows="3" required minlength="3"
+                                                maxlength="1000"
+                                                class="w-full resize-none rounded-lg border
+                                                    {{ $shouldOpenCancellation ? 'border-red-300' : 'border-red-200' }}
+                                                    bg-white px-3 py-2 text-sm text-gray-700
+                                                    outline-none transition
+                                                    focus:border-red-400 focus:ring-1 focus:ring-red-300"
+                                                placeholder="Например: платёж зарегистрирован ошибочно">{{ $shouldOpenCancellation ? old('cancel_reason') : '' }}</textarea>
+
+                                            @if ($shouldOpenCancellation)
+                                                @error('cancel_reason')
+                                                    <p class="mt-1 text-xs text-red-600">
+                                                        {{ $message }}
+                                                    </p>
+                                                @enderror
+                                            @endif
+                                        </div>
+
+                                        <div class="flex justify-end gap-2">
+                                            <button type="button" @click="cancelOpen = false"
+                                                class="px-3 py-2 text-xs font-medium text-gray-600
+                                                       hover:text-gray-900 transition">
+
+                                                Не отменять
+                                            </button>
+
+                                            <button type="submit"
+                                                class="rounded-lg bg-red-600 px-3 py-2 text-xs
+                                                       font-medium text-white hover:bg-red-700 transition">
+
+                                                Подтвердить отмену
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
                             @endif
                         </div>
                     @empty
-                        <p class="text-sm text-gray-400 text-center py-4">Платежей по счету пока не зарегистрировано.</p>
+                        <p class="text-sm text-gray-400 text-center py-4">
+                            Платежей по счету пока не зарегистрировано.
+                        </p>
                     @endforelse
                 </div>
             </div>

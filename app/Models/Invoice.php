@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 
 class Invoice extends Model
 {
@@ -51,30 +52,95 @@ class Invoice extends Model
         return $this->hasMany(Payment::class);
     }
 
-    // Сколько уже оплачено
-    public function getPaidAmountAttribute()
+    /**
+     * Общая сумма всех подтверждённых платежей.
+     *
+     * Может быть больше суммы инвойса,
+     * если клиент допустил переплату.
+     */
+    public function getPaidAmountAttribute(): float
     {
-        return $this->payments()
-            ->where('status', 'confirmed')
-            ->sum('amount');
+        return round(
+            (float) $this->payments()
+                ->where('status', 'confirmed')
+                ->sum('amount'),
+            2
+        );
     }
 
-    // Остаток к оплате
-    public function getRemainingAmountAttribute()
+    /**
+     * Часть платежей, которая фактически
+     * погашает сумму данного инвойса.
+     *
+     * Никогда не превышает total_amount.
+     */
+    public function getAppliedAmountAttribute(): float
     {
-        return $this->total_amount - $this->paid_amount;
+        return round(
+            min(
+                (float) $this->total_amount,
+                (float) $this->paid_amount
+            ),
+            2
+        );
     }
 
-    // Просрочен ли инвойс
-    public function getIsOverdueAttribute()
+    /**
+     * Переплата сверх суммы инвойса.
+     */
+    public function getOverpaymentAmountAttribute(): float
     {
-        return !in_array($this->status, ['paid', 'cancelled'])
-            && now()->toDateString() > $this->due_date;
+        return round(
+            max(
+                0,
+                (float) $this->paid_amount
+                    - (float) $this->total_amount
+            ),
+            2
+        );
     }
 
-    protected static function booted()
+    /**
+     * Остаток к оплате.
+     *
+     * Никогда не может быть отрицательным.
+     */
+    public function getRemainingAmountAttribute(): float
     {
-        static::deleting(function (Invoice $invoice) {
+        return round(
+            max(
+                0,
+                (float) $this->total_amount
+                    - (float) $this->paid_amount
+            ),
+            2
+        );
+    }
+
+    /**
+     * Просрочен ли инвойс.
+     */
+    public function getIsOverdueAttribute(): bool
+    {
+        if (
+            !$this->due_date
+            || in_array(
+                $this->status,
+                ['paid', 'cancelled'],
+                true
+            )
+        ) {
+            return false;
+        }
+
+        return today()->gt(
+            Carbon::parse($this->due_date)->startOfDay()
+        );
+    }
+
+    protected static function booted(): void
+    {
+        static::deleting(function (Invoice $invoice): void {
             $invoice->lines()->delete();
         });
     }

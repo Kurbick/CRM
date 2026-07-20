@@ -1174,20 +1174,196 @@ class InvoiceController extends Controller
             ->with('success', $message);
     }
 
+    public function cancel(Invoice $invoice)
+    {
+        DB::transaction(function () use ($invoice) {
+            /*
+         * Блокируем инвойс, чтобы два запроса
+         * не могли отменить его одновременно.
+         */
+            $invoice = Invoice::query()
+                ->whereKey($invoice->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($invoice->status !== 'issued') {
+                throw ValidationException::withMessages([
+                    'cancel' => 'Отменить можно только выставленный инвойс без оплат.',
+                ]);
+            }
+
+            /*
+         * Пока отмену инвойсов с платежами запрещаем.
+         * Возврат денег и Credit Balance сделаем
+         * отдельной контролируемой операцией.
+         */
+            if ($invoice->payments()->exists()) {
+                throw ValidationException::withMessages([
+                    'cancel' => 'Нельзя отменить инвойс, по которому зарегистрирован платёж.',
+                ]);
+            }
+
+            $lines = $invoice->lines()
+                ->lockForUpdate()
+                ->get();
+
+            $subscriptionLines = $lines
+                ->whereNotNull('subscription_id');
+
+            $subscriptionIds = $subscriptionLines
+                ->pluck('subscription_id')
+                ->unique()
+                ->sort()
+                ->values();
+
+            $subscriptions = Subscription::query()
+                ->whereIn('id', $subscriptionIds)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+
+            /*
+         * Сначала выполняем все проверки.
+         * Только затем меняем статус и даты.
+         */
+            foreach ($subscriptionLines as $line) {
+                $subscription = $subscriptions->get(
+                    $line->subscription_id
+                );
+
+                if (!$subscription) {
+                    throw ValidationException::withMessages([
+                        'cancel' => 'Одна из подписок больше не существует.',
+                    ]);
+                }
+
+                if (!$line->period_start || !$line->period_end) {
+                    throw ValidationException::withMessages([
+                        'cancel' => "У позиции «{$line->description}» отсутствует расчётный период.",
+                    ]);
+                }
+
+                /*
+             * Если после отменяемого периода уже существует
+             * другой инвойс или черновик, откатывать дату нельзя.
+             *
+             * Сначала необходимо удалить последующий черновик
+             * либо отменить более поздний выставленный инвойс.
+             */
+                $hasLaterPeriod = InvoiceLine::query()
+                    ->where('subscription_id', $subscription->id)
+                    ->where('invoice_id', '!=', $invoice->id)
+                    ->whereDate(
+                        'period_start',
+                        '>',
+                        Carbon::parse($line->period_start)
+                            ->toDateString()
+                    )
+                    ->whereHas('invoice', function ($query) {
+                        $query->where(
+                            'status',
+                            '!=',
+                            'cancelled'
+                        );
+                    })
+                    ->exists();
+
+                if ($hasLaterPeriod) {
+                    throw ValidationException::withMessages([
+                        'cancel' =>
+                        "Нельзя отменить позицию «{$line->description}»: "
+                            . 'по подписке уже существует более поздний инвойс или черновик.',
+                    ]);
+                }
+            }
+
+            /*
+         * Инвойс не удаляется — остаётся
+         * в бухгалтерской истории.
+         */
+            $invoice->update([
+                'status' => 'cancelled',
+            ]);
+
+            /*
+         * Возвращаем стандартные подписки
+         * на начало отменённого периода.
+         */
+            foreach ($subscriptionLines as $line) {
+                $subscription = $subscriptions->get(
+                    $line->subscription_id
+                );
+
+                if (!$subscription) {
+                    continue;
+                }
+
+                /*
+             * Пользовательский график пока
+             * не пересчитываем автоматически.
+             */
+                if ($subscription->billing_period === 'custom') {
+                    continue;
+                }
+
+                $subscription->update([
+                    'next_billing_date' => Carbon::parse(
+                        $line->period_start
+                    )->toDateString(),
+                ]);
+            }
+        });
+
+        return redirect()
+            ->route('invoices.show', $invoice)
+            ->with(
+                'success',
+                'Инвойс отменён. График подписок восстановлен.'
+            );
+    }
+
     /**
      * Remove the specified resource from storage.
      */
     public function destroy(Invoice $invoice)
     {
-        if ($invoice->payments()->where('status', 'confirmed')->exists()) {
-            return redirect()->route('invoices.show', $invoice)
-                ->with('error', 'Невозможно удалить инвойс, по которому уже зарегистрированы платежи.');
+        /*
+     * Физически удалять разрешаем только черновики.
+     * Выставленные счета должны сохраняться
+     * в истории бухгалтерских документов.
+     */
+        if ($invoice->status !== 'draft') {
+            return redirect()
+                ->route('invoices.show', $invoice)
+                ->with(
+                    'error',
+                    'Удалить можно только черновик инвойса.'
+                );
+        }
+
+        /*
+     * Дополнительная защита для старых данных:
+     * черновик с любым зарегистрированным платежом
+     * удалять нельзя.
+     */
+        if ($invoice->payments()->exists()) {
+            return redirect()
+                ->route('invoices.show', $invoice)
+                ->with(
+                    'error',
+                    'Нельзя удалить черновик, по которому зарегистрирован платёж.'
+                );
         }
 
         $invoice->delete();
 
-        return redirect()->route('invoices.index')
-            ->with('success', 'Инвойс успешно удален.');
+        return redirect()
+            ->route('invoices.index')
+            ->with(
+                'success',
+                'Черновик инвойса успешно удалён.'
+            );
     }
 
     /**
