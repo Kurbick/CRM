@@ -4,6 +4,25 @@
 
 @section('content')
 
+    @php
+        $currentSort = in_array(request('sort'), ['issue_date', 'due_date'], true)
+            ? request('sort')
+            : 'issue_date';
+        $currentDirection = in_array(request('direction'), ['asc', 'desc'], true)
+            ? request('direction')
+            : 'desc';
+        $preservedFilters = request()->only(['search', 'company_id', 'status', 'overdue']);
+
+        $sortUrl = function (string $column) use ($currentSort, $currentDirection, $preservedFilters): string {
+            $direction = $currentSort === $column && $currentDirection === 'desc' ? 'asc' : 'desc';
+
+            return route('invoices.index', array_merge($preservedFilters, [
+                'sort' => $column,
+                'direction' => $direction,
+            ]));
+        };
+    @endphp
+
     <div class="mb-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
             <h1 class="text-2xl font-bold text-gray-900">
@@ -34,6 +53,9 @@
     <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm mb-6">
         <form action="{{ route('invoices.index') }}" method="GET" class="flex flex-col md:flex-row md:items-center gap-4">
 
+            <input type="hidden" name="sort" value="{{ $currentSort }}">
+            <input type="hidden" name="direction" value="{{ $currentDirection }}">
+
             {{-- Поиск --}}
             <div class="flex-1 relative">
                 <span
@@ -48,66 +70,122 @@
                 </span>
 
                 <input type="text" name="search" value="{{ request('search') }}"
-                    placeholder="Поиск по номеру счета или плательщику..."
+                    placeholder="Номер, компания, плательщик или договор..."
                     class="w-full pl-10 pr-4 py-2 border border-gray-200
                            rounded-lg text-sm focus:border-blue-500
                            focus:ring-1 focus:ring-blue-500
                            outline-none transition">
             </div>
 
-            {{-- Фильтр по компании --}}
-            <div class="w-full md:w-56">
-                <select name="company_id" onchange="this.form.submit()"
-                    class="w-full px-3 py-2 border border-gray-200
-                           rounded-lg text-sm focus:border-blue-500
-                           focus:ring-1 focus:ring-blue-500
-                           outline-none transition">
+            {{-- Фильтр по компании с поиском --}}
+            <div class="relative w-full md:w-64" x-data="{
+                open: false,
+                selectedId: @js((string) request('company_id', '')),
+                query: @js($companies->firstWhere('id', (int) request('company_id'))?->name ?? ''),
+                companies: @js($companies->map(fn($company) => ['id' => $company->id, 'name' => $company->name])->values()->all()),
+                get filteredCompanies() {
+                    const search = this.query.trim().toLowerCase();
+                    return search
+                        ? this.companies.filter(company => company.name.toLowerCase().startsWith(search))
+                        : this.companies;
+                },
+                selectCompany(company) {
+                    this.selectedId = String(company.id);
+                    this.query = company.name;
+                    this.open = false;
+                    this.$nextTick(() => this.$root.closest('form').requestSubmit());
+                },
+                clearCompany() {
+                    this.selectedId = '';
+                    this.query = '';
+                    this.open = false;
+                    this.$nextTick(() => this.$root.closest('form').requestSubmit());
+                }
+            }" x-on:click.outside="open = false" x-on:keydown.escape.window="open = false">
+                <input type="hidden" name="company_id" x-model="selectedId">
 
-                    <option value="">
-                        Все компании
-                    </option>
+                <div class="relative">
+                    <input type="text" x-model="query" x-on:focus="open = true" x-on:click="open = true"
+                        x-on:input="selectedId = ''; open = true"
+                        x-on:keydown.enter.prevent="if (filteredCompanies.length > 0) selectCompany(filteredCompanies[0])"
+                        placeholder="Все компании" autocomplete="off"
+                        class="w-full px-3 py-2 pr-16 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition">
 
-                    @foreach ($companies as $company)
-                        <option value="{{ $company->id }}" {{ request('company_id') == $company->id ? 'selected' : '' }}>
+                    <button type="button" x-show="query.length > 0" x-cloak x-on:click="clearCompany()"
+                        class="absolute inset-y-0 right-8 flex items-center px-2 text-gray-400 hover:text-red-500 transition"
+                        title="Сбросить компанию">✕</button>
 
-                            {{ $company->name }}
-                        </option>
-                    @endforeach
-                </select>
+                    <button type="button" x-on:click="open = !open"
+                        class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600 transition"
+                        tabindex="-1">
+                        <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div x-show="open" x-cloak x-transition
+                    class="absolute z-30 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                    <button type="button" x-on:click="clearCompany()"
+                        class="w-full px-3 py-2.5 text-left text-sm text-gray-600 hover:bg-gray-50 transition">Все компании</button>
+                    <div class="border-t border-gray-100"></div>
+                    <template x-for="company in filteredCompanies" :key="company.id">
+                        <button type="button" x-on:click="selectCompany(company)"
+                            class="w-full px-3 py-2.5 text-left text-sm hover:bg-blue-50 hover:text-blue-700 transition"
+                            :class="String(company.id) === selectedId ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'">
+                            <span x-text="company.name"></span>
+                        </button>
+                    </template>
+                    <div x-show="filteredCompanies.length === 0" class="px-3 py-4 text-center text-sm text-gray-400">
+                        Компании не найдены
+                    </div>
+                </div>
             </div>
 
             {{-- Фильтр по статусу --}}
-            <div class="w-full md:w-44">
-                <select name="status" onchange="this.form.submit()"
-                    class="w-full px-3 py-2 border border-gray-200
-                           rounded-lg text-sm focus:border-blue-500
-                           focus:ring-1 focus:ring-blue-500
-                           outline-none transition">
-
-                    <option value="">
-                        Все статусы
-                    </option>
-
-                    <option value="draft" {{ request('status') === 'draft' ? 'selected' : '' }}>
-                        Черновик
-                    </option>
-
-                    <option value="issued" {{ request('status') === 'issued' ? 'selected' : '' }}>
-                        Выставлен
-                    </option>
-
-                    <option value="partially_paid" {{ request('status') === 'partially_paid' ? 'selected' : '' }}>
-                        Частично оплачен
-                    </option>
-
-                    <option value="paid" {{ request('status') === 'paid' ? 'selected' : '' }}>
-                        Оплачен
-                    </option>
-
-                    <option value="cancelled" {{ request('status') === 'cancelled' ? 'selected' : '' }}>
-                        Отменен
-                    </option>
-                </select>
+            <div class="relative w-full md:w-44" x-data="{
+                open: false,
+                selectedStatus: @js((string) request('status', '')),
+                statuses: [
+                    { value: '', label: 'Все статусы' },
+                    { value: 'draft', label: 'Черновик' },
+                    { value: 'issued', label: 'Выставлен' },
+                    { value: 'partially_paid', label: 'Частично оплачен' },
+                    { value: 'paid', label: 'Оплачен' },
+                    { value: 'cancelled', label: 'Отменён' },
+                ],
+                get selectedLabel() {
+                    return this.statuses.find(item => item.value === this.selectedStatus)?.label ?? 'Все статусы';
+                },
+                selectStatus(status) {
+                    this.selectedStatus = status.value;
+                    this.open = false;
+                    this.$nextTick(() => this.$root.closest('form').requestSubmit());
+                }
+            }" x-on:click.outside="open = false" x-on:keydown.escape.window="open = false">
+                <input type="hidden" name="status" x-model="selectedStatus">
+                <button type="button" x-on:click="open = !open"
+                    class="relative w-full px-3 py-2 pr-10 border border-gray-200 rounded-lg bg-white text-left text-sm text-gray-700 hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition">
+                    <span x-text="selectedLabel" :class="selectedStatus ? 'text-gray-700' : 'text-gray-400'"></span>
+                    <span class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
+                        <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </span>
+                </button>
+                <div x-show="open" x-cloak x-transition
+                    class="absolute z-30 mt-1 w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
+                    <template x-for="status in statuses" :key="status.value">
+                        <button type="button" x-on:click="selectStatus(status)"
+                            class="flex w-full items-center justify-between px-3 py-2.5 text-left text-sm transition hover:bg-blue-50 hover:text-blue-700"
+                            :class="status.value === selectedStatus ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'">
+                            <span x-text="status.label"></span>
+                            <svg x-show="status.value === selectedStatus" class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+                            </svg>
+                        </button>
+                    </template>
+                </div>
             </div>
 
             {{-- Просроченные --}}
@@ -134,7 +212,7 @@
                     Найти
                 </button>
 
-                @if (request('search') || request('status') || request('company_id') || request('overdue'))
+                @if (request('search') || request('status') || request('company_id') || request('overdue') || request('sort') || request('direction'))
                     <a href="{{ route('invoices.index') }}"
                         class="px-4 py-2 border border-gray-200 hover:bg-gray-50
                                text-gray-500 text-sm font-medium rounded-lg
@@ -169,16 +247,26 @@
                             Плательщик / Компания
                         </th>
 
-                        <th
-                            class="px-6 py-3.5 text-xs font-semibold
-                                   uppercase tracking-wider">
-                            Дата выставления
+                        <th class="px-6 py-3.5 text-xs font-semibold uppercase tracking-wider">
+                            <a href="{{ $sortUrl('issue_date') }}"
+                                class="inline-flex items-center gap-1.5 hover:text-blue-600 transition"
+                                title="{{ $currentSort === 'issue_date' && $currentDirection === 'desc' ? 'Показать сначала старые даты' : 'Показать сначала новые даты' }}">
+                                <span>Дата выставления</span>
+                                <span class="{{ $currentSort === 'issue_date' ? 'text-blue-600' : 'text-gray-300' }}">
+                                    {{ $currentSort === 'issue_date' ? ($currentDirection === 'asc' ? '↑' : '↓') : '↕' }}
+                                </span>
+                            </a>
                         </th>
 
-                        <th
-                            class="px-6 py-3.5 text-xs font-semibold
-                                   uppercase tracking-wider">
-                            Срок оплаты
+                        <th class="px-6 py-3.5 text-xs font-semibold uppercase tracking-wider">
+                            <a href="{{ $sortUrl('due_date') }}"
+                                class="inline-flex items-center gap-1.5 hover:text-blue-600 transition"
+                                title="{{ $currentSort === 'due_date' && $currentDirection === 'desc' ? 'Показать сначала ранние сроки' : 'Показать сначала поздние сроки' }}">
+                                <span>Срок оплаты</span>
+                                <span class="{{ $currentSort === 'due_date' ? 'text-blue-600' : 'text-gray-300' }}">
+                                    {{ $currentSort === 'due_date' ? ($currentDirection === 'asc' ? '↑' : '↓') : '↕' }}
+                                </span>
+                            </a>
                         </th>
 
                         <th
@@ -208,6 +296,12 @@
 
                 <tbody class="divide-y divide-gray-100 text-gray-700">
                     @forelse ($invoices as $invoice)
+                        @php
+                            $paidAmount = (float) ($invoice->confirmed_paid_amount ?? 0);
+                            $appliedAmount = min((float) $invoice->total_amount, $paidAmount);
+                            $overpaymentAmount = max(0, $paidAmount - (float) $invoice->total_amount);
+                            $remainingAmount = max(0, (float) $invoice->total_amount - $paidAmount);
+                        @endphp
                         <tr class="hover:bg-gray-50/50 transition">
 
                             {{-- Номер --}}
@@ -234,7 +328,7 @@
 
                             {{-- Дата выставления --}}
                             <td class="px-6 py-4 text-gray-600">
-                                {{ $invoice->issue_date }}
+                                {{ \Illuminate\Support\Carbon::parse($invoice->issue_date)->format('d.m.Y') }}
                             </td>
 
                             {{-- Срок оплаты --}}
@@ -242,7 +336,7 @@
                                 <div
                                     class="{{ $invoice->is_overdue ? 'text-red-600 font-semibold' : 'text-gray-600' }}">
 
-                                    {{ $invoice->due_date }}
+                                    {{ \Illuminate\Support\Carbon::parse($invoice->due_date)->format('d.m.Y') }}
                                 </div>
 
                                 @if ($invoice->is_overdue)
@@ -264,20 +358,20 @@
                             <td class="px-6 py-4 text-xs">
                                 <div class="text-green-600 font-medium">
                                     Оплачено:
-                                    {{ number_format($invoice->applied_amount, 2) }} ₼
+                                    {{ number_format($appliedAmount, 2) }} ₼
                                 </div>
 
-                                @if ($invoice->overpayment_amount > 0)
+                                @if ($overpaymentAmount > 0)
                                     <div class="text-blue-600 font-medium mt-0.5">
                                         Переплата:
-                                        {{ number_format($invoice->overpayment_amount, 2) }} ₼
+                                        {{ number_format($overpaymentAmount, 2) }} ₼
                                     </div>
                                 @endif
 
-                                @if ($invoice->remaining_amount > 0)
+                                @if ($remainingAmount > 0)
                                     <div class="text-red-500 font-medium mt-0.5">
                                         Долг:
-                                        {{ number_format($invoice->remaining_amount, 2) }} ₼
+                                        {{ number_format($remainingAmount, 2) }} ₼
                                     </div>
                                 @endif
                             </td>
@@ -307,7 +401,7 @@
 
                                 Счетов не найдено.
 
-                                @if (request('search') || request('status') || request('company_id') || request('overdue'))
+                                @if (request('search') || request('status') || request('company_id') || request('overdue') || request('sort') || request('direction'))
                                     <a href="{{ route('invoices.index') }}" class="text-blue-600 hover:underline ml-1">
 
                                         Сбросить фильтры

@@ -21,22 +21,58 @@ class InvoiceController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Invoice::query()->with('company');
+        $query = Invoice::query()
+            ->with('company')
+            ->withSum([
+                'payments as confirmed_paid_amount' => function ($paymentQuery) {
+                    $paymentQuery->where('status', 'confirmed');
+                },
+            ], 'amount');
+
+        $allowedStatuses = [
+            'draft',
+            'issued',
+            'partially_paid',
+            'paid',
+            'cancelled',
+        ];
+
+        $allowedSortColumns = [
+            'issue_date',
+            'due_date',
+        ];
+
+        $allowedSortDirections = [
+            'asc',
+            'desc',
+        ];
 
         if ($request->filled('search')) {
-            $search = $request->input('search');
-            $query->where(function ($q) use ($search) {
-                $q->where('invoice_number', 'like', "%{$search}%")
-                    ->orWhere('payer_name', 'like', "%{$search}%");
+            $search = trim($request->input('search'));
+
+            $query->where(function ($query) use ($search) {
+                $query
+                    ->where('invoices.invoice_number', 'like', "%{$search}%")
+                    ->orWhere('invoices.payer_name', 'like', "%{$search}%")
+                    ->orWhere('invoices.contract_reference', 'like', "%{$search}%")
+                    ->orWhereHas('company', function ($companyQuery) use ($search) {
+                        $companyQuery->where('companies.name', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('contract', function ($contractQuery) use ($search) {
+                        $contractQuery->where('contracts.contract_number', 'like', "%{$search}%");
+                    });
             });
         }
 
-        if ($request->filled('status')) {
+        if (in_array($request->input('status'), $allowedStatuses, true)) {
             $query->where('status', $request->input('status'));
         }
 
-        if ($request->filled('company_id')) {
-            $query->where('company_id', $request->input('company_id'));
+        if (
+            $request->filled('company_id')
+            && Company::query()->whereKey($request->integer('company_id'))->exists()
+        ) {
+            $query->where('invoices.company_id', $request->integer('company_id'));
         }
 
         if ($request->boolean('overdue')) {
@@ -44,8 +80,29 @@ class InvoiceController extends Controller
                 ->where('due_date', '<', now()->toDateString());
         }
 
-        $invoices = $query->orderBy('due_date', 'desc')->paginate(10)->withQueryString();
-        $companies = Company::orderBy('name')->get();
+        $sort = $request->input('sort', 'issue_date');
+        $direction = $request->input('direction', 'desc');
+
+        if (!in_array($sort, $allowedSortColumns, true)) {
+            $sort = 'issue_date';
+        }
+
+        if (!in_array($direction, $allowedSortDirections, true)) {
+            $direction = 'desc';
+        }
+
+        $invoices = $query
+            ->orderBy("invoices.{$sort}", $direction)
+            ->orderByDesc('invoices.id')
+            ->paginate(10)
+            ->withQueryString();
+
+        $companies = Company::query()
+            ->orderBy('name')
+            ->get([
+                'id',
+                'name',
+            ]);
 
         return view('invoices.index', compact('invoices', 'companies'));
     }
