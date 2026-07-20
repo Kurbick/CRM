@@ -109,7 +109,7 @@
                     </p>
 
                     <p class="mt-2 text-sm text-gray-700">
-                        {{ \Carbon\Carbon::parse($contract->start_date)->format('d.m.Y') }}
+                        {{ \Carbon\Carbon::parse($contract->start_date)->format('d/m/Y') }}
                     </p>
                 </div>
 
@@ -120,7 +120,7 @@
 
                     <p class="mt-2 text-sm text-gray-700">
                         @if ($contract->end_date)
-                            {{ \Carbon\Carbon::parse($contract->end_date)->format('d.m.Y') }}
+                            {{ \Carbon\Carbon::parse($contract->end_date)->format('d/m/Y') }}
                         @else
                             Бессрочный
                         @endif
@@ -320,7 +320,7 @@
                                     @endif
 
                                     <span class="text-xs text-gray-400">
-                                        {{ $document->created_at->format('d.m.Y H:i') }}
+                                        {{ $document->created_at->format('d/m/Y H:i') }}
                                     </span>
                                 </div>
 
@@ -456,7 +456,7 @@
 
                                 <td class="px-6 py-4 text-gray-600">
                                     @if ($service['date'])
-                                        {{ \Carbon\Carbon::parse($service['date'])->format('d.m.Y') }}
+                                        {{ \Carbon\Carbon::parse($service['date'])->format('d/m/Y') }}
                                     @else
                                         —
                                     @endif

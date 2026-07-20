@@ -21,6 +21,16 @@
                 'direction' => $direction,
             ]));
         };
+
+        $formatMoney = static function ($amount): string {
+            $value = (float) $amount;
+
+            if ($value == 0.0) {
+                $value = 0.0;
+            }
+
+            return number_format($value, 2, ',', ' ') . ' ₼';
+        };
     @endphp
 
     <div class="mb-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
@@ -244,7 +254,7 @@
                         <th
                             class="px-6 py-3.5 text-xs font-semibold
                                    uppercase tracking-wider">
-                            Плательщик / Компания
+                            Компания
                         </th>
 
                         <th class="px-6 py-3.5 text-xs font-semibold uppercase tracking-wider">
@@ -288,7 +298,7 @@
                         </th>
 
                         <th
-                            class="px-6 py-3.5 text-xs font-semibold
+                            class="w-12 px-2 py-3.5 text-xs font-semibold
                                    uppercase tracking-wider">
                         </th>
                     </tr>
@@ -305,30 +315,28 @@
                         <tr class="hover:bg-gray-50/50 transition">
 
                             {{-- Номер --}}
-                            <td class="px-6 py-4 font-mono font-semibold text-gray-900">
-                                {{ $invoice->invoice_number }}
+                            <td class="px-6 py-4">
+                                <a href="{{ route('invoices.show', $invoice) }}"
+                                    class="font-mono font-semibold text-gray-900 transition hover:text-blue-600 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                                    {{ $invoice->invoice_number }}
+                                </a>
                             </td>
 
-                            {{-- Плательщик и компания --}}
+                            {{-- Связанная компания с fallback на snapshot --}}
                             <td class="px-6 py-4">
-                                <div class="font-medium text-gray-900">
-                                    {{ $invoice->payer_name }}
-                                </div>
-
-                                <div class="text-xs text-gray-400 mt-0.5">
-                                    Компания:
-
-                                    <a href="{{ route('companies.show', $invoice->company_id) }}"
-                                        class="text-blue-600 hover:underline">
-
+                                @if ($invoice->company)
+                                    <a href="{{ route('companies.show', ['company' => $invoice->company, 'return_url' => request()->fullUrl()]) }}"
+                                        class="font-medium text-gray-900 transition hover:text-blue-600 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
                                         {{ $invoice->company->name }}
                                     </a>
-                                </div>
+                                @else
+                                    <span class="font-medium text-gray-900">{{ $invoice->payer_name }}</span>
+                                @endif
                             </td>
 
                             {{-- Дата выставления --}}
                             <td class="px-6 py-4 text-gray-600">
-                                {{ \Illuminate\Support\Carbon::parse($invoice->issue_date)->format('d.m.Y') }}
+                                {{ \Illuminate\Support\Carbon::parse($invoice->issue_date)->format('d/m/Y') }}
                             </td>
 
                             {{-- Срок оплаты --}}
@@ -336,7 +344,7 @@
                                 <div
                                     class="{{ $invoice->is_overdue ? 'text-red-600 font-semibold' : 'text-gray-600' }}">
 
-                                    {{ \Illuminate\Support\Carbon::parse($invoice->due_date)->format('d.m.Y') }}
+                                    {{ \Illuminate\Support\Carbon::parse($invoice->due_date)->format('d/m/Y') }}
                                 </div>
 
                                 @if ($invoice->is_overdue)
@@ -351,28 +359,34 @@
 
                             {{-- Сумма --}}
                             <td class="px-6 py-4 font-semibold text-gray-900">
-                                {{ number_format($invoice->total_amount, 2) }} ₼
+                                {{ $formatMoney($invoice->total_amount) }}
                             </td>
 
                             {{-- Оплата, переплата и долг --}}
                             <td class="px-6 py-4 text-xs">
-                                <div class="text-green-600 font-medium">
-                                    Оплачено:
-                                    {{ number_format($appliedAmount, 2) }} ₼
-                                </div>
-
-                                @if ($overpaymentAmount > 0)
-                                    <div class="text-blue-600 font-medium mt-0.5">
-                                        Переплата:
-                                        {{ number_format($overpaymentAmount, 2) }} ₼
+                                @if ($invoice->status === 'cancelled')
+                                    <div class="font-medium text-gray-500">
+                                        Счёт отменён
                                     </div>
-                                @endif
-
-                                @if ($remainingAmount > 0)
-                                    <div class="text-red-500 font-medium mt-0.5">
-                                        Долг:
-                                        {{ number_format($remainingAmount, 2) }} ₼
+                                @else
+                                    <div class="text-green-600 font-medium">
+                                        Оплачено:
+                                        {{ $formatMoney($appliedAmount) }}
                                     </div>
+
+                                    @if ($overpaymentAmount > 0)
+                                        <div class="text-blue-600 font-medium mt-0.5">
+                                            Переплата:
+                                            {{ $formatMoney($overpaymentAmount) }}
+                                        </div>
+                                    @endif
+
+                                    @if ($remainingAmount > 0)
+                                        <div class="text-red-500 font-medium mt-0.5">
+                                            Долг:
+                                            {{ $formatMoney($remainingAmount) }}
+                                        </div>
+                                    @endif
                                 @endif
                             </td>
 
@@ -384,13 +398,14 @@
                             </td>
 
                             {{-- Действия --}}
-                            <td class="px-6 py-4 text-right">
-                                <div class="flex items-center justify-end gap-3">
+                            <td class="w-12 px-2 py-4 text-center">
+                                <div class="flex items-center justify-center gap-1">
                                     <a href="{{ route('invoices.show', $invoice) }}"
-                                        class="text-blue-600 hover:text-blue-800
-                                               text-sm font-semibold transition">
-
-                                        Открыть →
+                                        class="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-400 transition hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                                        aria-label="Открыть счёт {{ $invoice->invoice_number }}" title="Открыть счёт">
+                                        <svg class="h-[18px] w-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                        </svg>
                                     </a>
                                 </div>
                             </td>

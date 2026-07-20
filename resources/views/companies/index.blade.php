@@ -109,7 +109,7 @@
                             </td>
                             <td class="px-6 py-4 text-right">
                                 <div class="flex items-center justify-end gap-3">
-                                    <a href="{{ route('companies.show', $company) }}"
+                                    <a href="{{ route('companies.show', ['company' => $company, 'return_url' => request()->fullUrl()]) }}"
                                        class="text-blue-600 hover:text-blue-800 text-sm font-semibold transition">
                                         Открыть →
                                     </a>

@@ -31,16 +31,11 @@
                 <div>
                     <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Дата начала <span
                             class="text-red-500">*</span></label>
-                    <input type="date" name="start_date"
-                        value="{{ old('start_date', $contract->start_date?->format('Y-m-d')) }}"
-                        class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition"
-                        required>
+                    <x-form.date-input name="start_date" :value="old('start_date', $contract->start_date?->format('Y-m-d'))" required />
                 </div>
                 <div>
                     <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Дата окончания</label>
-                    <input type="date" name="end_date"
-                        value="{{ old('end_date', $contract->end_date?->format('Y-m-d')) }}"
-                        class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition">
+                    <x-form.date-input name="end_date" :value="old('end_date', $contract->end_date?->format('Y-m-d'))" />
                 </div>
             </div>
 

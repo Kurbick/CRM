@@ -6,12 +6,12 @@
 
     {{-- Навигация и заголовок --}}
     <div class="mb-6">
-        <a href="{{ route('companies.index') }}"
+        <a href="{{ $returnContext['url'] }}"
             class="text-sm text-gray-500 hover:text-gray-900 transition flex items-center gap-1.5 mb-2">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
-            Назад к списку
+            {{ $returnContext['label'] }}
         </a>
 
         <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
@@ -32,7 +32,7 @@
             </div>
 
             <div class="flex items-center gap-2">
-                <a href="{{ route('companies.edit', $company) }}"
+                <a href="{{ route('companies.edit', ['company' => $company, 'return_url' => $returnContext['is_contextual'] ? $returnContext['url'] : null]) }}"
                     class="inline-flex items-center text-sm border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg font-medium transition shadow-sm">
                     <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -319,9 +319,9 @@
                                 <tr>
                                     <td class="py-3 font-medium text-gray-900 font-mono">{{ $contract->contract_number }}
                                     </td>
-                                    <td class="py-3 text-gray-600">{{ $contract->start_date }}</td>
+                                    <td class="py-3 text-gray-600">{{ $contract->start_date?->format('d/m/Y') ?? '—' }}</td>
                                     <td class="py-3 text-gray-400">
-                                        {{ $contract->end_date?->format('d.m.Y') ?? 'Бессрочный' }}</td>
+                                        {{ $contract->end_date?->format('d/m/Y') ?? 'Бессрочный' }}</td>
                                     <td class="py-3">
                                         @include('partials.badge', [
                                             'status' => $contract->effective_status,
@@ -368,9 +368,9 @@
                                         {{ $invoice->invoice_number }}
                                     </td>
                                     <td class="py-3">
-                                        <div class="text-gray-900 text-xs">{{ $invoice->issue_date }}</div>
+                                        <div class="text-gray-900 text-xs">{{ $invoice->issue_date ? \Illuminate\Support\Carbon::parse($invoice->issue_date)->format('d/m/Y') : '—' }}</div>
                                         <div class="text-red-500 text-xs mt-0.5 font-medium flex items-center gap-1">
-                                            <span>до {{ $invoice->due_date }}</span>
+                                            <span>до {{ $invoice->due_date ? \Illuminate\Support\Carbon::parse($invoice->due_date)->format('d/m/Y') : '—' }}</span>
                                             @if ($invoice->is_overdue)
                                                 <span
                                                     class="bg-red-100 text-red-800 text-[10px] px-1 py-0.2 rounded">Просрочен</span>
@@ -425,7 +425,7 @@
                             @forelse($company->payments as $payment)
                                 <tr>
                                     <td class="py-3 font-medium text-gray-900">
-                                        {{ $payment->payment_date }}
+                                        {{ $payment->payment_date ? \Illuminate\Support\Carbon::parse($payment->payment_date)->format('d/m/Y') : '—' }}
                                     </td>
                                     <td class="py-3 font-mono text-xs">
                                         @if ($payment->invoice)

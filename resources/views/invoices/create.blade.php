@@ -1,1313 +1,370 @@
 @extends('layouts.app')
-@section('title', 'Выставить счёт')
+
+@section('title', 'Новый счёт')
+
 @section('content')
+@php
+    $companyOptions = $companies->map(fn ($company) => [
+        'id' => (string) $company->id,
+        'name' => $company->name,
+    ])->values();
+    $oldCompanyId = (string) old('company_id', '');
+    $oldCompanyName = $companies->firstWhere('id', (int) $oldCompanyId)?->name ?? '';
+    $defaultInvoiceNumber = 'INV-' . strtoupper(substr(uniqid(), -6));
+    $defaultIssueDate = now()->toDateString();
+@endphp
 
-    <div class="mb-6">
-        <a href="{{ route('invoices.index') }}" class="text-sm text-gray-500 hover:text-gray-700">
-            ← Назад к инвойсам
-        </a>
+<div class="mb-6">
+    <a href="{{ route('invoices.index') }}" class="text-sm text-gray-500 hover:text-gray-700">← Назад к инвойсам</a>
+    <h1 class="mt-2 text-2xl font-bold text-gray-900">Новый счёт</h1>
+</div>
 
-        <h1 class="text-2xl font-bold text-gray-900 mt-2">
-            Выставить счёт
-        </h1>
-    </div>
+<form method="POST" action="{{ route('invoices.store') }}"
+    x-data="invoiceCreateForm({
+        companies: @js($companyOptions),
+        selectedCompanyId: @js($oldCompanyId),
+        companyQuery: @js($oldCompanyName),
+        selectedContractId: @js((string) old('contract_id', '')),
+        oldLines: @js(array_values(old('lines', []))),
+        invoiceNumber: @js(old('invoice_number', '')),
+        issueDate: @js(old('issue_date', '')),
+        dueDate: @js(old('due_date', '')),
+        comment: @js(old('comment', '')),
+        defaultInvoiceNumber: @js($defaultInvoiceNumber),
+        defaultIssueDate: @js($defaultIssueDate),
+        hasOldInput: @js(session()->hasOldInput()),
+        hasOldDueDate: @js(old('due_date') !== null),
+        contractsUrl: @js(route('ajax.contracts', ['company' => '__COMPANY__'])),
+        itemsUrl: @js(route('ajax.items', ['contract' => '__CONTRACT__'])),
+    })" x-init="init()" x-on:submit="if (!lines.length) { $event.preventDefault(); linesError = true }">
+    @csrf
 
-    <form id="invoice-form" action="{{ route('invoices.store') }}" method="POST">
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div class="space-y-4 lg:col-span-2">
+            <section class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                <h2 class="mb-4 font-semibold text-gray-800">Компания и договор</h2>
 
-        @csrf
-
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-            {{-- Левая колонка --}}
-            <div class="lg:col-span-2 space-y-4">
-
-                {{-- Клиент и договор --}}
-                <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-
-                    <h2 class="font-semibold text-gray-800 mb-4">
-                        Клиент и договор
-                    </h2>
-
-                    {{-- Компания --}}
-                    <div class="mb-4">
-                        <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">
-                            Компания
-                            <span class="text-red-500">*</span>
-                        </label>
-
-                        <select name="company_id" id="company_id"
-                            class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm
-                               focus:border-blue-500 outline-none transition"
-                            required>
-
-                            <option value="">
-                                — Выберите компанию —
-                            </option>
-
-                            @foreach ($companies as $company)
-                                <option value="{{ $company->id }}"
-                                    {{ old('company_id') == $company->id ? 'selected' : '' }}>
-                                    {{ $company->name }}
-                                </option>
-                            @endforeach
-                        </select>
-
-                        @error('company_id')
-                            <p class="text-xs text-red-500 mt-1">
-                                {{ $message }}
-                            </p>
-                        @enderror
+                <div class="grid grid-cols-1 gap-4" :class="selectedCompanyId ? 'sm:grid-cols-2' : ''">
+                    <div class="relative" x-on:click.outside="companyOpen = false" x-on:keydown.escape.window="companyOpen = false">
+                        <label class="mb-1 block text-xs font-semibold uppercase text-gray-500">Компания <span class="text-red-500">*</span></label>
+                        <input type="hidden" name="company_id" x-model="selectedCompanyId">
+                        <div class="relative">
+                            <input type="text" x-model="companyQuery" autocomplete="off" placeholder="Начните вводить название"
+                                x-on:focus="companyOpen = true" x-on:click="companyOpen = true"
+                                x-on:input="companyTyped()"
+                                x-on:keydown.enter.prevent="filteredCompanies.length && selectCompany(filteredCompanies[0])"
+                                class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 pr-16 text-sm text-gray-700 outline-none transition hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                            <button type="button" x-show="companyQuery" x-cloak x-on:click="clearCompany()"
+                                class="absolute inset-y-0 right-8 flex items-center px-2 text-gray-400 transition hover:text-red-500" aria-label="Очистить компанию">✕</button>
+                            <button type="button" x-on:click="companyOpen = !companyOpen"
+                                class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 transition hover:text-gray-600"
+                                aria-label="Открыть список компаний" aria-haspopup="listbox" x-bind:aria-expanded="companyOpen">
+                                <svg class="h-4 w-4 transition-transform duration-200" :class="{ 'rotate-180': companyOpen }" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div x-show="companyOpen" x-cloak x-transition role="listbox" class="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                            <template x-for="company in filteredCompanies" :key="company.id">
+                                <button type="button" x-on:click="selectCompany(company)" class="block w-full px-3 py-2.5 text-left text-sm hover:bg-blue-50">
+                                    <span x-text="company.name"></span>
+                                </button>
+                            </template>
+                            <p x-show="!filteredCompanies.length" class="px-3 py-3 text-sm text-gray-400">Компании не найдены</p>
+                        </div>
+                        @error('company_id') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
                     </div>
 
-                    {{-- Договор --}}
-                    <div class="mb-4">
-                        <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">
-                            Договор
-                            <span class="text-red-500">*</span>
-                        </label>
+                    <div x-show="selectedCompanyId" x-cloak data-step="contract" class="relative"
+                        x-on:click.outside="contractOpen = false" x-on:keydown.escape.window="contractOpen = false">
+                        <label class="mb-1 block text-xs font-semibold uppercase text-gray-500">Договор <span class="text-red-500">*</span></label>
+                        <input type="hidden" name="contract_id" x-model="selectedContractId">
+                        <button type="button" x-on:click="contractOpen = !contractOpen"
+                            :disabled="!selectedCompanyId || loadingContracts"
+                            class="relative w-full rounded-lg border border-gray-200 bg-white px-3 py-2 pr-10 text-left text-sm text-gray-700 outline-none transition hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
+                            aria-haspopup="listbox" x-bind:aria-expanded="contractOpen" aria-label="Выбрать договор">
+                            <span x-text="selectedContract ? contractLabel(selectedContract) : (loadingContracts ? 'Загрузка договоров…' : 'Выберите договор')"
+                                :class="selectedContract ? 'text-gray-700' : 'text-gray-400'"></span>
+                            <span class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
+                                <svg class="h-4 w-4 transition-transform duration-200" :class="{ 'rotate-180': contractOpen }" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </span>
+                        </button>
+                        <div x-show="contractOpen" x-cloak x-transition role="listbox"
+                            class="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                            <template x-for="contract in contracts" :key="contract.id">
+                                <button type="button" role="option" x-on:click="selectContract(contract)"
+                                    x-bind:aria-selected="String(contract.id) === String(selectedContractId)"
+                                    class="block w-full px-3 py-2.5 text-left text-sm transition hover:bg-blue-50 hover:text-blue-700"
+                                    :class="String(contract.id) === String(selectedContractId) ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-700'">
+                                    <span x-text="contractLabel(contract)"></span>
+                                </button>
+                            </template>
+                            <p x-show="!contracts.length && !loadingContracts" class="px-3 py-3 text-sm text-gray-400">Договоры не найдены</p>
+                        </div>
+                        <p x-show="selectedContract" x-cloak class="mt-1.5 text-xs text-gray-500">
+                            Срок действия: <span x-text="contractDates(selectedContract)"></span>
+                        </p>
+                        @error('contract_id') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                    </div>
+                </div>
+            </section>
 
-                        <select name="contract_id" id="contract_id"
-                            class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm
-                               focus:border-blue-500 outline-none transition"
-                            required disabled>
+            <section x-show="selectedContractId" x-cloak data-step="invoice-details" class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                <h2 class="mb-4 font-semibold text-gray-800">Данные счёта</h2>
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <div>
+                        <label class="mb-1 block text-xs font-semibold uppercase text-gray-500">Номер счёта <span class="text-red-500">*</span></label>
+                        <input name="invoice_number" x-model="invoiceNumber" required
+                            class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono outline-none focus:border-blue-500">
+                        @error('invoice_number') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-xs font-semibold uppercase text-gray-500">Дата выставления <span class="text-red-500">*</span></label>
+                        <x-form.date-input name="issue_date" x-model="issueDate" x-on:change="issueDateChanged()" required />
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-xs font-semibold uppercase text-gray-500">Оплатить до <span class="text-red-500">*</span></label>
+                        <x-form.date-input name="due_date" x-model="dueDate" x-on:input="dueDateIsManual = true" required />
+                    </div>
+                </div>
+            </section>
 
-                            <option value="">
-                                — Сначала выберите компанию —
-                            </option>
-                        </select>
+            <section x-show="selectedContractId" x-cloak data-step="invoice-lines" class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                <h2 class="font-semibold text-gray-800">Позиции счёта</h2>
+                <p class="mt-1 text-xs text-gray-500">Выберите услуги по договору или добавьте ручную позицию.</p>
 
-                        @error('contract_id')
-                            <p class="text-xs text-red-500 mt-1">
-                                {{ $message }}
-                            </p>
-                        @enderror
+                <div class="mt-4">
+                    <div>
+                        <h3 class="mb-2 text-xs font-semibold uppercase text-gray-500">Услуги по договору</h3>
+                        <p x-show="loadingItems" class="text-sm text-gray-500">Загрузка услуг…</p>
+                        <p x-show="!loadingItems && !availableItems.length" class="text-sm text-gray-500">В договоре нет услуг для добавления</p>
+                        <div class="space-y-1">
+                            <template x-for="item in availableItems" :key="itemKey(item)">
+                                <label class="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-gray-50">
+                                    <input type="checkbox" class="mt-1 rounded border-gray-300 text-blue-600" :checked="isSelected(item)" x-on:change="toggleItem(item, $event.target.checked)">
+                                    <span class="min-w-0 flex-1">
+                                        <span class="block text-sm font-medium text-gray-800" x-text="item.description"></span>
+                                        <span class="block text-xs text-gray-500" x-text="itemSubtitle(item)"></span>
+                                    </span>
+                                    <span class="whitespace-nowrap text-sm font-semibold text-gray-800" x-text="money(item.amount)"></span>
+                                </label>
+                            </template>
+                        </div>
+                    </div>
+                </div>
 
-                        <div id="contract-info"
-                            class="hidden mt-3 rounded-lg border border-blue-100
-                               bg-blue-50 px-4 py-3">
+                <button type="button" x-on:click="addManualLine()" class="mt-4 text-sm font-medium text-blue-600 hover:text-blue-800">+ Добавить ручную позицию</button>
 
-                            <div class="flex flex-wrap items-center justify-between gap-2">
-                                <div>
-                                    <p class="text-xs font-semibold uppercase tracking-wide text-blue-500">
-                                        Выбранный договор
-                                    </p>
-
-                                    <p id="contract-info-number" class="mt-1 text-sm font-semibold text-gray-900">
-                                    </p>
+                <div x-show="lines.length" x-cloak class="mt-5">
+                    <h3 class="mb-2 text-xs font-semibold uppercase text-gray-500">Добавлено в счёт</h3>
+                    <div class="space-y-3">
+                        <template x-for="(line, index) in lines" :key="line.key">
+                            <div class="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                                <input type="hidden" :name="`lines[${index}][subscription_id]`" :value="line.subscription_id || ''">
+                                <input type="hidden" :name="`lines[${index}][order_id]`" :value="line.order_id || ''">
+                                <input type="hidden" :name="line.subscription_id && !isCustomLine(line) ? `lines[${index}][period_start]` : null" :value="line.period_start || ''">
+                                <input type="hidden" :name="line.subscription_id && !isCustomLine(line) ? `lines[${index}][period_end]` : null" :value="line.period_end || ''">
+                                <div class="mb-2 flex items-center justify-between gap-3">
+                                    <div>
+                                        <p class="text-xs font-medium text-gray-500" x-text="lineType(line)"></p>
+                                        <p x-show="line.subscription_id && line.billing_period !== 'custom'" class="mt-0.5 text-xs text-gray-500">
+                                            Расчётный период: <span x-text="`${formatDate(line.period_start)} — ${formatDate(line.period_end)}`"></span>
+                                        </p>
+                                    </div>
+                                    <button type="button" x-on:click="removeLine(index)" class="text-sm text-red-500 hover:text-red-700" aria-label="Удалить позицию">Удалить</button>
                                 </div>
-
-                                <div class="text-sm text-gray-600">
-                                    <span id="contract-info-start"></span>
-                                    <span class="mx-1">—</span>
-                                    <span id="contract-info-end"></span>
+                                <div class="grid grid-cols-1 gap-3 sm:grid-cols-12">
+                                    <div class="sm:col-span-8">
+                                        <label class="mb-1 block text-xs text-gray-500">Описание</label>
+                                        <input :name="`lines[${index}][description]`" x-model="line.description" required maxlength="255"
+                                            class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500">
+                                    </div>
+                                    <div class="sm:col-span-4">
+                                        <label class="mb-1 block text-xs text-gray-500">Сумма (₼)</label>
+                                        <input type="number" :name="`lines[${index}][amount]`" x-model="line.amount" min="0.01" step="0.01" required
+                                            class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500">
+                                    </div>
+                                </div>
+                                <div x-show="isCustomLine(line)" class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                    <div>
+                                        <label :for="`line_${index}_period_start`" class="mb-1 block text-xs text-gray-500">Начало расчётного периода</label>
+                                        <x-form.date-input name="period_start" dynamic-name="`lines[${index}][period_start]`" dynamic-id="`line_${index}_period_start`" x-model="line.period_start" ::required="isCustomLine(line)" ::disabled="!isCustomLine(line)" />
+                                    </div>
+                                    <div>
+                                        <label :for="`line_${index}_period_end`" class="mb-1 block text-xs text-gray-500">Окончание расчётного периода</label>
+                                        <x-form.date-input name="period_end" dynamic-name="`lines[${index}][period_end]`" dynamic-id="`line_${index}_period_end`" dynamic-min="line.period_start || null" x-model="line.period_end" ::required="isCustomLine(line)" ::disabled="!isCustomLine(line)" />
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-
-                    {{-- Номер и дата выставления --}}
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                        <div>
-                            <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">
-                                Номер счёта
-                                <span class="text-red-500">*</span>
-                            </label>
-
-                            <input type="text" name="invoice_number"
-                                value="{{ old('invoice_number', 'INV-' . strtoupper(substr(uniqid(), -6))) }}"
-                                class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm
-                                   font-mono focus:border-blue-500 outline-none transition"
-                                required>
-
-                            @error('invoice_number')
-                                <p class="text-xs text-red-500 mt-1">
-                                    {{ $message }}
-                                </p>
-                            @enderror
-                        </div>
-
-                        <div>
-                            <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">
-                                Дата выставления
-                                <span class="text-red-500">*</span>
-                            </label>
-
-                            <input type="date" name="issue_date" id="issue_date"
-                                value="{{ old('issue_date', now()->toDateString()) }}"
-                                class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm
-                                   focus:border-blue-500 outline-none transition"
-                                required>
-
-                            @error('issue_date')
-                                <p class="text-xs text-red-500 mt-1">
-                                    {{ $message }}
-                                </p>
-                            @enderror
-                        </div>
-                    </div>
-
-                    {{-- Срок оплаты и статус --}}
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                        <div>
-                            <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">
-                                Срок оплаты
-                                <span class="text-red-500">*</span>
-                            </label>
-
-                            <input type="date" name="due_date" id="due_date" value="{{ old('due_date') }}"
-                                class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm
-                                   focus:border-blue-500 outline-none transition"
-                                required>
-
-                            @error('due_date')
-                                <p class="text-xs text-red-500 mt-1">
-                                    {{ $message }}
-                                </p>
-                            @enderror
-                        </div>
-
-                        <div>
-                            <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">
-                                Статус
-                            </label>
-
-                            <select name="status"
-                                class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm
-                                   focus:border-blue-500 outline-none transition">
-
-                                <option value="draft" {{ old('status') === 'draft' ? 'selected' : '' }}>
-                                    Черновик
-                                </option>
-
-                                <option value="issued" {{ old('status', 'issued') === 'issued' ? 'selected' : '' }}>
-                                    Выставлен
-                                </option>
-                            </select>
-                        </div>
-                    </div>
-
-                    {{-- Общий период — временно оставляем --}}
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                        <div>
-                            <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">
-                                Период с
-                            </label>
-
-                            <input type="date" name="period_start" value="{{ old('period_start') }}"
-                                class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm
-                                   focus:border-blue-500 outline-none transition">
-                        </div>
-
-                        <div>
-                            <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">
-                                Период по
-                            </label>
-
-                            <input type="date" name="period_end" value="{{ old('period_end') }}"
-                                class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm
-                                   focus:border-blue-500 outline-none transition">
-                        </div>
-                    </div>
-
-                    {{-- Реквизиты --}}
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                        <div>
-                            <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">
-                                Плательщик
-                            </label>
-
-                            <input type="text" name="payer_name" id="payer_name" value="{{ old('payer_name') }}"
-                                class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm
-                                   focus:border-blue-500 outline-none transition">
-                        </div>
-
-                        <div>
-                            <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">
-                                VÖEN плательщика
-                            </label>
-
-                            <input type="text" name="payer_voen" id="payer_voen" value="{{ old('payer_voen') }}"
-                                class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm
-                                   font-mono focus:border-blue-500 outline-none transition">
-                        </div>
-                    </div>
-
-                    <div class="mb-4">
-                        <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">
-                            Ссылка на договор (Müqavilə №)
-                        </label>
-
-                        <input type="text" name="contract_reference" id="contract_reference"
-                            value="{{ old('contract_reference') }}"
-                            class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm
-                               font-mono focus:border-blue-500 outline-none transition">
-                    </div>
-
-                    <div>
-                        <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">
-                            Комментарий
-                        </label>
-
-                        <textarea name="comment" rows="2"
-                            class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm
-                               focus:border-blue-500 outline-none transition">{{ old('comment') }}</textarea>
+                        </template>
                     </div>
                 </div>
-
-                {{-- Позиции счёта --}}
-                <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-
-                    <div class="flex items-center justify-between gap-3 mb-4">
-                        <div>
-                            <h2 class="font-semibold text-gray-800">
-                                Позиции счёта
-                            </h2>
-
-                            <p class="text-xs text-gray-500 mt-1">
-                                Выберите предметы договора или добавьте ручную позицию.
-                            </p>
-                        </div>
-                    </div>
-
-                    {{-- Позиции выбранного договора --}}
-                    <div id="contract-items" class="hidden mb-5">
-                        <p class="text-xs font-semibold text-gray-500 uppercase mb-2">
-                            Доступные позиции договора
-                        </p>
-
-                        <div id="items-list" class="space-y-2"></div>
-                    </div>
-
-                    {{-- Пустое состояние --}}
-                    <div id="lines-empty"
-                        class="rounded-lg border border-dashed border-gray-200
-                           px-4 py-5 text-center">
-
-                        <p class="text-sm font-medium text-gray-700">
-                            Позиции ещё не выбраны
-                        </p>
-
-                        <p class="text-xs text-gray-500 mt-1">
-                            Выберите услугу из договора или добавьте строку вручную.
-                        </p>
-                    </div>
-
-                    {{-- Строки счёта --}}
-                    <div id="lines-container" class="space-y-3"></div>
-
-                    <p id="lines-error" class="hidden text-sm text-red-600 mt-3">
-                        Добавьте хотя бы одну заполненную позицию счёта.
-                    </p>
-
-                    @error('lines')
-                        <p class="text-sm text-red-600 mt-3">
-                            {{ $message }}
-                        </p>
-                    @enderror
-
-                    <button type="button" id="add-manual-line"
-                        class="mt-4 text-sm text-blue-600 hover:text-blue-800
-                           font-medium transition">
-
-                        + Добавить строку
-                    </button>
-                </div>
-
-                {{-- Кнопки --}}
-                <div class="flex gap-3">
-                    <button type="submit"
-                        class="bg-blue-600 hover:bg-blue-700 text-white text-sm
-                           font-medium px-6 py-2.5 rounded-lg transition">
-
-                        Выставить счёт
-                    </button>
-
-                    <a href="{{ route('invoices.index') }}"
-                        class="px-6 py-2.5 border border-gray-200 text-gray-600
-                           text-sm font-medium rounded-lg hover:bg-gray-50 transition">
-
-                        Отмена
-                    </a>
-                </div>
-            </div>
-
-            {{-- Правая колонка — итог --}}
-            <div class="space-y-4">
-                <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 sticky top-4">
-
-                    <h2 class="font-semibold text-gray-800 mb-4">
-                        Итог
-                    </h2>
-
-                    <div class="space-y-2 text-sm">
-                        <div class="flex justify-between text-gray-500">
-                            <span>Позиций:</span>
-                            <span id="lines-count">0</span>
-                        </div>
-
-                        <div
-                            class="border-t border-gray-100 pt-2 flex justify-between
-                                font-semibold text-gray-900 text-lg">
-
-                            <span>Итого:</span>
-                            <span id="total-amount">0.00 ₼</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-        </div>
-    </form>
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            let lineIndex = 0;
-
-            const companySelect = document.getElementById('company_id');
-            const contractSelect = document.getElementById('contract_id');
-
-            const contractItems = document.getElementById('contract-items');
-            const itemsList = document.getElementById('items-list');
-
-            const linesContainer = document.getElementById('lines-container');
-            const linesEmpty = document.getElementById('lines-empty');
-            const linesError = document.getElementById('lines-error');
-
-            const linesCount = document.getElementById('lines-count');
-            const totalAmount = document.getElementById('total-amount');
-
-            const payerName = document.getElementById('payer_name');
-            const payerVoen = document.getElementById('payer_voen');
-            const contractReference = document.getElementById('contract_reference');
-
-            const contractInfo = document.getElementById('contract-info');
-            const contractInfoNumber = document.getElementById('contract-info-number');
-            const contractInfoStart = document.getElementById('contract-info-start');
-            const contractInfoEnd = document.getElementById('contract-info-end');
-
-            const invoiceForm = document.getElementById('invoice-form');
-
-            const oldContractId = @json(old('contract_id'));
-            const oldLines = Object.values(@json(old('lines', [])) || {});
-
-            const billingPeriodLabels = {
-                monthly: 'Ежемесячно',
-                quarterly: 'Ежеквартально',
-                semiannual: 'Раз в полгода',
-                annual: 'Раз в год',
-                custom: 'Свой период',
-            };
-
-            function formatDate(value) {
-                if (!value) {
-                    return 'Бессрочный';
-                }
-
-                const parts = value.split('-');
-
-                if (parts.length !== 3) {
-                    return value;
-                }
-
-                return `${parts[2]}.${parts[1]}.${parts[0]}`;
-            }
-
-            function getSourceKey(type, id) {
-                if (!type || !id) {
-                    return '';
-                }
-
-                return `${type}:${id}`;
-            }
-
-            function parseLocalDate(value) {
-                if (!value) {
-                    return null;
-                }
-
-                const normalizedValue = String(value).slice(0, 10);
-                const parts = normalizedValue.split('-');
-
-                if (parts.length !== 3) {
-                    return null;
-                }
-
-                return new Date(
-                    Number(parts[0]),
-                    Number(parts[1]) - 1,
-                    Number(parts[2])
-                );
-            }
-
-            function formatDateForInput(date) {
-                if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
-                    return '';
-                }
-
-                const year = date.getFullYear();
-                const month = String(date.getMonth() + 1).padStart(2, '0');
-                const day = String(date.getDate()).padStart(2, '0');
-
-                return `${year}-${month}-${day}`;
-            }
-
-            function addMonthsClamped(date, months) {
-                const originalDay = date.getDate();
-
-                const result = new Date(
-                    date.getFullYear(),
-                    date.getMonth(),
-                    1
-                );
-
-                result.setMonth(result.getMonth() + months);
-
-                const lastDayOfTargetMonth = new Date(
-                    result.getFullYear(),
-                    result.getMonth() + 1,
-                    0
-                ).getDate();
-
-                result.setDate(
-                    Math.min(originalDay, lastDayOfTargetMonth)
-                );
-
-                return result;
-            }
-
-            function calculateSubscriptionPeriod(
-                billingPeriod,
-                nextBillingDate,
-                subscriptionStartDate
-            ) {
-                const monthsByPeriod = {
-                    monthly: 1,
-                    quarterly: 3,
-                    semiannual: 6,
-                    annual: 12,
-                };
-
-                const startValue =
-                    nextBillingDate || subscriptionStartDate || '';
-
-                if (!startValue) {
-                    return {
-                        start: '',
-                        end: '',
-                    };
-                }
-
-                if (billingPeriod === 'custom') {
-                    return {
-                        start: startValue,
-                        end: '',
-                    };
-                }
-
-                const months = monthsByPeriod[billingPeriod];
-
-                if (!months) {
-                    return {
-                        start: startValue,
-                        end: '',
-                    };
-                }
-
-                const startDate = parseLocalDate(startValue);
-
-                if (!startDate) {
-                    return {
-                        start: '',
-                        end: '',
-                    };
-                }
-
-                const nextPeriodStart = addMonthsClamped(
-                    startDate,
-                    months
-                );
-
-                const endDate = new Date(nextPeriodStart);
-                endDate.setDate(endDate.getDate() - 1);
-
-                return {
-                    start: formatDateForInput(startDate),
-                    end: formatDateForInput(endDate),
-                };
-            }
-
-            function hasLineWithSourceKey(sourceKey) {
-                return Array.from(
-                    linesContainer.querySelectorAll('.line-item')
-                ).some(function(line) {
-                    return line.dataset.sourceKey === sourceKey;
-                });
-            }
-
-            function createLine({
-                description = '',
-                amount = '',
-                type = '',
-                id = '',
-                sourceKey = '',
-                billingPeriod = '',
-                paymentTerms = '',
-                nextBillingDate = '',
-                subscriptionStartDate = '',
-                periodStart = '',
-                periodEnd = '',
-            } = {}) {
-                if (sourceKey && hasLineWithSourceKey(sourceKey)) {
-                    return;
-                }
-
-                const row = document.createElement('div');
-
-                row.className =
-                    'line-item rounded-lg border border-gray-200 bg-gray-50 p-3';
-
-                row.dataset.sourceKey = sourceKey;
-                row.dataset.paymentTerms = paymentTerms || '';
-                row.dataset.billingPeriod = billingPeriod || '';
-                row.dataset.nextBillingDate = nextBillingDate || '';
-                row.dataset.subscriptionStartDate =
-                    subscriptionStartDate || '';
-
-                let hiddenSourceField = '';
-
-                if (type === 'subscription') {
-                    hiddenSourceField = `
-            <input type="hidden"
-                name="lines[${lineIndex}][subscription_id]"
-                value="${id}">
-        `;
-                }
-
-                if (type === 'order') {
-                    hiddenSourceField = `
-            <input type="hidden"
-                name="lines[${lineIndex}][order_id]"
-                value="${id}">
-        `;
-                }
-
-                let positionLabel = 'Ручная позиция';
-
-                if (type === 'order') {
-                    positionLabel = 'Разовая услуга';
-                }
-
-                if (type === 'subscription') {
-                    const periodLabel =
-                        billingPeriodLabels[billingPeriod] || 'Подписка';
-
-                    positionLabel = `Подписка · ${periodLabel}`;
-                }
-
-                const calculatedPeriod =
-                    calculateSubscriptionPeriod(
-                        billingPeriod,
-                        nextBillingDate,
-                        subscriptionStartDate
-                    );
-
-                const resolvedPeriodStart =
-                    periodStart || calculatedPeriod.start;
-
-                const resolvedPeriodEnd =
-                    periodEnd || calculatedPeriod.end;
-
-                const isSubscription = type === 'subscription';
-                const isCustomPeriod = billingPeriod === 'custom';
-
-                const periodCalculatedAutomatically =
-                    isSubscription &&
-                    !isCustomPeriod &&
-                    resolvedPeriodStart &&
-                    resolvedPeriodEnd;
-
-                let periodFields = '';
-
-                if (isSubscription) {
-                    let periodHint =
-                        'Укажите расчётный период вручную.';
-
-                    if (isCustomPeriod) {
-                        periodHint =
-                            'Для собственного графика период указывается вручную.';
-                    } else if (periodCalculatedAutomatically) {
-                        periodHint =
-                            'Период рассчитан автоматически по графику подписки.';
-                    } else {
-                        periodHint =
-                            'Период не удалось определить автоматически — укажите даты вручную.';
-                    }
-
-                    const readonlyAttribute =
-                        periodCalculatedAutomatically ?
-                        'readonly' :
-                        '';
-
-                    const readonlyClass =
-                        periodCalculatedAutomatically ?
-                        'bg-gray-100 text-gray-600' :
-                        'bg-white';
-
-                    periodFields = `
-            <div class="mt-3 pt-3 border-t border-gray-200">
-                <div class="flex items-center justify-between gap-3 mb-2">
-                    <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                        Расчётный период
-                    </p>
-
-                    <p class="text-[11px] text-gray-400">
-                        ${periodHint}
-                    </p>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                        <label class="block text-xs font-medium text-gray-500 mb-1">
-                            Период с
-                        </label>
-
-                        <input type="date"
-                            name="lines[${lineIndex}][period_start]"
-                            value="${resolvedPeriodStart}"
-                            class="line-period-start w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none transition ${readonlyClass}"
-                            ${readonlyAttribute}
-                            required>
-                    </div>
-
-                    <div>
-                        <label class="block text-xs font-medium text-gray-500 mb-1">
-                            Период по
-                        </label>
-
-                        <input type="date"
-                            name="lines[${lineIndex}][period_end]"
-                            value="${resolvedPeriodEnd}"
-                            min="${resolvedPeriodStart}"
-                            class="line-period-end w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none transition ${readonlyClass}"
-                            ${readonlyAttribute}
-                            required>
-                    </div>
-                </div>
-            </div>
-        `;
-                }
-
-                row.innerHTML = `
-        ${hiddenSourceField}
-
-        <div class="flex items-center justify-between gap-3 mb-2">
-            <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                ${positionLabel}
-            </span>
-
-            <button type="button"
-                class="remove-line-button text-red-400 hover:text-red-600 text-sm transition">
-                ✕
-            </button>
+                <p x-show="linesError" class="mt-3 text-sm text-red-600">Добавьте хотя бы одну позицию счёта.</p>
+                @error('lines') <p class="mt-3 text-sm text-red-600">{{ $message }}</p> @enderror
+            </section>
+
+            <section x-show="selectedContractId" x-cloak data-step="invoice-comment" class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                <label class="mb-1 block text-xs font-semibold uppercase text-gray-500">Комментарий</label>
+                <textarea name="comment" rows="3" x-model="comment" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500"></textarea>
+                @error('comment') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+            </section>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
-            <div class="md:col-span-8">
-                <label class="block text-xs font-medium text-gray-500 mb-1">
-                    Описание
-                </label>
+        <aside class="h-fit rounded-xl border border-gray-200 bg-white p-5 shadow-sm lg:sticky lg:top-6">
+            <h2 class="font-semibold text-gray-800">Итог</h2>
+            <div class="mt-4 flex justify-between text-sm text-gray-600"><span>Позиции:</span><span x-text="lines.length">0</span></div>
+            <div class="mt-3 flex justify-between border-t border-gray-100 pt-3 font-semibold text-gray-900"><span>Итого:</span><span x-text="money(total)">0.00 ₼</span></div>
+            <button type="submit" :disabled="!selectedCompanyId || !selectedContractId || !lines.length" class="mt-5 w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">Сохранить черновик</button>
+        </aside>
+    </div>
+</form>
 
-                <input type="text"
-                    name="lines[${lineIndex}][description]"
-                    value=""
-                    placeholder="Описание услуги"
-                    class="line-description w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition"
-                    required>
-            </div>
-
-            <div class="md:col-span-4">
-                <label class="block text-xs font-medium text-gray-500 mb-1">
-                    Сумма (₼)
-                </label>
-
-                <input type="number"
-                    name="lines[${lineIndex}][amount]"
-                    value=""
-                    placeholder="0.00"
-                    step="0.01"
-                    min="0.01"
-                    class="line-amount w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:border-blue-500 outline-none transition"
-                    required>
-            </div>
-        </div>
-
-        ${periodFields}
-    `;
-
-                const descriptionInput =
-                    row.querySelector('.line-description');
-
-                const amountInput =
-                    row.querySelector('.line-amount');
-
-                descriptionInput.value = description || '';
-
-                amountInput.value =
-                    amount !== '' && amount !== null ?
-                    Number(amount).toFixed(2) :
-                    '';
-
-                const periodStartInput =
-                    row.querySelector('.line-period-start');
-
-                const periodEndInput =
-                    row.querySelector('.line-period-end');
-
-                if (periodStartInput && periodEndInput) {
-                    periodStartInput.addEventListener(
-                        'change',
-                        function() {
-                            periodEndInput.min = this.value;
-
-                            if (
-                                periodEndInput.value &&
-                                periodEndInput.value < this.value
-                            ) {
-                                periodEndInput.value = '';
-                            }
-                        }
-                    );
-                }
-
-                linesContainer.appendChild(row);
-
-                lineIndex++;
-                recalculate();
-
-                if (!description) {
-                    descriptionInput.focus();
-                }
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.data('invoiceCreateForm', config => ({
+        ...config, companyOpen: false, contractOpen: false, contracts: [], availableItems: [], lines: [], loadingContracts: false, loadingItems: false, linesError: false,
+        contractsRequestId: 0, itemsRequestId: 0,
+        dueDateIsManual: config.hasOldInput && config.hasOldDueDate, restoring: true, previousContractId: config.selectedContractId,
+        get filteredCompanies() { const q = this.companyQuery.trim().toLocaleLowerCase(); return q ? this.companies.filter(c => c.name.toLocaleLowerCase().startsWith(q)) : this.companies },
+        get selectedContract() { return this.contracts.find(c => String(c.id) === String(this.selectedContractId)) || null },
+        get total() { return this.lines.reduce((sum, line) => sum + (Number.parseFloat(line.amount) || 0), 0) },
+        async init() {
+            this.lines = this.oldLines.map((line, i) => this.normaliseOldLine(line, i));
+            if (this.selectedCompanyId) await this.loadContracts(true);
+            this.restoring = false;
+        },
+        companyTyped() {
+            if (this.selectedCompanyId) {
+                const selected = this.companies.find(company => String(company.id) === this.selectedCompanyId);
+                if (!this.confirmCompanyReset()) { this.companyQuery = selected?.name || ''; return }
+                this.resetAll();
             }
-
-            function removeLineBySourceKey(sourceKey) {
-                linesContainer
-                    .querySelectorAll('.line-item')
-                    .forEach(function(line) {
-                        if (line.dataset.sourceKey === sourceKey) {
-                            line.remove();
-                        }
-                    });
-
-                recalculate();
+            this.companyOpen = true;
+        },
+        async selectCompany(company) {
+            if (String(company.id) === this.selectedCompanyId) { this.companyQuery = company.name; this.companyOpen = false; return }
+            if (this.selectedCompanyId && !this.confirmCompanyReset()) return;
+            this.resetAll();
+            this.selectedCompanyId = String(company.id); this.companyQuery = company.name; this.companyOpen = false;
+            await this.loadContracts(false);
+        },
+        clearCompany() { this.resetAll() },
+        async selectContract(contract) {
+            if (String(contract.id) === String(this.selectedContractId)) { this.contractOpen = false; return }
+            this.selectedContractId = String(contract.id); this.contractOpen = false; await this.contractChanged()
+        },
+        confirmCompanyReset() {
+            return !this.hasInvoiceState() || window.confirm('При смене компании все введённые данные счёта будут очищены. Продолжить?');
+        },
+        hasInvoiceState() {
+            return Boolean(this.selectedContractId || this.invoiceNumber || this.issueDate || this.dueDate || this.comment || this.lines.length);
+        },
+        resetInvoiceState() {
+            this.itemsRequestId++;
+            this.selectedContractId = '';
+            this.contractOpen = false;
+            this.previousContractId = '';
+            this.availableItems = [];
+            this.lines = [];
+            this.invoiceNumber = '';
+            this.issueDate = '';
+            this.dueDate = '';
+            this.comment = '';
+            this.dueDateIsManual = false;
+            this.linesError = false;
+            this.loadingItems = false;
+        },
+        resetAll() {
+            this.contractsRequestId++;
+            this.resetInvoiceState();
+            this.selectedCompanyId = '';
+            this.companyQuery = '';
+            this.companyOpen = false;
+            this.contracts = [];
+            this.loadingContracts = false;
+        },
+        initialiseNewInvoice() {
+            this.invoiceNumber = this.defaultInvoiceNumber;
+            this.issueDate = this.defaultIssueDate;
+            this.dueDate = '';
+            this.comment = '';
+            this.lines = [];
+            this.availableItems = [];
+            this.dueDateIsManual = false;
+            this.linesError = false;
+            this.recalculateDueDate();
+        },
+        async loadContracts(restore) {
+            const requestId = ++this.contractsRequestId;
+            const companyId = this.selectedCompanyId;
+            this.loadingContracts = true;
+            try {
+                const response = await fetch(this.contractsUrl.replace('__COMPANY__', companyId), { headers: { Accept: 'application/json' } });
+                if (!response.ok) throw new Error();
+                const contracts = await response.json();
+                if (requestId !== this.contractsRequestId || companyId !== this.selectedCompanyId) return;
+                this.contracts = contracts;
+                if (restore && this.selectedContractId && this.contracts.some(c => String(c.id) === String(this.selectedContractId))) {
+                    this.previousContractId = this.selectedContractId;
+                    await this.loadItems();
+                } else if (this.selectedContractId) {
+                    this.resetInvoiceState();
+                }
+            } catch (_) {
+                if (requestId === this.contractsRequestId) { this.contracts = []; if (!restore) this.resetInvoiceState() }
+            } finally {
+                if (requestId === this.contractsRequestId) this.loadingContracts = false;
             }
-
-            function clearLines() {
-                linesContainer.innerHTML = '';
-                linesError.classList.add('hidden');
-
-                recalculate();
+        },
+        async contractChanged() {
+            if (this.restoring) return;
+            const nextContractId = this.selectedContractId;
+            this.resetInvoiceState();
+            if (!nextContractId) return;
+            this.selectedContractId = nextContractId;
+            this.previousContractId = nextContractId;
+            this.initialiseNewInvoice();
+            await this.loadItems();
+        },
+        async loadItems() {
+            const requestId = ++this.itemsRequestId;
+            const contractId = this.selectedContractId;
+            this.loadingItems = true;
+            try {
+                const response = await fetch(this.itemsUrl.replace('__CONTRACT__', contractId), { headers: { Accept: 'application/json' } });
+                if (!response.ok) throw new Error();
+                const data = await response.json();
+                if (requestId !== this.itemsRequestId || contractId !== this.selectedContractId) return;
+                this.availableItems = [...data.orders, ...data.subscriptions]; this.mergeOldMetadata();
+            } catch (_) {
+                if (requestId === this.itemsRequestId) this.availableItems = [];
+            } finally {
+                if (requestId === this.itemsRequestId) this.loadingItems = false;
             }
-
-            function clearContractInformation() {
-                contractInfo.classList.add('hidden');
-
-                contractInfoNumber.textContent = '';
-                contractInfoStart.textContent = '';
-                contractInfoEnd.textContent = '';
-
-                if (payerName) {
-                    payerName.value = '';
-                }
-
-                if (payerVoen) {
-                    payerVoen.value = '';
-                }
-
-                if (contractReference) {
-                    contractReference.value = '';
-                }
-            }
-
-            function showContractInformation(contract) {
-                contractInfoNumber.textContent =
-                    contract.contract_number || '';
-
-                contractInfoStart.textContent =
-                    formatDate(contract.start_date);
-
-                contractInfoEnd.textContent =
-                    formatDate(contract.end_date);
-
-                contractInfo.classList.remove('hidden');
-
-                if (payerName) {
-                    payerName.value = contract.company?.name || '';
-                }
-
-                if (payerVoen) {
-                    payerVoen.value = contract.company?.voen || '';
-                }
-
-                if (contractReference) {
-                    contractReference.value =
-                        contract.contract_number || '';
-                }
-            }
-
-            function renderContractItems(data) {
-                itemsList.innerHTML = '';
-
-                const allItems = [
-                    ...data.orders,
-                    ...data.subscriptions,
-                ];
-
-                if (allItems.length === 0) {
-                    itemsList.innerHTML = `
-                    <p class="text-sm text-gray-400">
-                        В этом договоре нет доступных позиций.
-                    </p>
-                `;
-
-                    contractItems.classList.remove('hidden');
-
-                    return;
-                }
-
-                allItems.forEach(function(item) {
-                    const sourceKey =
-                        getSourceKey(item.type, item.id);
-
-                    const label = document.createElement('label');
-
-                    label.className =
-                        'flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer border border-gray-200 transition';
-
-                    const checkbox = document.createElement('input');
-
-                    checkbox.type = 'checkbox';
-                    checkbox.className =
-                        'item-checkbox rounded border-gray-300 text-blue-600 focus:ring-blue-500';
-
-                    checkbox.dataset.sourceKey = sourceKey;
-                    checkbox.dataset.description =
-                        item.description || '';
-
-                    checkbox.dataset.amount =
-                        item.amount || 0;
-
-                    checkbox.dataset.type =
-                        item.type || '';
-
-                    checkbox.dataset.id =
-                        item.id || '';
-
-                    checkbox.dataset.paymentTerms =
-                        item.payment_terms ?? item.terms ?? '';
-
-                    checkbox.dataset.billingPeriod =
-                        item.billing_period || '';
-
-                    checkbox.dataset.nextBillingDate =
-                        item.next_billing_date || '';
-
-                    checkbox.dataset.subscriptionStartDate =
-                        item.start_date || '';
-
-                    checkbox.checked =
-                        hasLineWithSourceKey(sourceKey);
-
-                    const textWrapper =
-                        document.createElement('div');
-
-                    textWrapper.className = 'flex-1 min-w-0';
-
-                    const title =
-                        document.createElement('p');
-
-                    title.className =
-                        'text-sm font-medium text-gray-800';
-
-                    title.textContent =
-                        item.description || 'Без названия';
-
-                    textWrapper.appendChild(title);
-
-                    if (item.type === 'subscription') {
-                        const period =
-                            document.createElement('p');
-
-                        period.className =
-                            'text-xs text-gray-500 mt-0.5';
-
-                        period.textContent =
-                            billingPeriodLabels[item.billing_period] ||
-                            'Подписка';
-
-                        textWrapper.appendChild(period);
-                    }
-
-                    const amount =
-                        document.createElement('span');
-
-                    amount.className =
-                        'text-sm font-mono font-semibold text-gray-900 whitespace-nowrap';
-
-                    amount.textContent =
-                        `${Number(item.amount || 0).toFixed(2)} ₼`;
-
-                    label.appendChild(checkbox);
-                    label.appendChild(textWrapper);
-                    label.appendChild(amount);
-
-                    itemsList.appendChild(label);
-                });
-
-                contractItems.classList.remove('hidden');
-            }
-
-            async function loadContracts(
-                companyId,
-                selectedContractId = '',
-                preserveLines = false
-            ) {
-                contractSelect.disabled = true;
-
-                contractSelect.innerHTML =
-                    '<option value="">Загрузка договоров...</option>';
-
-                if (!companyId) {
-                    contractSelect.innerHTML =
-                        '<option value="">— Сначала выберите компанию —</option>';
-
-                    contractItems.classList.add('hidden');
-                    itemsList.innerHTML = '';
-
-                    return;
-                }
-
-                try {
-                    const response = await fetch(
-                        `/ajax/companies/${companyId}/contracts`
-                    );
-
-                    if (!response.ok) {
-                        throw new Error('Не удалось загрузить договоры.');
-                    }
-
-                    const contracts = await response.json();
-
-                    contractSelect.innerHTML =
-                        '<option value="">— Выберите договор —</option>';
-
-                    contracts.forEach(function(contract) {
-                        const option =
-                            document.createElement('option');
-
-                        option.value = contract.id;
-                        option.textContent =
-                            contract.contract_number;
-
-                        contractSelect.appendChild(option);
-                    });
-
-                    contractSelect.disabled = false;
-
-                    if (selectedContractId) {
-                        contractSelect.value =
-                            String(selectedContractId);
-
-                        await loadContractItems(
-                            selectedContractId,
-                            preserveLines
-                        );
-                    }
-                } catch (error) {
-                    contractSelect.innerHTML =
-                        '<option value="">Ошибка загрузки договоров</option>';
-
-                    console.error(error);
-                }
-            }
-
-            async function loadContractItems(
-                contractId,
-                preserveLines = false
-            ) {
-                contractItems.classList.add('hidden');
-                itemsList.innerHTML = '';
-
-                clearContractInformation();
-
-                if (!preserveLines) {
-                    clearLines();
-                }
-
-                if (!contractId) {
-                    return;
-                }
-
-                itemsList.innerHTML = `
-                <p class="text-sm text-gray-400">
-                    Загрузка позиций...
-                </p>
-            `;
-
-                contractItems.classList.remove('hidden');
-
-                try {
-                    const response = await fetch(
-                        `/ajax/contracts/${contractId}/items`
-                    );
-
-                    if (!response.ok) {
-                        throw new Error(
-                            'Не удалось загрузить позиции договора.'
-                        );
-                    }
-
-                    const data = await response.json();
-
-                    showContractInformation(data.contract);
-                    renderContractItems(data);
-                } catch (error) {
-                    itemsList.innerHTML = `
-                    <p class="text-sm text-red-500">
-                        Не удалось загрузить позиции договора.
-                    </p>
-                `;
-
-                    console.error(error);
-                }
-            }
-
-            function recalculate() {
-                let total = 0;
-                let validLinesCount = 0;
-
-                linesContainer
-                    .querySelectorAll('.line-item')
-                    .forEach(function(line) {
-                        const description =
-                            line.querySelector('.line-description')
-                            ?.value.trim() || '';
-
-                        const amount =
-                            Number(
-                                line.querySelector('.line-amount')
-                                ?.value || 0
-                            );
-
-                        if (description && amount > 0) {
-                            total += amount;
-                            validLinesCount++;
-                        }
-                    });
-
-                linesCount.textContent =
-                    validLinesCount;
-
-                totalAmount.textContent =
-                    `${total.toFixed(2)} ₼`;
-
-                const hasAnyRows =
-                    linesContainer.querySelectorAll('.line-item')
-                    .length > 0;
-
-                linesEmpty.classList.toggle(
-                    'hidden',
-                    hasAnyRows
-                );
-            }
-
-            companySelect.addEventListener(
-                'change',
-                async function() {
-                    clearLines();
-                    clearContractInformation();
-
-                    contractItems.classList.add('hidden');
-                    itemsList.innerHTML = '';
-
-                    await loadContracts(this.value);
-                }
-            );
-
-            contractSelect.addEventListener(
-                'change',
-                async function() {
-                    await loadContractItems(this.value);
-                }
-            );
-
-            itemsList.addEventListener(
-                'change',
-                function(event) {
-                    const checkbox =
-                        event.target.closest('.item-checkbox');
-
-                    if (!checkbox) {
-                        return;
-                    }
-
-                    if (checkbox.checked) {
-                        createLine({
-                            description: checkbox.dataset.description,
-
-                            amount: checkbox.dataset.amount,
-
-                            type: checkbox.dataset.type,
-
-                            id: checkbox.dataset.id,
-
-                            sourceKey: checkbox.dataset.sourceKey,
-
-                            billingPeriod: checkbox.dataset.billingPeriod,
-
-                            paymentTerms: checkbox.dataset.paymentTerms,
-
-                            nextBillingDate: checkbox.dataset.nextBillingDate,
-
-                            subscriptionStartDate: checkbox.dataset.subscriptionStartDate,
-                        });
-                    } else {
-                        removeLineBySourceKey(
-                            checkbox.dataset.sourceKey
-                        );
-                    }
-                }
-            );
-
-            linesContainer.addEventListener(
-                'click',
-                function(event) {
-                    const button =
-                        event.target.closest(
-                            '.remove-line-button'
-                        );
-
-                    if (!button) {
-                        return;
-                    }
-
-                    const line =
-                        button.closest('.line-item');
-
-                    const sourceKey =
-                        line.dataset.sourceKey;
-
-                    line.remove();
-
-                    if (sourceKey) {
-                        itemsList
-                            .querySelectorAll('.item-checkbox')
-                            .forEach(function(checkbox) {
-                                if (
-                                    checkbox.dataset.sourceKey ===
-                                    sourceKey
-                                ) {
-                                    checkbox.checked = false;
-                                }
-                            });
-                    }
-
-                    recalculate();
-                }
-            );
-
-            linesContainer.addEventListener(
-                'input',
-                function(event) {
-                    if (
-                        event.target.classList.contains(
-                            'line-description'
-                        ) ||
-                        event.target.classList.contains(
-                            'line-amount'
-                        )
-                    ) {
-                        recalculate();
-                    }
-                }
-            );
-
-            document
-                .getElementById('add-manual-line')
-                .addEventListener('click', function() {
-                    createLine();
-                });
-
-            invoiceForm.addEventListener(
-                'submit',
-                function(event) {
-                    const validLines =
-                        Array.from(
-                            linesContainer.querySelectorAll(
-                                '.line-item'
-                            )
-                        ).filter(function(line) {
-                            const description =
-                                line.querySelector(
-                                    '.line-description'
-                                )?.value.trim();
-
-                            const amount =
-                                Number(
-                                    line.querySelector(
-                                        '.line-amount'
-                                    )?.value || 0
-                                );
-
-                            return description && amount > 0;
-                        });
-
-                    if (validLines.length === 0) {
-                        event.preventDefault();
-
-                        linesError.classList.remove('hidden');
-
-                        linesError.scrollIntoView({
-                            behavior: 'smooth',
-                            block: 'center',
-                        });
-                    }
-                }
-            );
-
-            oldLines.forEach(function(line) {
-                let type = '';
-                let id = '';
-
-                if (line.subscription_id) {
-                    type = 'subscription';
-                    id = line.subscription_id;
-                }
-
-                if (line.order_id) {
-                    type = 'order';
-                    id = line.order_id;
-                }
-
-                createLine({
-                    description: line.description || '',
-                    amount: line.amount || '',
-                    type: type,
-                    id: id,
-                    sourceKey: getSourceKey(type, id),
-                    periodStart: line.period_start || '',
-                    periodEnd: line.period_end || '',
-                });
-            });
-
-            if (companySelect.value) {
-                loadContracts(
-                    companySelect.value,
-                    oldContractId,
-                    true
-                );
-            }
-
-            recalculate();
-        });
-    </script>
-
+        },
+        mergeOldMetadata() { this.lines.forEach(line => { const item = this.availableItems.find(i => this.itemKey(i) === line.key); if (item) { line.billing_period = item.billing_period || null; line.payment_terms = item.payment_terms || null } }) },
+        normaliseOldLine(line, i) { const type = line.subscription_id ? 'subscription' : (line.order_id ? 'order' : 'manual'); const id = line.subscription_id || line.order_id || i; return { key: type === 'manual' ? `manual-old-${i}` : `${type}-${id}`, description: line.description || '', amount: line.amount || '', subscription_id: line.subscription_id || null, order_id: line.order_id || null, period_start: line.period_start || null, period_end: line.period_end || null, billing_period: line.billing_period || null, payment_terms: null } },
+        itemKey(item) { return `${item.type}-${item.id}` }, isSelected(item) { return this.lines.some(line => line.key === this.itemKey(item)) },
+        isCustomLine(line) { return Boolean(line.subscription_id && line.billing_period === 'custom') },
+        toggleItem(item, checked) { const key = this.itemKey(item); if (checked && !this.lines.some(line => line.key === key)) this.lines.push(this.lineFromItem(item)); else if (!checked) this.lines = this.lines.filter(line => line.key !== key); this.afterLinesChanged() },
+        lineFromItem(item) { const period = item.type === 'subscription' ? this.subscriptionPeriod(item) : [null, null]; return { key: this.itemKey(item), description: item.description, amount: item.amount, subscription_id: item.type === 'subscription' ? item.id : null, order_id: item.type === 'order' ? item.id : null, period_start: period[0], period_end: period[1], billing_period: item.billing_period || null, payment_terms: item.type === 'subscription' ? item.payment_terms : null } },
+        subscriptionPeriod(item) { if (item.billing_period === 'custom') return [null, null]; const months = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12 }[item.billing_period]; if (!months || !item.next_billing_date) return [null, null]; const start = this.parseDate(item.next_billing_date); const end = new Date(start); const day = end.getDate(); end.setDate(1); end.setMonth(end.getMonth() + months); end.setDate(Math.min(day, new Date(end.getFullYear(), end.getMonth() + 1, 0).getDate())); end.setDate(end.getDate() - 1); return [this.inputDate(start), this.inputDate(end)] },
+        addManualLine() { this.lines.push({ key: `manual-${Date.now()}-${Math.random()}`, description: '', amount: '', subscription_id: null, order_id: null, period_start: null, period_end: null, billing_period: null, payment_terms: null }); this.afterLinesChanged() },
+        removeLine(index) { this.lines.splice(index, 1); this.afterLinesChanged() },
+        afterLinesChanged() { this.linesError = false; if (!this.dueDateIsManual) this.recalculateDueDate() },
+        issueDateChanged() { if (!this.dueDateIsManual) this.recalculateDueDate() },
+        recalculateDueDate() { if (!this.issueDate) return; const terms = this.lines.filter(l => l.subscription_id && l.payment_terms !== null && l.payment_terms !== '').map(l => Number(l.payment_terms)).filter(Number.isFinite); const days = terms.length ? Math.min(...terms) : 30; const date = this.parseDate(this.issueDate); date.setDate(date.getDate() + days); this.dueDate = this.inputDate(date) },
+        contractLabel(c) { return `№ ${c.contract_number}` },
+        contractDates(c) { return c.end_date ? `${this.formatDate(c.start_date)} — ${this.formatDate(c.end_date)}` : `с ${this.formatDate(c.start_date)}, бессрочный` },
+        itemSubtitle(item) { if (item.type === 'order') return 'Разовая услуга'; return `Подписка · ${{ monthly: 'ежемесячно', quarterly: 'ежеквартально', semiannual: 'раз в полгода', annual: 'ежегодно', custom: 'индивидуальный период' }[item.billing_period] || 'индивидуальный период'}` },
+        lineType(line) { return line.subscription_id ? 'Подписка' : (line.order_id ? 'Разовая услуга' : 'Ручная позиция') },
+        money(value) { return `${(Number.parseFloat(value) || 0).toFixed(2)} ₼` },
+        parseDate(value) { const [y, m, d] = value.split('-').map(Number); return new Date(y, m - 1, d) },
+        inputDate(date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` },
+        formatDate(value) { if (!value) return '—'; const [y, m, d] = value.slice(0, 10).split('-'); return `${d}/${m}/${y}` },
+    }));
+});
+</script>
 @endsection

@@ -33,14 +33,11 @@
                 <div>
                     <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Дата заказа <span
                             class="text-red-500">*</span></label>
-                    <input type="date" name="order_date" value="{{ old('order_date', $order->order_date) }}"
-                        class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition"
-                        required>
+                    <x-form.date-input name="order_date" :value="old('order_date', $order->order_date)" required />
                 </div>
                 <div>
                     <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Дедлайн</label>
-                    <input type="date" name="deadline" value="{{ old('deadline', $order->deadline) }}"
-                        class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition">
+                    <x-form.date-input name="deadline" :value="old('deadline', $order->deadline)" />
                 </div>
             </div>
 

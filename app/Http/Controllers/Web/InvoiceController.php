@@ -132,14 +132,6 @@ class InvoiceController extends Controller
             'issue_date' => 'required|date',
             'due_date' => 'required|date|after_or_equal:issue_date',
 
-            'period_start' => 'nullable|date',
-            'period_end' => 'nullable|date|after_or_equal:period_start',
-
-            'status' => [
-                'required',
-                'in:draft,issued',
-            ],
-
             'seller_name' => 'nullable|string|max:255',
             'seller_voen' => 'nullable|string|max:20',
             'seller_bank_name' => 'nullable|string|max:255',
@@ -147,10 +139,6 @@ class InvoiceController extends Controller
             'seller_bank_code' => 'nullable|string|max:20',
             'seller_bank_voen' => 'nullable|string|max:20',
             'seller_swift' => 'nullable|string|max:20',
-
-            'payer_name' => 'nullable|string|max:255',
-            'payer_voen' => 'nullable|string|max:20',
-            'contract_reference' => 'nullable|string|max:50',
 
             'comment' => 'nullable|string',
 
@@ -206,6 +194,8 @@ class InvoiceController extends Controller
 
         $lineErrors = [];
         $requestPeriodKeys = [];
+        $requestOrderIds = [];
+        $requestSubscriptionIds = [];
 
         foreach ($validated['lines'] as $index => $line) {
             $fieldPrefix = "lines.{$index}";
@@ -251,6 +241,13 @@ class InvoiceController extends Controller
                         'Выбранная разовая услуга не принадлежит этому договору или отменена.';
                 }
 
+                if (isset($requestOrderIds[(string) $orderId])) {
+                    $lineErrors["{$fieldPrefix}.order_id"] =
+                        'Эта разовая услуга уже добавлена в счёт.';
+                }
+
+                $requestOrderIds[(string) $orderId] = true;
+
                 continue;
             }
 
@@ -283,6 +280,13 @@ class InvoiceController extends Controller
 
                 continue;
             }
+
+            if (isset($requestSubscriptionIds[(string) $subscriptionId])) {
+                $lineErrors["{$fieldPrefix}.subscription_id"] =
+                    'Эта подписка уже добавлена в счёт.';
+            }
+
+            $requestSubscriptionIds[(string) $subscriptionId] = true;
 
             /*
      * Для подписки обе даты обязательны.
@@ -450,6 +454,9 @@ class InvoiceController extends Controller
                 ->toArray();
 
             $invoiceData['total_amount'] = $totalAmount;
+            $invoiceData['status'] = 'draft';
+            $invoiceData['period_start'] = null;
+            $invoiceData['period_end'] = null;
 
             /*
          * Сохраняем снимок реквизитов на момент выставления.
@@ -481,92 +488,12 @@ class InvoiceController extends Controller
                 ]);
             }
 
-            /*
- * После выставления счёта переводим подписки
- * на следующий расчётный период.
- *
- * Черновик график подписки не изменяет.
- */
-            if ($invoice->status === 'issued') {
-                foreach ($lines as $line) {
-                    $subscriptionId =
-                        $line['subscription_id'] ?? null;
-
-                    if (!$subscriptionId) {
-                        continue;
-                    }
-
-                    $subscription = Subscription::query()
-                        ->lockForUpdate()
-                        ->find($subscriptionId);
-
-                    if (!$subscription) {
-                        continue;
-                    }
-
-                    /*
-         * Для собственного графика следующую дату
-         * пока не рассчитываем автоматически.
-         */
-                    if ($subscription->billing_period === 'custom') {
-                        continue;
-                    }
-
-                    if (empty($line['period_end'])) {
-                        continue;
-                    }
-
-                    $nextBillingDate = Carbon::parse(
-                        $line['period_end']
-                    )
-                        ->addDay()
-                        ->toDateString();
-
-                    $subscription->update([
-                        'next_billing_date' => $nextBillingDate,
-                    ]);
-                }
-            }
-
-            /*
-            * Кредитный баланс применяется только
-            * к выставленному счёту.
-            *
-            * Черновик не должен резервировать или списывать деньги.
-            */
-            if ($invoice->status === 'issued') {
-                $creditBalance = $company->creditBalance;
-
-                if ($creditBalance && $creditBalance->amount > 0) {
-                    $applied = $creditBalance->apply(
-                        $invoice->total_amount,
-                        $invoice
-                    );
-
-                    if ($applied > 0) {
-                        $invoice->payments()->create([
-                            'company_id' => $company->id,
-                            'payment_date' => now()->toDateString(),
-                            'amount' => $applied,
-                            'payment_method' => 'transfer',
-                            'status' => 'confirmed',
-                            'comment' =>
-                            "Автоматически применён Credit Balance ({$applied} ₼)",
-                        ]);
-                    }
-                }
-            }
-
             return $invoice;
         });
 
-        $message = $invoice->status === 'draft'
-            ? 'Черновик инвойса успешно сохранён.'
-            : 'Инвойс успешно выставлен.';
-
         return redirect()
             ->route('invoices.show', $invoice)
-            ->with('success', $message);
+            ->with('success', 'Черновик инвойса успешно сохранён.');
     }
 
     /**
@@ -618,14 +545,7 @@ class InvoiceController extends Controller
             'contract',
         ]);
 
-        $companies = Company::query()
-            ->whereKey($invoice->company_id)
-            ->get();
-
-        return view(
-            'invoices.edit',
-            compact('invoice', 'companies')
-        );
+        return view('invoices.edit', compact('invoice'));
     }
 
     /**
@@ -658,7 +578,6 @@ class InvoiceController extends Controller
         }
 
         $validated = $request->validate([
-            'company_id' => ['required', 'exists:companies,id'],
             'invoice_number' => [
                 'required',
                 'string',
@@ -667,9 +586,6 @@ class InvoiceController extends Controller
             ],
             'issue_date' => ['required', 'date'],
             'due_date' => ['required', 'date', 'after_or_equal:issue_date'],
-            'period_start' => ['nullable', 'date'],
-            'period_end' => ['nullable', 'date', 'after_or_equal:period_start'],
-            'status' => ['required', 'in:draft'],
             'seller_name' => ['nullable', 'string', 'max:255'],
             'seller_voen' => ['nullable', 'string', 'max:20'],
             'seller_bank_name' => ['nullable', 'string', 'max:255'],
@@ -677,9 +593,6 @@ class InvoiceController extends Controller
             'seller_bank_code' => ['nullable', 'string', 'max:20'],
             'seller_bank_voen' => ['nullable', 'string', 'max:20'],
             'seller_swift' => ['nullable', 'string', 'max:20'],
-            'payer_name' => ['nullable', 'string', 'max:255'],
-            'payer_voen' => ['nullable', 'string', 'max:20'],
-            'contract_reference' => ['nullable', 'string', 'max:50'],
             'comment' => ['nullable', 'string'],
             'lines' => ['required', 'array', 'min:1'],
             'lines.*.id' => ['nullable', 'integer'],
@@ -690,20 +603,6 @@ class InvoiceController extends Controller
             'lines.*.period_start' => ['nullable', 'date'],
             'lines.*.period_end' => ['nullable', 'date'],
         ]);
-
-        /*
-     * Компания черновика не должна меняться,
-     * потому что инвойс уже связан с договором.
-     */
-        if (
-            (int) $validated['company_id']
-            !== (int) $invoice->company_id
-        ) {
-            throw ValidationException::withMessages([
-                'company_id' =>
-                'Нельзя изменить компанию существующего инвойса.',
-            ]);
-        }
 
         DB::transaction(function () use (
             $invoice,
@@ -850,6 +749,8 @@ class InvoiceController extends Controller
                     'payer_name',
                     'payer_voen',
                     'contract_reference',
+                    'period_start',
+                    'period_end',
                 ])
                 ->toArray();
 

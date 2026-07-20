@@ -78,11 +78,11 @@
                                 </span>
                             </td>
                             <td class="px-6 py-4 text-gray-500">
-                                {{ $company['last_payment_date'] ?? '—' }}
+                                {{ $company['last_payment_date'] ? \Illuminate\Support\Carbon::parse($company['last_payment_date'])->format('d/m/Y') : '—' }}
                             </td>
                             <td class="px-6 py-4 text-gray-500">
                                 @if($company['next_due_date'])
-                                    {{ $company['next_due_date'] }}
+                                    {{ \Illuminate\Support\Carbon::parse($company['next_due_date'])->format('d/m/Y') }}
                                     <span class="text-gray-400">({{ number_format($company['next_due_amount'], 2) }} ₼)</span>
                                 @else
                                     —

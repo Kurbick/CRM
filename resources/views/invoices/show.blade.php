@@ -1,8 +1,26 @@
 @extends('layouts.app')
 
-@section('title', 'Инвойс ' . $invoice->invoice_number)
+@section('title', 'Счёт ' . $invoice->invoice_number)
 
 @section('content')
+    @php
+        $formatMoney = static function ($amount): string {
+            $value = (float) $amount;
+
+            if ($value == 0.0) {
+                $value = 0.0;
+            }
+
+            return number_format($value, 2, ',', ' ') . ' ₼';
+        };
+
+        $remainingColor = match (true) {
+            (float) $invoice->remaining_amount === 0.0 || $invoice->status === 'paid' => 'text-green-600',
+            in_array($invoice->status, ['issued', 'partially_paid'], true) && (bool) $invoice->is_overdue => 'text-red-600',
+            $invoice->status === 'partially_paid' => 'text-orange-600',
+            default => 'text-gray-900',
+        };
+    @endphp
 
     {{-- Верхний заголовок и действия --}}
     <div class="mb-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4 print:hidden">
@@ -15,7 +33,7 @@
                 Назад к списку
             </a>
             <div class="flex items-center gap-3">
-                <h1 class="text-2xl font-bold text-gray-900">Инвойс {{ $invoice->invoice_number }}</h1>
+                <h1 class="text-2xl font-bold text-gray-900">Счёт {{ $invoice->invoice_number }}</h1>
                 @include('partials.badge', ['status' => $invoice->status])
             </div>
         </div>
@@ -44,9 +62,9 @@
             </div>
         @enderror
 
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-5">
             {{-- Кнопка Печать --}}
-            <button onclick="window.print()"
+            <button type="button" onclick="window.print()"
                 class="inline-flex items-center text-sm border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg font-medium transition shadow-sm">
                 <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -55,75 +73,64 @@
                 Печать
             </button>
 
-            @if ($invoice->status === 'draft')
-                <a href="{{ route('invoices.edit', $invoice) }}"
-                    class="px-4 py-2 border border-gray-200 text-gray-600
-               text-sm font-medium rounded-lg hover:bg-gray-50 transition">
+            <div class="flex items-center gap-2">
+                @if ($invoice->status === 'draft')
+                    <a href="{{ route('invoices.edit', $invoice) }}"
+                        class="px-4 py-2 border border-gray-200 text-gray-600
+                   text-sm font-medium rounded-lg hover:bg-gray-50 transition">
 
-                    Редактировать
-                </a>
+                        Редактировать
+                    </a>
 
-                <form action="{{ route('invoices.issue', $invoice) }}" method="POST"
-                    onsubmit="return confirm('Выставить этот инвойс? После этого свободное редактирование будет недоступно.')">
+                    <form action="{{ route('invoices.destroy', $invoice) }}" method="POST"
+                        onsubmit="return confirm('Вы уверены, что хотите удалить этот счет? Действие необратимо.')">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit"
+                            class="inline-flex items-center text-sm bg-red-50 hover:bg-red-100 text-red-700 px-4 py-2 rounded-lg font-medium transition border border-red-200">
+                            <svg class="w-4 h-4 mr-1.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            Удалить
+                        </button>
+                    </form>
+                @endif
+                @if ($invoice->status === 'issued')
+                    <form action="{{ route('invoices.cancel', $invoice) }}" method="POST"
+                        onsubmit="return confirm('Отменить выставленный инвойс? График подписок будет восстановлен.')">
 
-                    @csrf
+                        @csrf
+                        @method('PATCH')
 
-                    <button type="submit"
-                        class="px-4 py-2 bg-blue-600 hover:bg-blue-700
-                   text-white text-sm font-medium rounded-lg transition">
+                        <button type="submit"
+                            class="inline-flex items-center px-4 py-2
+                       rounded-lg border border-red-200
+                       bg-red-50 text-sm font-medium text-red-700
+                       hover:bg-red-100 transition">
 
-                        Выставить счёт
-                    </button>
-                </form>
-
-                <form action="{{ route('invoices.destroy', $invoice) }}" method="POST"
-                    onsubmit="return confirm('Вы уверены, что хотите удалить этот счет? Действие необратимо.')">
-                    @csrf
-                    @method('DELETE')
-                    <button type="submit"
-                        class="inline-flex items-center text-sm bg-red-50 hover:bg-red-100 text-red-700 px-4 py-2 rounded-lg font-medium transition border border-red-200">
-                        <svg class="w-4 h-4 mr-1.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                        Удалить
-                    </button>
-                </form>
-            @endif
-            @if ($invoice->status === 'issued')
-                <form action="{{ route('invoices.cancel', $invoice) }}" method="POST"
-                    onsubmit="return confirm('Отменить выставленный инвойс? График подписок будет восстановлен.')">
-
-                    @csrf
-                    @method('PATCH')
-
-                    <button type="submit"
-                        class="inline-flex items-center px-4 py-2
-                   rounded-lg border border-red-200
-                   bg-red-50 text-sm font-medium text-red-700
-                   hover:bg-red-100 transition">
-
-                        Отменить счёт
-                    </button>
-                </form>
-            @endif
+                            Отменить счёт
+                        </button>
+                    </form>
+                @endif
+            </div>
         </div>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {{-- Основной документ инвойса (2/3 ширины) --}}
-        <div class="lg:col-span-2 space-y-6 print:w-full print:col-span-3">
+        <div class="lg:col-span-2 print:w-full print:col-span-3">
 
             {{-- Печатный бланк счета --}}
             <div
-                class="bg-white rounded-xl border border-gray-200 shadow-sm p-8 md:p-12 relative overflow-hidden print:border-none print:shadow-none print:p-0">
+                class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:p-8 relative overflow-hidden print:border-none print:shadow-none print:p-0">
 
                 {{-- Верхняя декоративная полоса (скрывается при печати) --}}
                 <div class="absolute top-0 left-0 right-0 h-1.5 bg-blue-600 print:hidden"></div>
 
                 {{-- Шапка бланка --}}
-                <div class="flex flex-col md:flex-row justify-between gap-6 pb-8 border-b border-gray-100 mb-8">
+                <div class="flex flex-col md:flex-row justify-between gap-5 pb-6 border-b border-gray-100 mb-6">
 
                     {{-- Данные продавца (Мы) --}}
                     <div class="space-y-1">
@@ -131,43 +138,53 @@
                         <h2 class="text-lg font-bold text-gray-900">{{ $invoice->seller_name ?? 'IT Solutions MMC' }}</h2>
                         <div class="text-sm text-gray-600 font-mono">VÖEN: {{ $invoice->seller_voen ?? '9900123456' }}
                         </div>
-                        <div class="text-sm text-gray-600 mt-2">
-                            <span class="font-medium text-gray-800">Банк:</span>
-                            {{ $invoice->seller_bank_name ?? 'Pasha Bank OJSC' }}
-                        </div>
-                        <div class="text-sm text-gray-600 font-mono break-all">
-                            <span class="font-medium text-gray-800">IBAN (H/h):</span>
-                            {{ $invoice->seller_iban ?? 'AZ00PRCB0000000000000000000' }}
-                        </div>
-                        <div class="grid grid-cols-2 gap-2 text-sm text-gray-600">
-                            <div><span class="font-medium text-gray-800">SWIFT:</span> <span
-                                    class="font-mono">{{ $invoice->seller_swift ?? 'PAHBAZ2D' }}</span></div>
-                            <div><span class="font-medium text-gray-800">Kod:</span> <span
-                                    class="font-mono">{{ $invoice->seller_bank_code ?? '505050' }}</span></div>
-                        </div>
+                        @if ($invoice->seller_bank_name ?? 'Pasha Bank OJSC')
+                            <div class="text-sm text-gray-600 mt-1.5">
+                                <span class="font-medium text-gray-800">Банк:</span>
+                                {{ $invoice->seller_bank_name ?? 'Pasha Bank OJSC' }}
+                            </div>
+                        @endif
+                        @if ($invoice->seller_iban ?? 'AZ00PRCB0000000000000000000')
+                            <div class="text-sm text-gray-600 break-words [overflow-wrap:anywhere]">
+                                <span class="font-medium text-gray-800">IBAN:</span>
+                                <span class="font-mono">{{ $invoice->seller_iban ?? 'AZ00PRCB0000000000000000000' }}</span>
+                            </div>
+                        @endif
+                        @if (($invoice->seller_swift ?? 'PAHBAZ2D') || ($invoice->seller_bank_code ?? '505050'))
+                            <div class="grid grid-cols-2 gap-2 text-sm text-gray-600">
+                            @if ($invoice->seller_swift ?? 'PAHBAZ2D')
+                                <div><span class="font-medium text-gray-800">SWIFT:</span> <span
+                                        class="font-mono">{{ $invoice->seller_swift ?? 'PAHBAZ2D' }}</span></div>
+                            @endif
+                            @if ($invoice->seller_bank_code ?? '505050')
+                                <div><span class="font-medium text-gray-800">Код банка:</span> <span
+                                        class="font-mono">{{ $invoice->seller_bank_code ?? '505050' }}</span></div>
+                            @endif
+                            </div>
+                        @endif
                         @if ($invoice->seller_bank_voen)
                             <div class="text-sm text-gray-600 font-mono">
-                                <span class="font-medium text-gray-800">Bank VÖEN:</span> {{ $invoice->seller_bank_voen }}
+                                <span class="font-medium text-gray-800">VÖEN банка:</span> {{ $invoice->seller_bank_voen }}
                             </div>
                         @endif
                     </div>
 
                     {{-- Метаданные инвойса --}}
                     <div class="space-y-2 md:text-right md:self-start">
-                        <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Документ</div>
+                        <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Счёт</div>
                         <h2 class="text-xl font-bold text-gray-900 font-mono">{{ $invoice->invoice_number }}</h2>
 
                         <div class="text-sm text-gray-600">
-                            <span class="font-medium text-gray-800">Дата счета:</span> {{ $invoice->issue_date }}
+                            <span class="font-medium text-gray-800">Дата выставления:</span> {{ $invoice->issue_date ? \Illuminate\Support\Carbon::parse($invoice->issue_date)->format('d/m/Y') : '—' }}
                         </div>
                         <div class="text-sm text-gray-600">
-                            <span class="font-medium text-gray-800">Срок оплаты:</span> {{ $invoice->due_date }}
+                            <span class="font-medium text-gray-800">Срок оплаты:</span> {{ $invoice->due_date ? \Illuminate\Support\Carbon::parse($invoice->due_date)->format('d/m/Y') : '—' }}
                         </div>
                         @if ($invoice->period_start && $invoice->period_end)
                             <div class="text-sm text-gray-600">
                                 <span class="font-medium text-gray-800">Расчетный период:</span>
-                                <div class="text-xs text-gray-500 font-mono mt-0.5">{{ $invoice->period_start }} —
-                                    {{ $invoice->period_end }}</div>
+                                <div class="text-xs text-gray-500 font-mono mt-0.5">{{ \Illuminate\Support\Carbon::parse($invoice->period_start)->format('d/m/Y') }} —
+                                    {{ \Illuminate\Support\Carbon::parse($invoice->period_end)->format('d/m/Y') }}</div>
                             </div>
                         @endif
                     </div>
@@ -175,37 +192,33 @@
 
                 {{-- Получатель счета (Плательщик) --}}
                 <div
-                    class="bg-gray-50 rounded-xl p-5 mb-8 grid grid-cols-1 md:grid-cols-2 gap-4 print:bg-gray-100 print:rounded-none">
+                    class="bg-gray-50 rounded-lg px-4 py-3.5 mb-6 grid grid-cols-1 md:grid-cols-2 gap-3 print:bg-gray-100 print:rounded-none">
                     <div>
-                        <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Плательщик (Ödəyici)
-                        </div>
-                        <h3 class="font-bold text-gray-900">{{ $invoice->payer_name }}</h3>
-                        <div class="text-sm text-gray-600 font-mono mt-0.5">VÖEN: {{ $invoice->payer_voen ?? '—' }}</div>
-                        <div class="text-xs text-gray-400 mt-2">
-                            Связано с аккаунтом: <a href="{{ route('companies.show', $invoice->company_id) }}"
-                                class="text-blue-600 hover:underline print:text-gray-900 font-medium">{{ $invoice->company->name }}</a>
-                        </div>
+                        <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Плательщик</div>
+                        <h3 class="font-bold text-gray-900">{{ $invoice->payer_name ?: 'Не указан' }}</h3>
+                        @if (trim((string) $invoice->payer_voen) !== '')
+                            <div class="text-sm text-gray-600 font-mono mt-0.5">VÖEN: {{ $invoice->payer_voen }}</div>
+                        @endif
                     </div>
                     <div class="md:text-right md:self-center">
                         @if ($invoice->contract_reference)
                             <div class="text-sm text-gray-600">
-                                <span class="font-medium text-gray-800">Основание (Договор):</span>
-                                <div class="font-mono text-gray-900 font-semibold mt-0.5">
-                                    {{ $invoice->contract_reference }}</div>
+                                <span class="font-medium text-gray-800">Договор:</span>
+                                <span class="font-mono text-gray-900 font-semibold">{{ $invoice->contract_reference }}</span>
                             </div>
                         @endif
                     </div>
                 </div>
 
                 {{-- Таблица позиций (Lines) --}}
-                <div class="mb-8">
+                <div class="mb-6">
                     <table class="w-full text-left text-sm">
                         <thead>
                             <tr
                                 class="border-b border-gray-200 text-gray-400 font-semibold uppercase tracking-wider text-xs pb-3">
-                                <th class="pb-3 w-10">#</th>
-                                <th class="pb-3">Описание услуги / товара</th>
-                                <th class="pb-3 text-right pr-4">Сумма (₼)</th>
+                                <th class="pb-3 w-10">№</th>
+                                <th class="pb-3">Описание</th>
+                                <th class="pb-3 text-right pr-4">Сумма</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100 text-gray-700">
@@ -214,9 +227,18 @@
                                     <td class="py-4 font-medium text-gray-400">{{ $index + 1 }}</td>
                                     <td class="py-4">
                                         <div class="font-semibold text-gray-900">{{ $line->description }}</div>
+                                        @if ($line->order_id)
+                                            <div class="mt-0.5 text-xs text-gray-500">
+                                                Разовая услуга
+                                            </div>
+                                        @elseif ($line->subscription_id)
+                                            <div class="mt-0.5 text-xs text-gray-500">
+                                                Подписка@if ($line->period_start && $line->period_end) · Расчётный период: {{ $line->period_start->format('d/m/Y') }} — {{ $line->period_end->format('d/m/Y') }}@endif
+                                            </div>
+                                        @endif
                                     </td>
                                     <td class="py-4 text-right font-semibold text-gray-900 font-mono pr-4">
-                                        {{ number_format($line->amount, 2) }} ₼
+                                        {{ $formatMoney($line->amount) }}
                                     </td>
                                 </tr>
                             @endforeach
@@ -227,10 +249,10 @@
                 {{-- Расчет итога --}}
                 <div class="border-t border-gray-100 pt-6 flex flex-col items-end gap-2 text-sm text-gray-600">
                     <div class="flex justify-between w-64">
-                        <span>Итого сумма счета:</span>
+                        <span>Итого:</span>
 
                         <span class="font-bold text-gray-900 font-mono">
-                            {{ number_format($invoice->total_amount, 2) }} ₼
+                            {{ $formatMoney($invoice->total_amount) }}
                         </span>
                     </div>
 
@@ -238,7 +260,7 @@
                         <span>Оплачено:</span>
 
                         <span class="font-bold font-mono">
-                            - {{ number_format($invoice->applied_amount, 2) }} ₼
+                            {{ $formatMoney($invoice->applied_amount) }}
                         </span>
                     </div>
 
@@ -247,31 +269,47 @@
                             <span>Переплата:</span>
 
                             <span class="font-bold font-mono">
-                                {{ number_format($invoice->overpayment_amount, 2) }} ₼
+                                {{ $formatMoney($invoice->overpayment_amount) }}
                             </span>
                         </div>
                     @endif
 
                     <div
                         class="flex justify-between w-64 border-t border-gray-100 pt-2 text-base
-        {{ $invoice->remaining_amount > 0 ? 'text-red-600' : 'text-gray-900' }}">
+                        {{ $remainingColor }}">
 
                         <span class="font-semibold">
-                            К оплате (Остаток):
+                            Остаток к оплате:
                         </span>
 
                         <span class="font-bold font-mono">
-                            {{ number_format($invoice->remaining_amount, 2) }} ₼
+                            {{ $formatMoney($invoice->remaining_amount) }}
                         </span>
                     </div>
                 </div>
 
+                @if ($invoice->status === 'draft')
+                    <div class="mt-4 flex justify-end print:hidden">
+                        <form action="{{ route('invoices.issue', $invoice) }}" method="POST"
+                            class="w-64 max-w-full"
+                            onsubmit="return confirm('Выставить этот инвойс? После этого свободное редактирование будет недоступно.')">
+
+                            @csrf
+
+                            <button type="submit"
+                                class="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-700">
+
+                                Выставить счёт
+                            </button>
+                        </form>
+                    </div>
+                @endif
+
                 {{-- Примечание продавца --}}
-                @if ($invoice->comment)
-                    <div class="mt-12 pt-6 border-t border-gray-100 text-sm">
-                        <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Примечания
-                            поставщика</div>
-                        <p class="text-gray-600 italic whitespace-pre-line">{{ $invoice->comment }}</p>
+                @if (filled($invoice->comment))
+                    <div class="mt-6 pt-4 border-t border-gray-100 text-sm break-words">
+                        <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Комментарий</div>
+                        <p class="text-gray-600 whitespace-pre-line">{{ $invoice->comment }}</p>
                     </div>
                 @endif
 
@@ -296,12 +334,8 @@
                             <label for="payment_date"
                                 class="block text-xs font-semibold text-gray-500 uppercase mb-1">Дата платежа <span
                                     class="text-red-500">*</span></label>
-                            <input type="date" name="payment_date" id="payment_date"
-                                value="{{ old('payment_date', date('Y-m-d')) }}" required
-                                class="w-full px-3 py-2 border @error('payment_date') border-red-300 @else border-gray-200 @enderror rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition">
-                            @error('payment_date')
-                                <p class="text-xs text-red-500 mt-1">{{ $message }}</p>
-                            @enderror
+                            <x-form.date-input name="payment_date" id="payment_date"
+                                :value="old('payment_date', date('Y-m-d'))" required />
                         </div>
 
                         <div>
@@ -313,7 +347,7 @@
                                 class="w-full px-3 py-2 border @error('amount') border-red-300 @else border-gray-200 @enderror rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition font-mono"
                                 placeholder="0.00">
                             <p class="text-[10px] text-gray-400 mt-1">Остаток к оплате:
-                                {{ number_format($invoice->remaining_amount, 2) }} ₼</p>
+                                {{ $formatMoney($invoice->remaining_amount) }}</p>
                             @error('amount')
                                 <p class="text-xs text-red-500 mt-1">{{ $message }}</p>
                             @enderror
@@ -411,7 +445,7 @@
                                     class="font-semibold font-mono
                                         {{ $payment->status === 'cancelled' ? 'text-gray-400 line-through' : 'text-gray-900' }}">
 
-                                    {{ number_format($payment->amount, 2) }} ₼
+                                    {{ $formatMoney($payment->amount) }}
                                 </span>
 
                                 @include('partials.badge', [
@@ -421,7 +455,7 @@
 
                             <div class="flex justify-between gap-3 text-xs text-gray-400 mt-1">
                                 <span>
-                                    {{ $payment->payment_date }}
+                                    {{ $payment->payment_date ? \Illuminate\Support\Carbon::parse($payment->payment_date)->format('d/m/Y') : '—' }}
                                 </span>
 
                                 <span class="font-medium">
@@ -460,7 +494,7 @@
 
                                         @if ($payment->cancelled_at)
                                             <span class="text-[11px] text-red-500">
-                                                {{ \Illuminate\Support\Carbon::parse($payment->cancelled_at)->format('Y-m-d H:i') }}
+                                                {{ \Illuminate\Support\Carbon::parse($payment->cancelled_at)->format('d/m/Y H:i') }}
                                             </span>
                                         @endif
                                     </div>
@@ -572,8 +606,8 @@
                             @endif
                         </div>
                     @empty
-                        <p class="text-sm text-gray-400 text-center py-4">
-                            Платежей по счету пока не зарегистрировано.
+                        <p class="text-sm text-gray-400 py-1">
+                            Платежей по счёту пока нет.
                         </p>
                     @endforelse
                 </div>

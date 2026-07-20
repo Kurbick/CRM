@@ -37,17 +37,7 @@
             Дата начала <span class="text-red-500">*</span>
         </label>
 
-        <input
-            type="date"
-            name="start_date"
-            value="{{ old('start_date', now()->toDateString()) }}"
-            class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition"
-            required
-        >
-
-        @error('start_date')
-            <p class="text-xs text-red-500 mt-1">{{ $message }}</p>
-        @enderror
+        <x-form.date-input name="start_date" :value="old('start_date', now()->toDateString())" required />
         </div>
 
         <div class="grid grid-cols-2 gap-4">

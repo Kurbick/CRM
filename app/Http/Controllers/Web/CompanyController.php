@@ -86,7 +86,7 @@ class CompanyController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(Company $company)
+    public function show(Request $request, Company $company)
 {
     $company->load([
         'contacts'     => fn($q) => $q->orderBy('first_name'),
@@ -109,15 +109,19 @@ class CompanyController extends Controller
         'credit_balance'  => $company->creditBalance?->amount ?? 0,
     ];
 
-    return view('companies.show', compact('company', 'stats'));
+    $returnContext = $this->companyReturnContext($request);
+
+    return view('companies.show', compact('company', 'stats', 'returnContext'));
 }
 
     /**
      * Show the form for editing the specified resource.
      */
-    public function edit(Company $company)
+    public function edit(Request $request, Company $company)
     {
-        return view('companies.edit', compact('company'));
+        $returnContext = $this->companyReturnContext($request);
+
+        return view('companies.edit', compact('company', 'returnContext'));
     }
 
     /**
@@ -147,7 +151,12 @@ class CompanyController extends Controller
 
         $company->update($validated);
 
-        return redirect()->route('companies.show', $company)
+        $returnContext = $this->companyReturnContext($request);
+
+        return redirect()->route('companies.show', [
+            'company' => $company,
+            'return_url' => $returnContext['is_contextual'] ? $returnContext['url'] : null,
+        ])
             ->with('success', 'Данные компании успешно обновлены.');
     }
 
@@ -165,5 +174,63 @@ class CompanyController extends Controller
 
         return redirect()->route('companies.index')
             ->with('success', 'Компания успешно удалена.');
+    }
+
+    /**
+     * Resolve a safe list page to return to without accepting open redirects.
+     */
+    private function companyReturnContext(Request $request): array
+    {
+        $fallback = [
+            'url' => route('companies.index'),
+            'label' => 'Назад к компаниям',
+            'is_contextual' => false,
+        ];
+        $candidate = $request->input('return_url');
+
+        if (!is_string($candidate) || trim($candidate) === '' || str_starts_with($candidate, '//')) {
+            return $fallback;
+        }
+
+        $parts = parse_url($candidate);
+
+        if ($parts === false || isset($parts['user']) || isset($parts['pass']) || isset($parts['fragment'])) {
+            return $fallback;
+        }
+
+        if (isset($parts['scheme']) && strtolower($parts['scheme']) !== strtolower($request->getScheme())) {
+            return $fallback;
+        }
+
+        if (isset($parts['host']) && strtolower($parts['host']) !== strtolower($request->getHost())) {
+            return $fallback;
+        }
+
+        if (isset($parts['host'])) {
+            $candidatePort = $parts['port'] ?? (strtolower($parts['scheme'] ?? $request->getScheme()) === 'https' ? 443 : 80);
+
+            if ($candidatePort !== $request->getPort()) {
+                return $fallback;
+            }
+        } elseif (!str_starts_with($candidate, '/')) {
+            return $fallback;
+        }
+
+        $path = '/' . ltrim($parts['path'] ?? '/', '/');
+        $allowedDestinations = [
+            parse_url(route('invoices.index'), PHP_URL_PATH) => 'Назад к инвойсам',
+            parse_url(route('contracts.index'), PHP_URL_PATH) => 'Назад к договорам',
+            parse_url(route('companies.index'), PHP_URL_PATH) => 'Назад к компаниям',
+        ];
+
+        if (!isset($allowedDestinations[$path])) {
+            return $fallback;
+        }
+
+        return [
+            'url' => $candidate,
+            'label' => $allowedDestinations[$path],
+            'is_contextual' => true,
+        ];
     }
 }

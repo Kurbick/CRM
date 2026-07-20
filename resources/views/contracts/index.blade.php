@@ -456,7 +456,7 @@
                             {{-- Компания --}}
                             <td class="px-6 py-4">
 
-                                <a href="{{ route('companies.show', $contract->company) }}"
+                                <a href="{{ route('companies.show', ['company' => $contract->company, 'return_url' => request()->fullUrl()]) }}"
                                     class="font-medium text-gray-900
                                           hover:text-blue-600 transition">
 
@@ -466,7 +466,7 @@
 
                             {{-- Дата начала --}}
                             <td class="px-6 py-4 text-gray-600">
-                                {{ $contract->start_date->format('d.m.Y') }}
+                                {{ $contract->start_date->format('d/m/Y') }}
                             </td>
 
                             {{-- Дата окончания --}}
@@ -476,7 +476,7 @@
                                     <div
                                         class="{{ $contract->end_date->lt(today()) ? 'text-red-600 font-semibold' : 'text-gray-600' }}">
 
-                                        {{ $contract->end_date->format('d.m.Y') }}
+                                        {{ $contract->end_date->format('d/m/Y') }}
                                     </div>
 
                                     @if ($contract->end_date->lt(today()))
