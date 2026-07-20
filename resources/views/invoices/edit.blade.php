@@ -26,6 +26,10 @@
                     'id' => $line->id,
                     'description' => $line->description,
                     'amount' => $line->amount,
+                    'subscription_id' => $line->subscription_id,
+                    'order_id' => $line->order_id,
+                    'period_start' => $line->period_start?->toDateString(),
+                    'period_end' => $line->period_end?->toDateString(),
                 ],
             )
             ->values()
@@ -38,6 +42,10 @@
                 id: null,
                 description: '',
                 amount: '',
+                subscription_id: null,
+                order_id: null,
+                period_start: null,
+                period_end: null,
             });
         },
     
@@ -190,6 +198,14 @@
                             <div class="rounded-lg border border-gray-200 bg-gray-50 p-3">
 
                                 <input type="hidden" :name="'lines[' + index + '][id]'" :value="line.id ?? ''">
+                                <input type="hidden" :name="'lines[' + index + '][subscription_id]'"
+                                    :value="line.subscription_id ?? ''">
+                                <input type="hidden" :name="'lines[' + index + '][order_id]'"
+                                    :value="line.order_id ?? ''">
+                                <input type="hidden" :name="'lines[' + index + '][period_start]'"
+                                    :value="line.period_start ?? ''">
+                                <input type="hidden" :name="'lines[' + index + '][period_end]'"
+                                    :value="line.period_end ?? ''">
 
                                 <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
 

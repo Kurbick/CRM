@@ -601,136 +601,37 @@ class InvoiceController extends Controller
         }
 
         $validated = $request->validate([
-            'company_id' => [
-                'required',
-                'exists:companies,id',
-            ],
-
+            'company_id' => ['required', 'exists:companies,id'],
             'invoice_number' => [
                 'required',
                 'string',
                 'max:50',
                 'unique:invoices,invoice_number,' . $invoice->id,
             ],
-
-            'issue_date' => [
-                'required',
-                'date',
-            ],
-
-            'due_date' => [
-                'required',
-                'date',
-                'after_or_equal:issue_date',
-            ],
-
-            'period_start' => [
-                'nullable',
-                'date',
-            ],
-
-            'period_end' => [
-                'nullable',
-                'date',
-                'after_or_equal:period_start',
-            ],
-
-            /*
-         * Через обычное редактирование статус
-         * пока остаётся только draft.
-         */
-            'status' => [
-                'required',
-                'in:draft',
-            ],
-
-            'seller_name' => [
-                'nullable',
-                'string',
-                'max:255',
-            ],
-
-            'seller_voen' => [
-                'nullable',
-                'string',
-                'max:20',
-            ],
-
-            'seller_bank_name' => [
-                'nullable',
-                'string',
-                'max:255',
-            ],
-
-            'seller_iban' => [
-                'nullable',
-                'string',
-                'max:50',
-            ],
-
-            'seller_bank_code' => [
-                'nullable',
-                'string',
-                'max:20',
-            ],
-
-            'seller_bank_voen' => [
-                'nullable',
-                'string',
-                'max:20',
-            ],
-
-            'seller_swift' => [
-                'nullable',
-                'string',
-                'max:20',
-            ],
-
-            'payer_name' => [
-                'nullable',
-                'string',
-                'max:255',
-            ],
-
-            'payer_voen' => [
-                'nullable',
-                'string',
-                'max:20',
-            ],
-
-            'contract_reference' => [
-                'nullable',
-                'string',
-                'max:50',
-            ],
-
-            'comment' => [
-                'nullable',
-                'string',
-            ],
-
-            'lines' => [
-                'required',
-                'array',
-                'min:1',
-            ],
-
-            'lines.*.id' => [
-                'nullable',
-                'integer',
-            ],
-
-            'lines.*.description' => [
-                'required',
-                'string',
-                'max:255',
-            ],
-
-            'lines.*.amount' => [
-                'required',
-                'numeric',
-                'min:0.01',
-            ],
+            'issue_date' => ['required', 'date'],
+            'due_date' => ['required', 'date', 'after_or_equal:issue_date'],
+            'period_start' => ['nullable', 'date'],
+            'period_end' => ['nullable', 'date', 'after_or_equal:period_start'],
+            'status' => ['required', 'in:draft'],
+            'seller_name' => ['nullable', 'string', 'max:255'],
+            'seller_voen' => ['nullable', 'string', 'max:20'],
+            'seller_bank_name' => ['nullable', 'string', 'max:255'],
+            'seller_iban' => ['nullable', 'string', 'max:50'],
+            'seller_bank_code' => ['nullable', 'string', 'max:20'],
+            'seller_bank_voen' => ['nullable', 'string', 'max:20'],
+            'seller_swift' => ['nullable', 'string', 'max:20'],
+            'payer_name' => ['nullable', 'string', 'max:255'],
+            'payer_voen' => ['nullable', 'string', 'max:20'],
+            'contract_reference' => ['nullable', 'string', 'max:50'],
+            'comment' => ['nullable', 'string'],
+            'lines' => ['required', 'array', 'min:1'],
+            'lines.*.id' => ['nullable', 'integer'],
+            'lines.*.description' => ['required', 'string', 'max:255'],
+            'lines.*.amount' => ['required', 'numeric', 'min:0.01'],
+            'lines.*.subscription_id' => ['nullable', 'integer'],
+            'lines.*.order_id' => ['nullable', 'integer'],
+            'lines.*.period_start' => ['nullable', 'date'],
+            'lines.*.period_end' => ['nullable', 'date'],
         ]);
 
         /*
@@ -751,6 +652,17 @@ class InvoiceController extends Controller
             $invoice,
             $validated
         ) {
+            $lockedInvoice = Invoice::query()
+                ->whereKey($invoice->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($lockedInvoice->status !== 'draft') {
+                throw ValidationException::withMessages([
+                    'status' => 'Изменять можно только черновик инвойса.',
+                ]);
+            }
+
             $originalLines = $invoice->lines()
                 ->lockForUpdate()
                 ->get()
@@ -780,6 +692,40 @@ class InvoiceController extends Controller
                         ]);
                     }
 
+                    $submittedMetadata = [
+                        'subscription_id' => $line['subscription_id'] ?? null,
+                        'order_id' => $line['order_id'] ?? null,
+                        'period_start' => $line['period_start'] ?? null,
+                        'period_end' => $line['period_end'] ?? null,
+                    ];
+                    $storedMetadata = [
+                        'subscription_id' => $existingLine->subscription_id,
+                        'order_id' => $existingLine->order_id,
+                        'period_start' => $existingLine->period_start?->toDateString(),
+                        'period_end' => $existingLine->period_end?->toDateString(),
+                    ];
+
+                    if ($submittedMetadata != $storedMetadata) {
+                        throw ValidationException::withMessages([
+                            "lines.{$index}.id" =>
+                            'Нельзя изменить служебную связь или расчётный период позиции.',
+                        ]);
+                    }
+
+                    $linkedContractId = $existingLine->subscription_id
+                        ? $existingLine->subscription()->value('contract_id')
+                        : $existingLine->order()->value('contract_id');
+
+                    if (
+                        $linkedContractId !== null
+                        && (int) $linkedContractId !== (int) $invoice->contract_id
+                    ) {
+                        throw ValidationException::withMessages([
+                            "lines.{$index}.id" =>
+                            'Связанная позиция не принадлежит договору инвойса.',
+                        ]);
+                    }
+
                     $existingLine->update([
                         'description' => $line['description'],
                         'amount' => $line['amount'],
@@ -788,6 +734,18 @@ class InvoiceController extends Controller
                     $submittedExistingIds[] = $lineId;
 
                     continue;
+                }
+
+                if (
+                    !empty($line['subscription_id'])
+                    || !empty($line['order_id'])
+                    || !empty($line['period_start'])
+                    || !empty($line['period_end'])
+                ) {
+                    throw ValidationException::withMessages([
+                        "lines.{$index}.id" =>
+                        'Новая позиция может быть только ручной.',
+                    ]);
                 }
 
                 /*
