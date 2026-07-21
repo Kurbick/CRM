@@ -3,13 +3,9 @@
 @section('title', 'Редактировать счёт')
 
 @section('content')
-<div class="mb-6">
-    <a href="{{ route('invoices.show', $invoice) }}" class="text-sm text-gray-500 hover:text-gray-700">← Назад к просмотру</a>
-    <h1 class="mt-2 text-2xl font-bold text-gray-900">Редактировать счёт</h1>
-</div>
-
-<form method="POST" action="{{ route('invoices.update', $invoice) }}" x-data="{
-    lines: @js(array_values(old('lines', $invoice->lines->map(fn ($line) => [
+@php
+    $storedLines = $invoice->lines->keyBy('id');
+    $defaultLines = $invoice->lines->map(fn ($line) => [
         'id' => $line->id,
         'description' => $line->description,
         'amount' => $line->amount,
@@ -17,13 +13,46 @@
         'order_id' => $line->order_id,
         'period_start' => $line->period_start?->toDateString(),
         'period_end' => $line->period_end?->toDateString(),
-    ])->all()))),
-    addLine() { this.lines.push({ id: null, description: '', amount: '', subscription_id: null, order_id: null, period_start: null, period_end: null }) },
-    removeLine(index) { this.lines.splice(index, 1) },
+    ])->all();
+    $editLines = collect(array_values(old('lines', $defaultLines)))
+        ->map(function ($line) use ($storedLines) {
+            $storedLine = !empty($line['id'])
+                ? $storedLines->get((int) $line['id'])
+                : null;
+
+            $line['payment_terms'] = $storedLine?->subscription?->payment_terms
+                ?? $storedLine?->order?->payment_terms;
+
+            return $line;
+        })
+        ->values();
+@endphp
+<div class="mb-6">
+    <a href="{{ route('invoices.show', $invoice) }}" class="text-sm text-gray-500 hover:text-gray-700">← Назад к просмотру</a>
+    <h1 class="mt-2 text-2xl font-bold text-gray-900">Редактировать счёт</h1>
+</div>
+
+<form method="POST" action="{{ route('invoices.update', $invoice) }}" x-data="{
+    lines: @js($editLines),
+    issueDate: @js(old('issue_date', \Illuminate\Support\Carbon::parse($invoice->issue_date)->toDateString())),
+    dueDate: @js(old('due_date', \Illuminate\Support\Carbon::parse($invoice->due_date)->toDateString())),
+    dueDateWasAutomatic: false,
+    get paymentTerms() { return this.lines.filter(line => line.order_id || line.subscription_id).map(line => Number(line.payment_terms)).filter(terms => Number.isInteger(terms) && terms >= 1 && terms <= 365) },
+    get hasAutomaticPaymentTerms() { return this.paymentTerms.length > 0 },
+    get minimumPaymentTerms() { return this.hasAutomaticPaymentTerms ? Math.min(...this.paymentTerms) : null },
+    get hasDifferentPaymentTerms() { return new Set(this.paymentTerms).size > 1 },
+    get dueDateHint() { if (!this.hasAutomaticPaymentTerms) return 'Для выбранных позиций срок оплаты не задан'; if (this.hasDifferentPaymentTerms) return `У позиций разные условия оплаты. Использован минимальный срок: ${this.minimumPaymentTerms} дней`; return `Автоматически рассчитано: ${this.minimumPaymentTerms} календарных дней` },
+    init() { this.recalculateDueDate() },
+    addLine() { this.lines.push({ id: null, description: '', amount: '', subscription_id: null, order_id: null, period_start: null, period_end: null, payment_terms: null }); this.recalculateDueDate() },
+    removeLine(index) { this.lines.splice(index, 1); this.recalculateDueDate() },
+    issueDateChanged() { if (this.hasAutomaticPaymentTerms) this.recalculateDueDate() },
+    recalculateDueDate() { if (!this.hasAutomaticPaymentTerms) { if (this.dueDateWasAutomatic) this.dueDate = ''; this.dueDateWasAutomatic = false; return } this.dueDateWasAutomatic = true; if (!this.issueDate) { this.dueDate = ''; return } const date = this.parseDate(this.issueDate); date.setDate(date.getDate() + this.minimumPaymentTerms); this.dueDate = this.inputDate(date) },
     total() { return this.lines.reduce((sum, line) => sum + (Number.parseFloat(line.amount) || 0), 0) },
     type(line) { return line.subscription_id ? 'Подписка' : (line.order_id ? 'Разовая услуга' : 'Ручная позиция') },
+    parseDate(value) { const [y, m, d] = value.split('-').map(Number); return new Date(y, m - 1, d) },
+    inputDate(date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` },
     formatDate(value) { if (!value) return '—'; const [y,m,d] = value.slice(0,10).split('-'); return `${d}/${m}/${y}` }
-}">
+}" x-init="init()">
     @csrf
     @method('PUT')
 
@@ -57,11 +86,12 @@
                     </div>
                     <div>
                         <label class="mb-1 block text-xs font-semibold uppercase text-gray-500">Дата выставления <span class="text-red-500">*</span></label>
-                        <x-form.date-input name="issue_date" :value="old('issue_date', \Illuminate\Support\Carbon::parse($invoice->issue_date)->toDateString())" required />
+                        <x-form.date-input name="issue_date" x-model="issueDate" x-on:change="issueDateChanged()" required />
                     </div>
                     <div>
                         <label class="mb-1 block text-xs font-semibold uppercase text-gray-500">Оплатить до <span class="text-red-500">*</span></label>
-                        <x-form.date-input name="due_date" :value="old('due_date', \Illuminate\Support\Carbon::parse($invoice->due_date)->toDateString())" required />
+                        <x-form.date-input name="due_date" x-model="dueDate" dynamic-readonly="hasAutomaticPaymentTerms" required />
+                        <p class="mt-1 text-xs text-gray-500" x-text="dueDateHint"></p>
                     </div>
                 </div>
             </section>

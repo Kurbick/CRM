@@ -126,7 +126,9 @@
                     </div>
                     <div>
                         <label class="mb-1 block text-xs font-semibold uppercase text-gray-500">Оплатить до <span class="text-red-500">*</span></label>
-                        <x-form.date-input name="due_date" x-model="dueDate" x-on:input="dueDateIsManual = true" required />
+                        <x-form.date-input name="due_date" x-model="dueDate" x-on:input="dueDateIsManual = true"
+                            dynamic-readonly="hasAutomaticPaymentTerms" required />
+                        <p class="mt-1 text-xs text-gray-500" x-text="dueDateHint"></p>
                     </div>
                 </div>
             </section>
@@ -226,10 +228,15 @@ document.addEventListener('alpine:init', () => {
     Alpine.data('invoiceCreateForm', config => ({
         ...config, companyOpen: false, contractOpen: false, contracts: [], availableItems: [], lines: [], loadingContracts: false, loadingItems: false, linesError: false,
         contractsRequestId: 0, itemsRequestId: 0,
-        dueDateIsManual: config.hasOldInput && config.hasOldDueDate, restoring: true, previousContractId: config.selectedContractId,
+        dueDateIsManual: config.hasOldInput && config.hasOldDueDate, dueDateWasAutomatic: false, restoring: true, previousContractId: config.selectedContractId,
         get filteredCompanies() { const q = this.companyQuery.trim().toLocaleLowerCase(); return q ? this.companies.filter(c => c.name.toLocaleLowerCase().startsWith(q)) : this.companies },
         get selectedContract() { return this.contracts.find(c => String(c.id) === String(this.selectedContractId)) || null },
         get total() { return this.lines.reduce((sum, line) => sum + (Number.parseFloat(line.amount) || 0), 0) },
+        get paymentTerms() { return this.lines.filter(line => line.order_id || line.subscription_id).map(line => Number(line.payment_terms)).filter(terms => Number.isInteger(terms) && terms >= 1 && terms <= 365) },
+        get hasAutomaticPaymentTerms() { return this.paymentTerms.length > 0 },
+        get minimumPaymentTerms() { return this.hasAutomaticPaymentTerms ? Math.min(...this.paymentTerms) : null },
+        get hasDifferentPaymentTerms() { return new Set(this.paymentTerms).size > 1 },
+        get dueDateHint() { if (!this.hasAutomaticPaymentTerms) return 'Для выбранных позиций срок оплаты не задан'; if (this.hasDifferentPaymentTerms) return `У позиций разные условия оплаты. Использован минимальный срок: ${this.minimumPaymentTerms} дней`; return `Автоматически рассчитано: ${this.minimumPaymentTerms} календарных дней` },
         async init() {
             this.lines = this.oldLines.map((line, i) => this.normaliseOldLine(line, i));
             if (this.selectedCompanyId) await this.loadContracts(true);
@@ -273,6 +280,7 @@ document.addEventListener('alpine:init', () => {
             this.dueDate = '';
             this.comment = '';
             this.dueDateIsManual = false;
+            this.dueDateWasAutomatic = false;
             this.linesError = false;
             this.loadingItems = false;
         },
@@ -293,6 +301,7 @@ document.addEventListener('alpine:init', () => {
             this.lines = [];
             this.availableItems = [];
             this.dueDateIsManual = false;
+            this.dueDateWasAutomatic = false;
             this.linesError = false;
             this.recalculateDueDate();
         },
@@ -337,7 +346,7 @@ document.addEventListener('alpine:init', () => {
                 if (!response.ok) throw new Error();
                 const data = await response.json();
                 if (requestId !== this.itemsRequestId || contractId !== this.selectedContractId) return;
-                this.availableItems = [...data.orders, ...data.subscriptions]; this.mergeOldMetadata();
+                this.availableItems = [...data.orders, ...data.subscriptions]; this.mergeOldMetadata(); this.recalculateDueDate();
             } catch (_) {
                 if (requestId === this.itemsRequestId) this.availableItems = [];
             } finally {
@@ -349,13 +358,13 @@ document.addEventListener('alpine:init', () => {
         itemKey(item) { return `${item.type}-${item.id}` }, isSelected(item) { return this.lines.some(line => line.key === this.itemKey(item)) },
         isCustomLine(line) { return Boolean(line.subscription_id && line.billing_period === 'custom') },
         toggleItem(item, checked) { const key = this.itemKey(item); if (checked && !this.lines.some(line => line.key === key)) this.lines.push(this.lineFromItem(item)); else if (!checked) this.lines = this.lines.filter(line => line.key !== key); this.afterLinesChanged() },
-        lineFromItem(item) { const period = item.type === 'subscription' ? this.subscriptionPeriod(item) : [null, null]; return { key: this.itemKey(item), description: item.description, amount: item.amount, subscription_id: item.type === 'subscription' ? item.id : null, order_id: item.type === 'order' ? item.id : null, period_start: period[0], period_end: period[1], billing_period: item.billing_period || null, payment_terms: item.type === 'subscription' ? item.payment_terms : null } },
+        lineFromItem(item) { const period = item.type === 'subscription' ? this.subscriptionPeriod(item) : [null, null]; return { key: this.itemKey(item), description: item.description, amount: item.amount, subscription_id: item.type === 'subscription' ? item.id : null, order_id: item.type === 'order' ? item.id : null, period_start: period[0], period_end: period[1], billing_period: item.billing_period || null, payment_terms: item.payment_terms ?? null } },
         subscriptionPeriod(item) { if (item.billing_period === 'custom') return [null, null]; const months = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12 }[item.billing_period]; if (!months || !item.next_billing_date) return [null, null]; const start = this.parseDate(item.next_billing_date); const end = new Date(start); const day = end.getDate(); end.setDate(1); end.setMonth(end.getMonth() + months); end.setDate(Math.min(day, new Date(end.getFullYear(), end.getMonth() + 1, 0).getDate())); end.setDate(end.getDate() - 1); return [this.inputDate(start), this.inputDate(end)] },
         addManualLine() { this.lines.push({ key: `manual-${Date.now()}-${Math.random()}`, description: '', amount: '', subscription_id: null, order_id: null, period_start: null, period_end: null, billing_period: null, payment_terms: null }); this.afterLinesChanged() },
         removeLine(index) { this.lines.splice(index, 1); this.afterLinesChanged() },
-        afterLinesChanged() { this.linesError = false; if (!this.dueDateIsManual) this.recalculateDueDate() },
-        issueDateChanged() { if (!this.dueDateIsManual) this.recalculateDueDate() },
-        recalculateDueDate() { if (!this.issueDate) return; const terms = this.lines.filter(l => l.subscription_id && l.payment_terms !== null && l.payment_terms !== '').map(l => Number(l.payment_terms)).filter(Number.isFinite); const days = terms.length ? Math.min(...terms) : 30; const date = this.parseDate(this.issueDate); date.setDate(date.getDate() + days); this.dueDate = this.inputDate(date) },
+        afterLinesChanged() { this.linesError = false; this.recalculateDueDate() },
+        issueDateChanged() { if (this.hasAutomaticPaymentTerms) this.recalculateDueDate() },
+        recalculateDueDate() { if (!this.hasAutomaticPaymentTerms) { if (this.dueDateWasAutomatic) this.dueDate = ''; this.dueDateWasAutomatic = false; this.dueDateIsManual = true; return } this.dueDateIsManual = false; this.dueDateWasAutomatic = true; if (!this.issueDate) { this.dueDate = ''; return } const date = this.parseDate(this.issueDate); date.setDate(date.getDate() + this.minimumPaymentTerms); this.dueDate = this.inputDate(date) },
         contractLabel(c) { return `№ ${c.contract_number}` },
         contractDates(c) { return c.end_date ? `${this.formatDate(c.start_date)} — ${this.formatDate(c.end_date)}` : `с ${this.formatDate(c.start_date)}, бессрочный` },
         itemSubtitle(item) { if (item.type === 'order') return 'Разовая услуга'; return `Подписка · ${{ monthly: 'ежемесячно', quarterly: 'ежеквартально', semiannual: 'раз в полгода', annual: 'ежегодно', custom: 'индивидуальный период' }[item.billing_period] || 'индивидуальный период'}` },

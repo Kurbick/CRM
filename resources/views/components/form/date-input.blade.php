@@ -10,6 +10,7 @@
     'dynamicName' => null,
     'dynamicId' => null,
     'dynamicMin' => null,
+    'dynamicReadonly' => null,
     'submit' => true,
 ])
 
@@ -31,6 +32,7 @@
         showError: false,
         required: @js((bool) $required),
         disabled: @js((bool) $disabled),
+        readonly: @js((bool) $readonly),
         availabilityReady: false,
         minimum: @js($min),
         maximum: @js($max),
@@ -41,11 +43,12 @@
                 this.validate(false);
             });
         },
-        syncAvailability(required, disabled, minimum = null) {
+        syncAvailability(required, disabled, minimum = null, readonly = false) {
             const becameDisabled = this.availabilityReady && !this.disabled && disabled;
             this.required = required;
             this.disabled = disabled;
             this.minimum = minimum;
+            this.readonly = readonly;
             if (becameDisabled) {
                 this.iso = '';
                 this.display = '';
@@ -116,7 +119,8 @@
     x-effect="syncAvailability(
         Boolean({{ $dynamicRequired ?: ($required ? 'true' : 'false') }}),
         Boolean({{ $dynamicDisabled ?: ($disabled ? 'true' : 'false') }}),
-        {{ $dynamicMin ?: \Illuminate\Support\Js::from($min) }}
+        {{ $dynamicMin ?: \Illuminate\Support\Js::from($min) }},
+        Boolean({{ $dynamicReadonly ?: ($readonly ? 'true' : 'false') }})
     )"
     {{ $attributes->whereStartsWith('x-model') }}
 >
@@ -138,8 +142,8 @@
             autocomplete="off"
             x-bind:required="required"
             x-bind:disabled="disabled"
-            @readonly($readonly)
-            {{ $attributes->except(['x-model', 'x-data', ':required', 'x-bind:required', ':disabled', 'x-bind:disabled'])->class([
+            x-bind:readonly="readonly"
+            {{ $attributes->except(['x-model', 'x-data', ':required', 'x-bind:required', ':disabled', 'x-bind:disabled', ':readonly', 'x-bind:readonly'])->class([
                 'w-full rounded-lg border px-3 py-2 pr-10 text-sm outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500',
                 'border-red-300' => $errorBag->has($name),
                 'border-gray-200' => !$errorBag->has($name),
@@ -148,7 +152,7 @@
         >
 
         @unless ($readonly)
-            <button type="button" x-show="!disabled" x-on:click="$refs.calendar.showPicker ? $refs.calendar.showPicker() : $refs.calendar.click()"
+            <button type="button" x-show="!disabled && !readonly" x-on:click="$refs.calendar.showPicker ? $refs.calendar.showPicker() : $refs.calendar.click()"
                 class="absolute inset-y-0 right-0 flex items-center justify-center px-3 text-gray-400 transition hover:text-gray-600"
                 aria-label="Открыть календарь">
                 <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
