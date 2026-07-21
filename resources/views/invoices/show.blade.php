@@ -96,7 +96,7 @@
                         </button>
                     </form>
                 @endif
-                @if ($invoice->status === 'issued')
+                @if ($invoice->status === 'issued' && $invoice->payments->isEmpty())
                     <form action="{{ route('invoices.cancel', $invoice) }}" method="POST"
                         onsubmit="return confirm('Отменить выставленный инвойс? График подписок будет восстановлен.')">
 
@@ -249,7 +249,7 @@
                 {{-- Расчет итога --}}
                 <div class="border-t border-gray-100 pt-6 flex flex-col items-end gap-2 text-sm text-gray-600">
                     <div class="flex justify-between w-64">
-                        <span>Итого:</span>
+                        <span>Итого сумма счета:</span>
 
                         <span class="font-bold text-gray-900 font-mono">
                             {{ $formatMoney($invoice->total_amount) }}
@@ -423,10 +423,12 @@
                              * нельзя отменять как обычный банковский/наличный платёж.
                              * Сервер дополнительно проверяет это в PaymentController.
                              */
-                            $isCreditBalancePayment = str_starts_with(
-                                (string) $payment->comment,
-                                'Автоматически применён Credit Balance',
-                            );
+                            $isCreditBalancePayment = $payment->creditBalanceEntries
+                                ->contains('type', 'applied')
+                                || str_starts_with(
+                                    (string) $payment->comment,
+                                    'Автоматически применён Credit Balance',
+                                );
 
                             /*
                              * После ошибки валидации повторно открываем форму
@@ -474,7 +476,7 @@
                                     class="mt-2 inline-flex items-center rounded-md bg-blue-50 px-2 py-1
                                            text-[11px] font-medium text-blue-700">
 
-                                    Оплата из Credit Balance
+                                    Оплачено из Credit Balance
                                 </div>
                             @endif
 
@@ -535,19 +537,13 @@
                                 </div>
                             @endif
 
-                            {{-- Отмена обычного подтверждённого платежа --}}
-                            @if ($payment->status === 'confirmed' && !$isCreditBalancePayment)
+                            {{-- Отмена обычного ожидающего или подтверждённого платежа --}}
+                            @if (in_array($payment->status, ['pending', 'confirmed'], true) && !$isCreditBalancePayment)
                                 <div class="mt-3">
-                                    <button type="button" @click="cancelOpen = !cancelOpen"
+                                    <button type="button" x-show="!cancelOpen" @click="cancelOpen = true"
                                         class="text-xs font-medium text-red-600 hover:text-red-800 transition">
 
-                                        <span x-show="!cancelOpen">
-                                            Отменить платёж
-                                        </span>
-
-                                        <span x-show="cancelOpen" x-cloak>
-                                            Закрыть форму отмены
-                                        </span>
+                                        Отменить платёж
                                     </button>
 
                                     <form x-show="cancelOpen" x-cloak action="{{ route('payments.cancel', $payment) }}"

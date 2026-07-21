@@ -506,6 +506,7 @@ class InvoiceController extends Controller
             'contract',
             'lines',
             'payments' => fn($query) => $query
+                ->with('creditBalanceEntries')
                 ->orderByDesc('payment_date'),
         ]);
 
@@ -1071,15 +1072,21 @@ class InvoiceController extends Controller
                 );
 
                 if ($applied > 0) {
-                    $invoice->payments()->create([
+                    $payment = $invoice->payments()->create([
                         'company_id' => $company->id,
                         'payment_date' => now()->toDateString(),
                         'amount' => $applied,
                         'payment_method' => 'transfer',
                         'status' => 'confirmed',
                         'comment' =>
-                        "Автоматически применён Credit Balance ({$applied} ₼)",
+                            "Автоматически применён Credit Balance ({$applied} ₼)",
                     ]);
+
+                    $creditBalance->entries()
+                        ->where('type', 'applied')
+                        ->where('invoice_id', $invoice->id)
+                        ->whereNull('payment_id')
+                        ->update(['payment_id' => $payment->id]);
                 }
             }
         });

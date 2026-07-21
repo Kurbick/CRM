@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
 
 class Payment extends Model
@@ -36,6 +37,11 @@ class Payment extends Model
         return $this->belongsTo(Company::class);
     }
 
+    public function creditBalanceEntries(): HasMany
+    {
+        return $this->hasMany(CreditBalanceEntry::class);
+    }
+
     /**
      * После подтверждения платежа:
      *
@@ -58,7 +64,10 @@ class Payment extends Model
             $becameConfirmed = $payment->status === 'confirmed'
                 && (
                     $payment->wasRecentlyCreated
-                    || $payment->wasChanged('status')
+                    || (
+                        $payment->wasChanged('status')
+                        && $payment->getOriginal('status') === 'pending'
+                    )
                 );
 
             if (!$becameConfirmed) {

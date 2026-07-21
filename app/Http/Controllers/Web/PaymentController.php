@@ -10,6 +10,7 @@ use App\Models\Payment;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class PaymentController extends Controller
@@ -234,7 +235,7 @@ class PaymentController extends Controller
     }
 
     /**
-     * Отмена подтверждённого платежа.
+     * Отмена ожидающего или подтверждённого платежа.
      *
      * Платёж не удаляется из базы, а сохраняется
      * в истории со статусом cancelled.
@@ -244,6 +245,11 @@ class PaymentController extends Controller
         Payment $payment
     ): RedirectResponse {
         $validated = $request->validate([
+            'cancel_payment_id' => [
+                'required',
+                'integer',
+                Rule::in([$payment->getKey()]),
+            ],
             'cancel_reason' => [
                 'required',
                 'string',
@@ -251,6 +257,15 @@ class PaymentController extends Controller
                 'max:1000',
             ],
         ], [
+            'cancel_payment_id.required' =>
+            'Не удалось определить отменяемый платёж.',
+
+            'cancel_payment_id.integer' =>
+            'Указан некорректный платёж.',
+
+            'cancel_payment_id.in' =>
+            'Платёж в форме не совпадает с отменяемым платежом.',
+
             'cancel_reason.required' =>
             'Укажите причину отмены платежа.',
 
@@ -277,10 +292,10 @@ class PaymentController extends Controller
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            if ($lockedPayment->status !== 'confirmed') {
+            if (!in_array($lockedPayment->status, ['pending', 'confirmed'], true)) {
                 throw ValidationException::withMessages([
                     'cancel_reason' =>
-                    'Отменить можно только подтверждённый платёж.',
+                    'Отменить можно только ожидающий или подтверждённый платёж.',
                 ]);
             }
 
@@ -301,6 +316,26 @@ class PaymentController extends Controller
                 ->firstOrFail();
 
             $invoiceId = $invoice->id;
+
+            if (
+                (int) $lockedPayment->company_id
+                !== (int) $invoice->company_id
+            ) {
+                throw ValidationException::withMessages([
+                    'cancel_reason' =>
+                    'Компания платежа не совпадает с компанией инвойса.',
+                ]);
+            }
+
+            if ($lockedPayment->status === 'pending') {
+                $lockedPayment->forceFill([
+                    'status' => 'cancelled',
+                    'cancelled_at' => now(),
+                    'cancel_reason' => $validated['cancel_reason'],
+                ])->saveQuietly();
+
+                return;
+            }
 
             if (
                 !in_array(
@@ -379,11 +414,12 @@ class PaymentController extends Controller
     private function isCreditBalancePayment(
         Payment $payment
     ): bool {
-        $hasAppliedCreditEntry =
-            CreditBalanceEntry::query()
-            ->where('type', 'applied')
-            ->where('payment_id', $payment->id)
-            ->exists();
+        $hasAppliedCreditEntry = $payment->relationLoaded('creditBalanceEntries')
+            ? $payment->creditBalanceEntries->contains('type', 'applied')
+            : CreditBalanceEntry::query()
+                ->where('type', 'applied')
+                ->where('payment_id', $payment->id)
+                ->exists();
 
         $hasCreditBalanceComment = str_starts_with(
             (string) $payment->comment,

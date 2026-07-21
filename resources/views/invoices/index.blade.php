@@ -307,10 +307,9 @@
                 <tbody class="divide-y divide-gray-100 text-gray-700">
                     @forelse ($invoices as $invoice)
                         @php
-                            $paidAmount = (float) ($invoice->confirmed_paid_amount ?? 0);
-                            $appliedAmount = min((float) $invoice->total_amount, $paidAmount);
-                            $overpaymentAmount = max(0, $paidAmount - (float) $invoice->total_amount);
-                            $remainingAmount = max(0, (float) $invoice->total_amount - $paidAmount);
+                            $appliedAmount = $invoice->applied_amount;
+                            $overpaymentAmount = $invoice->overpayment_amount;
+                            $remainingAmount = $invoice->remaining_amount;
                         @endphp
                         <tr class="hover:bg-gray-50/50 transition">
 

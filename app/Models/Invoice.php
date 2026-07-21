@@ -60,12 +60,19 @@ class Invoice extends Model
      */
     public function getPaidAmountAttribute(): float
     {
-        return round(
-            (float) $this->payments()
+        if ($this->relationLoaded('payments')) {
+            $paidAmount = $this->payments
                 ->where('status', 'confirmed')
-                ->sum('amount'),
-            2
-        );
+                ->sum(fn(Payment $payment) => (float) $payment->amount);
+        } elseif (array_key_exists('confirmed_paid_amount', $this->attributes)) {
+            $paidAmount = $this->attributes['confirmed_paid_amount'];
+        } else {
+            $paidAmount = $this->payments()
+                ->where('status', 'confirmed')
+                ->sum('amount');
+        }
+
+        return round((float) $paidAmount, 2);
     }
 
     /**
