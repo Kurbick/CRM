@@ -42,6 +42,11 @@ class Payment extends Model
         return $this->hasMany(CreditBalanceEntry::class);
     }
 
+    public function allocations(): HasMany
+    {
+        return $this->hasMany(PaymentAllocation::class);
+    }
+
     /**
      * После подтверждения платежа:
      *
