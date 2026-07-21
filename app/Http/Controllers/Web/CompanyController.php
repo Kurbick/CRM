@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Models\Company;
+use App\Models\Invoice;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 
 class CompanyController extends Controller
 {
@@ -30,14 +32,13 @@ class CompanyController extends Controller
         
         $companies = $query->orderBy('name')->paginate(10)->withQueryString();
         
-        // Add calculated debt to each company on the current page
-        $companies->getCollection()->transform(function ($company) {
-            $invoiced = $company->invoices()->whereNotIn('status', ['cancelled'])->sum('total_amount');
-            $paid = $company->payments()
-                ->where('status', 'confirmed')
-                ->where('comment', 'not like', '%Credit Balance%')
-                ->sum('amount');
-            $company->total_debt = max(0, $invoiced - $paid);
+        $summaries = $this->financialSummaries($companies->getCollection());
+
+        $companies->getCollection()->transform(function (Company $company) use ($summaries) {
+            foreach ($summaries->get($company->id) as $key => $value) {
+                $company->setAttribute($key, $value);
+            }
+
             return $company;
         });
         
@@ -88,31 +89,73 @@ class CompanyController extends Controller
      */
     public function show(Request $request, Company $company)
 {
-    $company->load([
-        'contacts'     => fn($q) => $q->orderBy('first_name'),
-        'contracts'    => fn($q) => $q->orderBy('start_date', 'desc'),
-        'invoices'     => fn($q) => $q->orderBy('due_date', 'desc'),
-        'payments'     => fn($q) => $q->orderBy('payment_date', 'desc'),
-        'creditBalance',
-    ]);
+        $company->load([
+            'contacts'     => fn($q) => $q->orderBy('first_name'),
+            'contracts'    => fn($q) => $q->orderBy('start_date', 'desc'),
+            'invoices'     => fn($q) => $q
+                ->withSum([
+                    'payments as confirmed_paid_amount' => fn($paymentQuery) => $paymentQuery
+                        ->where('status', 'confirmed'),
+                ], 'amount')
+                ->orderBy('due_date', 'desc'),
+            'payments'     => fn($q) => $q->with('invoice')->orderBy('payment_date', 'desc'),
+            'creditBalance',
+        ]);
 
-    $totalInvoiced = $company->invoices()->whereNotIn('status', ['cancelled'])->sum('total_amount');
-    $totalPaid = $company->payments()
-        ->where('status', 'confirmed')
-        ->where('comment', 'not like', '%Credit Balance%')
-        ->sum('amount');
+        $stats = $this->financialSummaries(
+            collect([$company]),
+            $company->invoices
+        )->get($company->id);
 
-    $stats = [
-        'total_invoiced'  => $totalInvoiced,
-        'total_paid'      => $totalPaid,
-        'total_debt'      => max(0, $totalInvoiced - $totalPaid), // исправлено
-        'credit_balance'  => $company->creditBalance?->amount ?? 0,
-    ];
+        $returnContext = $this->companyReturnContext($request);
 
-    $returnContext = $this->companyReturnContext($request);
+        return view('companies.show', compact('company', 'stats', 'returnContext'));
+    }
 
-    return view('companies.show', compact('company', 'stats', 'returnContext'));
-}
+    /**
+     * Calculate current financial totals from real issued invoices only.
+     *
+     * @param  Collection<int, Company>  $companies
+     * @param  Collection<int, Invoice>|null  $loadedInvoices
+     * @return Collection<int, array{total_invoiced: float, total_paid: float, total_debt: float, credit_balance: float}>
+     */
+    private function financialSummaries(Collection $companies, ?Collection $loadedInvoices = null): Collection
+    {
+        $companyIds = $companies->pluck('id')->values();
+
+        if ($companyIds->isEmpty()) {
+            return collect();
+        }
+
+        (new Company())->newCollection($companies->all())->loadMissing('creditBalance');
+
+        $invoices = $loadedInvoices ?? Invoice::query()
+            ->whereIn('company_id', $companyIds)
+            ->whereIn('status', ['issued', 'partially_paid', 'paid'])
+            ->withSum([
+                'payments as confirmed_paid_amount' => fn($query) => $query->where('status', 'confirmed'),
+            ], 'amount')
+            ->get(['id', 'company_id', 'total_amount', 'status']);
+
+        $eligibleInvoices = $invoices->whereIn('status', ['issued', 'partially_paid', 'paid']);
+
+        return $companies->mapWithKeys(function (Company $company) use ($eligibleInvoices) {
+            $companyInvoices = $eligibleInvoices->where('company_id', $company->id);
+
+            return [
+                $company->id => [
+                    'total_invoiced' => round((float) $companyInvoices->sum('total_amount'), 2),
+                    'total_paid' => round((float) $companyInvoices->sum(
+                        fn(Invoice $invoice) => $invoice->applied_amount
+                    ), 2),
+                    'total_debt' => round((float) $companyInvoices->sum(
+                        fn(Invoice $invoice) => $invoice->remaining_amount
+                    ), 2),
+                    'credit_balance' => round((float) ($company->creditBalance?->amount ?? 0), 2),
+                ],
+            ];
+        });
+    }
 
     /**
      * Show the form for editing the specified resource.

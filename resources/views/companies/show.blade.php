@@ -59,7 +59,7 @@
     </div>
 
     {{-- Сводная статистика по компании --}}
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
             <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Долг</p>
             <p class="text-2xl font-bold mt-1.5 {{ $stats['total_debt'] > 0 ? 'text-red-600' : 'text-gray-900' }}">
@@ -70,11 +70,16 @@
         <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
             <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Всего выставлено</p>
             <p class="text-2xl font-bold text-gray-900 mt-1.5">{{ number_format($stats['total_invoiced'], 2) }} ₼</p>
-            <p class="text-xs text-gray-400 mt-1">По всем активным счетам (без учета отмененных)</p>
+            <p class="text-xs text-gray-400 mt-1">По выставленным счетам</p>
+        </div>
+
+        <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+            <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Оплачено</p>
+            <p class="text-2xl font-bold text-green-600 mt-1.5">{{ number_format($stats['total_paid'], 2) }} ₼</p>
         </div>
 
         {{-- Credit Balance — переплата клиента --}}
-        @php $creditAmount = $company->creditBalance?->amount ?? 0; @endphp
+        @php $creditAmount = $stats['credit_balance']; @endphp
         @if ($creditAmount > 0)
             <div class="bg-blue-50 rounded-xl border border-blue-200 p-5 shadow-sm">
                 <p class="text-xs font-semibold text-blue-500 uppercase tracking-wide">Кредитный баланс</p>
@@ -382,7 +387,11 @@
                                     </td>
                                     <td class="py-3 text-xs">
                                         <div class="text-green-600 font-medium">Оплачено:
-                                            {{ number_format($invoice->paid_amount, 2) }} ₼</div>
+                                            {{ number_format($invoice->applied_amount, 2) }} ₼</div>
+                                        @if ($invoice->overpayment_amount > 0)
+                                            <div class="text-blue-600 font-medium mt-0.5">Переплата:
+                                                {{ number_format($invoice->overpayment_amount, 2) }} ₼</div>
+                                        @endif
                                         @if ($invoice->remaining_amount > 0)
                                             <div class="text-red-500 font-medium mt-0.5">Долг:
                                                 {{ number_format($invoice->remaining_amount, 2) }} ₼</div>
