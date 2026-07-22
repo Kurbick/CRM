@@ -30,8 +30,8 @@ class InvoiceShowViewTest extends TestCase
 
         $this->assertStringContainsString('$value == 0.0', $source);
         $this->assertStringContainsString("number_format(\$value, 2, ',', ' ')", $source);
-        $this->assertStringContainsString('$formatMoney($line->amount)', $source);
-        $this->assertStringContainsString('$formatMoney($payment->amount)', $source);
+        $this->assertStringContainsString('$formatBreakdownMoney($line[\'amount\'])', $source);
+        $this->assertStringContainsString('$formatBreakdownMoney($paymentRow[\'amount\'])', $source);
         $this->assertStringContainsString('$formatMoney($invoice->remaining_amount)', $source);
     }
 
@@ -39,9 +39,8 @@ class InvoiceShowViewTest extends TestCase
     {
         $source = file_get_contents(resource_path('views/invoices/show.blade.php'));
 
-        $this->assertStringContainsString('Разовая услуга', $source);
-        $this->assertStringContainsString('Подписка@if', $source);
-        $this->assertStringContainsString("format('d/m/Y')", $source);
+        $this->assertStringContainsString('$line[\'type_label\']', $source);
+        $this->assertStringContainsString('$line[\'period_label\']', $source);
         $this->assertStringNotContainsString('{{ $line->subscription_id }}', $source);
         $this->assertStringNotContainsString('{{ $line->order_id }}', $source);
     }
@@ -58,5 +57,75 @@ class InvoiceShowViewTest extends TestCase
         $this->assertStringContainsString("route('invoices.edit', \$invoice)", $source);
         $this->assertStringContainsString("route('invoices.destroy', \$invoice)", $source);
         $this->assertStringContainsString("@method('DELETE')", $source);
+    }
+
+    public function test_payment_breakdown_columns_and_current_allocation_details_are_present(): void
+    {
+        $source = file_get_contents(resource_path('views/invoices/show.blade.php'));
+
+        $this->assertStringContainsString('>Оплачено</th>', $source);
+        $this->assertStringContainsString('>Остаток</th>', $source);
+        $this->assertStringContainsString('>Статус</th>', $source);
+        $this->assertStringNotContainsString('>Состояние</th>', $source);
+        $this->assertStringNotContainsString('>Тип / период</th>', $source);
+        $this->assertStringContainsString('$line[\'payment_state_label\']', $source);
+        $this->assertStringContainsString("{{ \$line['type_label'] }}@if (\$line['period_label'])", $source);
+        $this->assertStringContainsString('print:hidden', $source);
+        $this->assertStringContainsString('overflow-x-auto', $source);
+        $this->assertStringNotContainsString('min-w-[860px]', $source);
+        $this->assertStringContainsString('Показать распределение', $source);
+        $this->assertStringContainsString('Текущее распределение', $source);
+        $this->assertStringContainsString('Будет распределён после подтверждения.', $source);
+        $this->assertStringNotContainsString('Текущее распределение отсутствует: платёж отменён.', $source);
+        $this->assertStringNotContainsString("str_starts_with(\n", $source);
+    }
+
+    public function test_payment_cancellation_form_supports_enter_without_bypassing_validation(): void
+    {
+        $source = file_get_contents(resource_path('views/invoices/show.blade.php'));
+
+        $this->assertStringContainsString("route('payments.cancel', \$payment)", $source);
+        $this->assertStringContainsString('name="cancel_reason"', $source);
+        $this->assertStringContainsString('required minlength="3"', $source);
+        $this->assertStringContainsString('type="submit" :disabled="cancelSubmitting"', $source);
+        $this->assertStringContainsString('x-on:keydown.enter=', $source);
+        $this->assertStringContainsString('if (!$event.shiftKey)', $source);
+        $this->assertStringContainsString('$event.currentTarget.form.requestSubmit();', $source);
+        $this->assertStringContainsString("value.trim()", $source);
+        $this->assertStringContainsString('cancelSubmitting = true;', $source);
+        $this->assertStringNotContainsString('$event.currentTarget.form.submit();', $source);
+    }
+
+    public function test_compact_payment_history_card_opens_an_accessible_drawer(): void
+    {
+        $source = file_get_contents(resource_path('views/invoices/show.blade.php'));
+
+        $this->assertStringContainsString("{{ \$paymentBreakdown['payments_count'] }}", $source);
+        $this->assertStringContainsString('Последний платёж:', $source);
+        $this->assertStringContainsString('Открыть историю', $source);
+        $this->assertStringContainsString('paymentHistoryOpen:', $source);
+        $this->assertStringContainsString('x-show="paymentHistoryOpen" x-cloak', $source);
+        $this->assertStringContainsString('id="payment-history-drawer"', $source);
+        $this->assertStringContainsString('class="fixed inset-0 z-50"', $source);
+        $this->assertStringContainsString('class="absolute inset-0 bg-gray-900/40" @click="closePaymentHistory()"', $source);
+        $this->assertStringContainsString('x-on:keydown.escape.window=', $source);
+        $this->assertStringContainsString('aria-label="Закрыть историю платежей"', $source);
+        $this->assertStringContainsString('overflow-y-auto', $source);
+        $this->assertStringContainsString("@forelse (\$paymentBreakdown['paymentRows'] as \$paymentRow)", $source);
+        $this->assertStringContainsString('$paymentBreakdown[\'pending_payments_count\']', $source);
+        $this->assertStringNotContainsString('Показать ещё', $source);
+        $this->assertStringNotContainsString('Скрыть историю', $source);
+        $this->assertStringNotContainsString('hidden_by_default', $source);
+        $this->assertStringNotContainsString('showAllHistory', $source);
+        $this->assertStringContainsString("route('payments.confirm', \$payment)", $source);
+        $this->assertStringContainsString("route('payments.cancel', \$payment)", $source);
+        $this->assertStringContainsString('$event.currentTarget.form.requestSubmit();', $source);
+        $this->assertStringContainsString('allocationOpen: false', $source);
+        $this->assertStringContainsString("document.body.style.overflow = 'hidden'", $source);
+        $this->assertStringContainsString("document.body.style.overflow = ''", $source);
+        $this->assertStringContainsString('$refs.paymentHistoryClose.focus()', $source);
+        $this->assertStringContainsString('$refs.paymentHistoryTrigger?.focus()', $source);
+        $this->assertStringContainsString('class="print:hidden"', $source);
+        $this->assertStringNotContainsString('<div class="mt-3 rounded-lg border border-red-100 bg-red-50 p-3">', $source);
     }
 }

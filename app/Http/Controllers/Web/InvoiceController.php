@@ -13,6 +13,7 @@ use App\Models\InvoiceLine;
 use App\Models\Order;
 use App\Models\Subscription;
 use App\Services\InvoiceDueDateCalculator;
+use App\Services\InvoicePaymentBreakdownPresenter;
 use App\Services\InvoicePaymentAllocationWriter;
 use App\Support\CompanyPageContext;
 use Illuminate\Validation\ValidationException;
@@ -20,7 +21,8 @@ use Illuminate\Validation\ValidationException;
 class InvoiceController extends Controller
 {
     public function __construct(
-        private readonly InvoiceDueDateCalculator $dueDateCalculator
+        private readonly InvoiceDueDateCalculator $dueDateCalculator,
+        private readonly InvoicePaymentBreakdownPresenter $paymentBreakdownPresenter
     ) {
     }
 
@@ -522,13 +524,21 @@ class InvoiceController extends Controller
             'contract',
             'lines',
             'payments' => fn($query) => $query
-                ->with('creditBalanceEntries')
-                ->orderByDesc('payment_date'),
+                ->with(['allocations', 'creditBalanceEntries'])
+                ->orderByDesc('payment_date')
+                ->orderByDesc('id'),
         ]);
 
         $companyContext = $this->invoiceCompanyContext($request, $invoice);
+        $paymentBreakdown = $this->paymentBreakdownPresenter->present($invoice);
+        $paymentsById = $invoice->payments->keyBy('id');
 
-        return view('invoices.show', compact('invoice', 'companyContext'));
+        return view('invoices.show', compact(
+            'invoice',
+            'companyContext',
+            'paymentBreakdown',
+            'paymentsById'
+        ));
     }
 
     /**

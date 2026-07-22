@@ -14,6 +14,12 @@
             return number_format($value, 2, ',', ' ') . ' ₼';
         };
 
+        $formatBreakdownMoney = static function (string $amount): string {
+            [$whole, $fraction] = array_pad(explode('.', $amount, 2), 2, '00');
+
+            return number_format((int) $whole, 0, ',', ' ') . ',' . $fraction . ' ₼';
+        };
+
         $remainingColor = match (true) {
             (float) $invoice->remaining_amount === 0.0 || $invoice->status === 'paid' => 'text-green-600',
             in_array($invoice->status, ['issued', 'partially_paid'], true) && (bool) $invoice->is_overdue => 'text-red-600',
@@ -212,38 +218,53 @@
 
                 {{-- Таблица позиций (Lines) --}}
                 <div class="mb-6">
-                    <table class="w-full text-left text-sm">
+                    <div class="overflow-x-auto print:overflow-visible">
+                    <table class="w-full table-auto text-left text-sm">
                         <thead>
                             <tr
                                 class="border-b border-gray-200 text-gray-400 font-semibold uppercase tracking-wider text-xs pb-3">
-                                <th class="pb-3 w-10">№</th>
-                                <th class="pb-3">Описание</th>
+                                <th class="w-8 pb-3 pr-2">№</th>
+                                <th class="pb-3 pr-4">Позиция</th>
                                 <th class="pb-3 text-right pr-4">Сумма</th>
+                                <th class="pb-3 text-right pr-4 print:hidden">Оплачено</th>
+                                <th class="pb-3 text-right pr-4 print:hidden">Остаток</th>
+                                <th class="pb-3 print:hidden">Статус</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100 text-gray-700">
-                            @foreach ($invoice->lines as $index => $line)
+                            @foreach ($paymentBreakdown['lineRows'] as $index => $line)
                                 <tr>
-                                    <td class="py-4 font-medium text-gray-400">{{ $index + 1 }}</td>
-                                    <td class="py-4">
-                                        <div class="font-semibold text-gray-900">{{ $line->description }}</div>
-                                        @if ($line->order_id)
-                                            <div class="mt-0.5 text-xs text-gray-500">
-                                                Разовая услуга
-                                            </div>
-                                        @elseif ($line->subscription_id)
-                                            <div class="mt-0.5 text-xs text-gray-500">
-                                                Подписка@if ($line->period_start && $line->period_end) · Расчётный период: {{ $line->period_start->format('d/m/Y') }} — {{ $line->period_end->format('d/m/Y') }}@endif
-                                            </div>
-                                        @endif
+                                    <td class="w-8 py-4 pr-2 font-medium text-gray-400">{{ $index + 1 }}</td>
+                                    <td class="py-4 pr-4">
+                                        <div class="font-semibold text-gray-900 break-words">{{ $line['description'] }}</div>
+                                        <div class="mt-0.5 text-xs text-gray-500 break-words">
+                                            {{ $line['type_label'] }}@if ($line['period_label']) · {{ $line['period_label'] }}@endif
+                                        </div>
                                     </td>
                                     <td class="py-4 text-right font-semibold text-gray-900 font-mono pr-4">
-                                        {{ $formatMoney($line->amount) }}
+                                        <span class="whitespace-nowrap tabular-nums">{{ $formatBreakdownMoney($line['amount']) }}</span>
+                                    </td>
+                                    <td class="py-4 text-right font-semibold text-green-600 font-mono pr-4 print:hidden">
+                                        <span class="whitespace-nowrap tabular-nums">{{ $formatBreakdownMoney($line['paid_amount']) }}</span>
+                                    </td>
+                                    <td class="py-4 text-right font-semibold text-gray-900 font-mono pr-4 print:hidden">
+                                        <span class="whitespace-nowrap tabular-nums">{{ $formatBreakdownMoney($line['remaining_amount']) }}</span>
+                                    </td>
+                                    <td class="py-4 print:hidden">
+                                        <span @class([
+                                            'inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium',
+                                            'bg-green-50 text-green-700' => $line['payment_state'] === 'paid',
+                                            'bg-amber-50 text-amber-700' => $line['payment_state'] === 'partially_paid',
+                                            'bg-gray-100 text-gray-600' => $line['payment_state'] === 'unpaid',
+                                        ])>
+                                            {{ $line['payment_state_label'] }}
+                                        </span>
                                     </td>
                                 </tr>
                             @endforeach
                         </tbody>
                     </table>
+                    </div>
                 </div>
 
                 {{-- Расчет итога --}}
@@ -409,26 +430,112 @@
             @endif
 
             {{-- История платежей --}}
-            <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                <h3
-                    class="font-bold text-gray-900 mb-4 pb-2 border-b border-gray-100 text-sm uppercase tracking-wider text-gray-500">
-                    История платежей
-                </h3>
+            @php
+                $paymentHistoryShouldOpen = $errors->has('cancel_reason') && old('cancel_payment_id');
+                $latestPayment = $paymentBreakdown['latest_payment'];
+            @endphp
+            <div x-data="{
+                    paymentHistoryOpen: @js((bool) $paymentHistoryShouldOpen),
+                    openPaymentHistory() {
+                        this.paymentHistoryOpen = true;
+                        document.body.style.overflow = 'hidden';
+                        this.$nextTick(() => this.$refs.paymentHistoryClose.focus());
+                    },
+                    closePaymentHistory() {
+                        this.paymentHistoryOpen = false;
+                        document.body.style.overflow = '';
+                        this.$nextTick(() => this.$refs.paymentHistoryTrigger?.focus());
+                    }
+                }"
+                x-init="if (paymentHistoryOpen) { document.body.style.overflow = 'hidden'; $nextTick(() => $refs.paymentHistoryClose.focus()); }"
+                x-on:keydown.escape.window="if (paymentHistoryOpen) closePaymentHistory()"
+                class="print:hidden">
 
-                <div class="space-y-4">
-                    @forelse ($invoice->payments as $payment)
+                {{-- Компактная карточка в основном потоке страницы --}}
+                <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                    <div class="flex items-center justify-between gap-3">
+                        <h3 class="font-bold text-sm uppercase tracking-wider text-gray-500">История платежей</h3>
+                        <span class="inline-flex min-w-6 items-center justify-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                            {{ $paymentBreakdown['payments_count'] }}
+                        </span>
+                    </div>
+
+                    @if ($latestPayment)
+                        <div class="mt-4 text-sm">
+                            <div class="text-xs text-gray-400">Последний платёж:</div>
+                            <div class="mt-1 font-semibold text-gray-900">
+                                <span class="whitespace-nowrap tabular-nums">{{ $formatBreakdownMoney($latestPayment['amount']) }}</span>
+                                <span class="font-normal text-gray-400">·</span>
+                                <span>{{ $latestPayment['status_label'] }}</span>
+                            </div>
+                            @if ($latestPayment['payment_date'])
+                                <div class="mt-0.5 text-xs text-gray-500">
+                                    {{ \Illuminate\Support\Carbon::parse($latestPayment['payment_date'])->format('d/m/Y') }}
+                                </div>
+                            @endif
+                        </div>
+
+                        @if ($paymentBreakdown['pending_payments_count'] > 0)
+                            <div class="mt-3 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
+                                Ожидают подтверждения: {{ $paymentBreakdown['pending_payments_count'] }}
+                            </div>
+                        @endif
+
+                        <button type="button" x-ref="paymentHistoryTrigger" @click="openPaymentHistory()"
+                            aria-haspopup="dialog" aria-controls="payment-history-drawer"
+                            class="mt-4 inline-flex w-full items-center justify-between border-t border-gray-100 pt-3 text-sm font-medium text-blue-600 transition hover:text-blue-800">
+                            <span>Открыть историю</span>
+                            <span aria-hidden="true">→</span>
+                        </button>
+                    @else
+                        <p class="mt-3 text-sm text-gray-400">Платежей пока нет.</p>
+                    @endif
+                </div>
+
+                @if ($paymentBreakdown['payments_count'] > 0)
+                    {{-- Drawer с полной историей --}}
+                    <div x-show="paymentHistoryOpen" x-cloak id="payment-history-drawer"
+                        class="fixed inset-0 z-50"
+                        role="dialog" aria-modal="true" aria-labelledby="payment-history-title">
+                        <div x-show="paymentHistoryOpen" x-transition.opacity
+                            class="absolute inset-0 bg-gray-900/40" @click="closePaymentHistory()"></div>
+
+                        <aside x-show="paymentHistoryOpen"
+                            x-transition:enter="transition ease-out duration-200"
+                            x-transition:enter-start="translate-x-full"
+                            x-transition:enter-end="translate-x-0"
+                            x-transition:leave="transition ease-in duration-150"
+                            x-transition:leave-start="translate-x-0"
+                            x-transition:leave-end="translate-x-full"
+                            @click.stop
+                            class="absolute inset-y-0 right-0 flex w-full max-w-[480px] flex-col bg-white shadow-2xl">
+                            <header class="sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-gray-200 bg-white px-5 py-4">
+                                <div>
+                                    <h3 id="payment-history-title" class="font-bold text-gray-900">История платежей</h3>
+                                    <p class="mt-0.5 text-xs text-gray-500">Счёт {{ $invoice->invoice_number }}</p>
+                                    <p class="mt-1 text-xs text-gray-400">Всего платежей: {{ $paymentBreakdown['payments_count'] }}</p>
+                                </div>
+                                <button type="button" x-ref="paymentHistoryClose" @click="closePaymentHistory()"
+                                    aria-label="Закрыть историю платежей"
+                                    class="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700">
+                                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </header>
+
+                            <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+                <div id="payment-history-list" class="space-y-3">
+                    @forelse ($paymentBreakdown['paymentRows'] as $paymentRow)
                         @php
+                            $payment = $paymentsById->get($paymentRow['id']);
+
                             /*
                              * Платёж, автоматически созданный из Credit Balance,
                              * нельзя отменять как обычный банковский/наличный платёж.
                              * Сервер дополнительно проверяет это в PaymentController.
                              */
-                            $isCreditBalancePayment = $payment->creditBalanceEntries
-                                ->contains('type', 'applied')
-                                || str_starts_with(
-                                    (string) $payment->comment,
-                                    'Автоматически применён Credit Balance',
-                                );
+                            $isCreditBalancePayment = $paymentRow['is_credit_balance'];
 
                             /*
                              * После ошибки валидации повторно открываем форму
@@ -439,15 +546,15 @@
                                 (string) old('cancel_payment_id') === (string) $payment->id;
                         @endphp
 
-                        <div x-data="{ cancelOpen: @js($shouldOpenCancellation) }"
-                            class="border-b border-gray-100 last:border-0 pb-4 last:pb-0 text-sm">
+                        <div x-data="{ cancelOpen: @js($shouldOpenCancellation), allocationOpen: false, cancelSubmitting: false }"
+                            class="rounded-lg border border-gray-200 p-4 text-sm">
 
                             <div class="flex items-center justify-between gap-3">
                                 <span
                                     class="font-semibold font-mono
                                         {{ $payment->status === 'cancelled' ? 'text-gray-400 line-through' : 'text-gray-900' }}">
 
-                                    {{ $formatMoney($payment->amount) }}
+                                    {{ $formatBreakdownMoney($paymentRow['amount']) }}
                                 </span>
 
                                 @include('partials.badge', [
@@ -461,13 +568,7 @@
                                 </span>
 
                                 <span class="font-medium">
-                                    @if ($payment->payment_method === 'transfer')
-                                        Безналичный
-                                    @elseif ($payment->payment_method === 'card')
-                                        Карта
-                                    @else
-                                        Наличные
-                                    @endif
+                                    {{ $paymentRow['payment_method_label'] }}
                                 </span>
                             </div>
 
@@ -476,8 +577,67 @@
                                     class="mt-2 inline-flex items-center rounded-md bg-blue-50 px-2 py-1
                                            text-[11px] font-medium text-blue-700">
 
-                                    Оплачено из Credit Balance
+                                    Оплата из Credit Balance
                                 </div>
+                            @endif
+
+                            @if ($payment->status === 'confirmed')
+                                <div class="mt-3 space-y-1 text-xs text-gray-600">
+                                    <div>
+                                        Применено:
+                                        <span class="font-semibold text-gray-900 tabular-nums whitespace-nowrap">
+                                            {{ $formatBreakdownMoney($paymentRow['applied_amount']) }}
+                                        </span>
+                                    </div>
+
+                                    @if ($paymentRow['unallocated_amount'] !== '0.00')
+                                        <div>
+                                            Не распределено / Credit Balance:
+                                            <span class="font-semibold text-blue-700 tabular-nums whitespace-nowrap">
+                                                {{ $formatBreakdownMoney($paymentRow['unallocated_amount']) }}
+                                            </span>
+                                        </div>
+                                    @endif
+                                </div>
+
+                                @if ($paymentRow['allocations'] !== [])
+                                    <div class="mt-3">
+                                        <button type="button" @click="allocationOpen = !allocationOpen"
+                                            class="text-xs font-medium text-blue-600 hover:text-blue-800 transition"
+                                            :aria-expanded="allocationOpen.toString()">
+                                            <span x-text="allocationOpen ? 'Скрыть распределение' : 'Показать распределение'">Показать распределение</span>
+                                        </button>
+
+                                        <div x-show="allocationOpen" x-cloak
+                                            class="mt-2 rounded-lg border border-gray-100 bg-gray-50 p-3">
+                                            <div class="mb-2 text-xs font-semibold text-gray-700">Текущее распределение</div>
+
+                                            <div class="divide-y divide-gray-200">
+                                                @foreach ($paymentRow['allocations'] as $allocation)
+                                                    <div class="flex items-start justify-between gap-4 py-2 first:pt-0 last:pb-0">
+                                                        <div class="min-w-0">
+                                                            <div class="text-xs font-medium text-gray-800 break-words">
+                                                                {{ $allocation['line_description'] }}
+                                                            </div>
+                                                            <div class="mt-0.5 text-[11px] text-gray-500">
+                                                                {{ $allocation['line_type_label'] }}@if ($allocation['period_label']) · {{ $allocation['period_label'] }}@endif
+                                                            </div>
+                                                        </div>
+                                                        <span class="shrink-0 whitespace-nowrap text-xs font-semibold text-gray-900 tabular-nums">
+                                                            {{ $formatBreakdownMoney($allocation['allocated_amount']) }}
+                                                        </span>
+                                                    </div>
+                                                @endforeach
+                                            </div>
+
+                                            <p class="mt-3 text-[11px] text-gray-500">
+                                                Отображается актуальное распределение после подтверждений и отмен платежей.
+                                            </p>
+                                        </div>
+                                    </div>
+                                @endif
+                            @elseif ($payment->status === 'pending')
+                                <p class="mt-3 text-xs text-gray-500">Будет распределён после подтверждения.</p>
                             @endif
 
                             @if ($payment->comment)
@@ -488,21 +648,15 @@
 
                             {{-- Данные отменённого платежа --}}
                             @if ($payment->status === 'cancelled')
-                                <div class="mt-3 rounded-lg border border-red-100 bg-red-50 p-3">
-                                    <div class="flex items-center justify-between gap-3">
-                                        <span class="text-xs font-semibold text-red-700">
-                                            Платёж отменён
-                                        </span>
-
-                                        @if ($payment->cancelled_at)
-                                            <span class="text-[11px] text-red-500">
-                                                {{ \Illuminate\Support\Carbon::parse($payment->cancelled_at)->format('d/m/Y H:i') }}
-                                            </span>
-                                        @endif
-                                    </div>
+                                <div class="mt-2 space-y-1 border-t border-red-100 pt-2 text-xs text-red-600">
+                                    @if ($payment->cancelled_at)
+                                        <p>
+                                            Отменён: {{ \Illuminate\Support\Carbon::parse($payment->cancelled_at)->format('d/m/Y H:i') }}
+                                        </p>
+                                    @endif
 
                                     @if ($payment->cancel_reason)
-                                        <p class="mt-1.5 text-xs text-red-700 whitespace-pre-line">
+                                        <p class="whitespace-pre-line">
                                             Причина: {{ $payment->cancel_reason }}
                                         </p>
                                     @endif
@@ -540,7 +694,8 @@
                             {{-- Отмена обычного ожидающего или подтверждённого платежа --}}
                             @if (in_array($payment->status, ['pending', 'confirmed'], true) && !$isCreditBalancePayment)
                                 <div class="mt-3">
-                                    <button type="button" x-show="!cancelOpen" @click="cancelOpen = true"
+                                    <button type="button" x-show="!cancelOpen"
+                                        @click="cancelOpen = true; $nextTick(() => $refs.cancelReason.focus())"
                                         class="text-xs font-medium text-red-600 hover:text-red-800 transition">
 
                                         Отменить платёж
@@ -549,7 +704,19 @@
                                     <form x-show="cancelOpen" x-cloak action="{{ route('payments.cancel', $payment) }}"
                                         method="POST"
                                         class="mt-3 space-y-3 rounded-lg border border-red-100 bg-red-50 p-3"
-                                        onsubmit="return confirm('Отменить этот платёж? Он останется в истории, а суммы инвойса и Credit Balance будут пересчитаны.')">
+                                        x-on:submit="
+                                            const reason = $event.currentTarget.elements.cancel_reason.value.trim();
+                                            if (cancelSubmitting || reason === '' || !$event.currentTarget.checkValidity()) {
+                                                $event.preventDefault();
+                                                $event.currentTarget.reportValidity();
+                                                return;
+                                            }
+                                            if (!confirm('Отменить этот платёж? Он останется в истории, а суммы инвойса и Credit Balance будут пересчитаны.')) {
+                                                $event.preventDefault();
+                                                return;
+                                            }
+                                            cancelSubmitting = true;
+                                        ">
 
                                         @csrf
                                         @method('PATCH')
@@ -566,6 +733,13 @@
 
                                             <textarea id="cancel_reason_{{ $payment->id }}" name="cancel_reason" rows="3" required minlength="3"
                                                 maxlength="1000"
+                                                x-ref="cancelReason"
+                                                x-on:keydown.enter="
+                                                    if (!$event.shiftKey) {
+                                                        $event.preventDefault();
+                                                        $event.currentTarget.form.requestSubmit();
+                                                    }
+                                                "
                                                 class="w-full resize-none rounded-lg border
                                                     {{ $shouldOpenCancellation ? 'border-red-300' : 'border-red-200' }}
                                                     bg-white px-3 py-2 text-sm text-gray-700
@@ -590,7 +764,7 @@
                                                 Не отменять
                                             </button>
 
-                                            <button type="submit"
+                                            <button type="submit" :disabled="cancelSubmitting"
                                                 class="rounded-lg bg-red-600 px-3 py-2 text-xs
                                                        font-medium text-white hover:bg-red-700 transition">
 
@@ -607,6 +781,10 @@
                         </p>
                     @endforelse
                 </div>
+                            </div>
+                        </aside>
+                    </div>
+                @endif
             </div>
 
         </div>
