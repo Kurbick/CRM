@@ -18,7 +18,7 @@ class UpdateContractRequest extends FormRequest
                                    . $this->route('contract')->id,
             'start_date'       => 'sometimes|date',
             'end_date'         => 'nullable|date|after:start_date',
-            'status'           => 'nullable|in:active,expired,terminated',
+            'status'           => 'nullable|in:active,terminated',
             'signed_document'  => 'nullable|string|max:255',
             'comment'          => 'nullable|string',
         ];

@@ -63,18 +63,6 @@ class ContractController extends Controller
 
                     break;
 
-                case 'expired':
-                    $query
-                        ->where('status', 'active')
-                        ->whereNotNull('end_date')
-                        ->whereDate(
-                            'end_date',
-                            '<',
-                            today()
-                        );
-
-                    break;
-
                 case 'terminated':
                     $query->where(
                         'status',
@@ -163,9 +151,6 @@ class ContractController extends Controller
      */
         $query->orderByDesc('id');
 
-        /*
-     * Эти строки были случайно удалены.
-     */
         $contracts = $query
             ->paginate(15)
             ->withQueryString();
@@ -177,11 +162,17 @@ class ContractController extends Controller
                 'name',
             ]);
 
+        $contractEditContext = [
+            'edit_origin' => 'index',
+            ...$this->contractIndexReturnParameters($request),
+        ];
+
         return view(
             'contracts.index',
             compact(
                 'contracts',
-                'companies'
+                'companies',
+                'contractEditContext'
             )
         );
     }
@@ -241,12 +232,11 @@ class ContractController extends Controller
     public function edit(Request $request, Contract $contract)
     {
         $company = $contract->company;
-
-        $companyContext = CompanyPageContext::resolve($request, $company, 'contracts');
+        $returnContext = $this->contractEditReturnContext($request, $contract);
 
         return view(
             'contracts.edit',
-            compact('contract', 'company', 'companyContext')
+            compact('contract', 'company', 'returnContext')
         );
     }
 
@@ -261,11 +251,66 @@ class ContractController extends Controller
         ]);
 
         $contract->update($validated);
-        $companyContext = CompanyPageContext::resolve($request, $contract->company, 'contracts');
+        $returnContext = $this->contractEditReturnContext($request, $contract);
 
         return redirect()
-            ->route('contracts.show', ['contract' => $contract, ...$companyContext['query']])
+            ->route($returnContext['route'], $returnContext['route_parameters'])
             ->with('success', 'Договор обновлён.');
+    }
+
+    private function contractEditReturnContext(Request $request, Contract $contract): array
+    {
+        if ($request->input('edit_origin') === 'index') {
+            $parameters = $this->contractIndexReturnParameters($request);
+
+            return [
+                'url' => route('contracts.index', $parameters),
+                'route' => 'contracts.index',
+                'route_parameters' => $parameters,
+                'hidden' => ['edit_origin' => 'index', ...$parameters],
+            ];
+        }
+
+        $companyContext = CompanyPageContext::resolve($request, $contract->company, 'contracts');
+        $parameters = ['contract' => $contract, ...$companyContext['query']];
+
+        return [
+            'url' => route('contracts.show', $parameters),
+            'route' => 'contracts.show',
+            'route_parameters' => $parameters,
+            'hidden' => ['edit_origin' => 'show', ...$companyContext['query']],
+        ];
+    }
+
+    private function contractIndexReturnParameters(Request $request): array
+    {
+        $parameters = [];
+        $search = mb_substr(trim((string) $request->input('search', '')), 0, 255);
+
+        if ($search !== '') {
+            $parameters['search'] = $search;
+        }
+        if (in_array($request->input('status'), ['active', 'terminated'], true)) {
+            $parameters['status'] = $request->input('status');
+        }
+
+        $companyId = filter_var($request->input('company_id'), FILTER_VALIDATE_INT);
+        if ($companyId !== false && $companyId > 0) {
+            $parameters['company_id'] = $companyId;
+        }
+        if (in_array($request->input('sort_by'), ['start_date', 'end_date'], true)) {
+            $parameters['sort_by'] = $request->input('sort_by');
+        }
+        if (in_array($request->input('sort_direction'), ['asc', 'desc'], true)) {
+            $parameters['sort_direction'] = $request->input('sort_direction');
+        }
+
+        $page = filter_var($request->input('page'), FILTER_VALIDATE_INT);
+        if ($page !== false && $page > 0) {
+            $parameters['page'] = $page;
+        }
+
+        return $parameters;
     }
 
     public function destroy(Contract $contract)

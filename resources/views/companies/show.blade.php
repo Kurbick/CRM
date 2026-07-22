@@ -32,7 +32,7 @@
             </div>
 
             <div class="flex items-center gap-2">
-                <a href="{{ route('companies.edit', ['company' => $company, 'return_url' => $returnContext['is_contextual'] ? $returnContext['url'] : null]) }}"
+                <a href="{{ route('companies.edit', ['company' => $company, 'origin' => 'show']) }}"
                     class="inline-flex items-center text-sm border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg font-medium transition shadow-sm">
                     <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"

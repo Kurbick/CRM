@@ -248,10 +248,6 @@
                         label: 'Активный',
                     },
                     {
-                        value: 'expired',
-                        label: 'Истёк',
-                    },
-                    {
                         value: 'terminated',
                         label: 'Расторгнут',
                     },
@@ -513,7 +509,7 @@
                                         Открыть →
                                     </a>
 
-                                    <a href="{{ route('contracts.edit', $contract) }}"
+                                    <a href="{{ route('contracts.edit', ['contract' => $contract, ...$contractEditContext]) }}"
                                         class="text-gray-400 hover:text-gray-600 transition" title="Редактировать">
 
                                         <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

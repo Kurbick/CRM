@@ -12,6 +12,7 @@ use App\Support\CompanyPageContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 class CompanyController extends Controller
 {
@@ -35,22 +36,44 @@ class CompanyController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Company::query();
+        $allowedStatuses = ['active', 'suspended', 'archived'];
+        $allowedSorts = ['name', 'debt'];
+        $allowedDirections = ['asc', 'desc'];
+        $status = in_array($request->input('status'), $allowedStatuses, true)
+            ? $request->input('status')
+            : '';
+        $sort = in_array($request->input('sort'), $allowedSorts, true)
+            ? $request->input('sort')
+            : 'name';
+        $direction = in_array($request->input('direction'), $allowedDirections, true)
+            ? $request->input('direction')
+            : 'asc';
+        $search = trim((string) $request->input('search', ''));
+
+        $query = Company::query()
+            ->select('companies.*')
+            ->addSelect([
+                'calculated_debt' => $this->companyDebtSubquery(),
+            ]);
         
-        if ($request->filled('search')) {
-            $search = $request->input('search');
-            $query->where(function($q) use ($search) {
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('short_name', 'like', "%{$search}%")
-                  ->orWhere('voen', 'like', "%{$search}%");
+                    ->orWhere('short_name', 'like', "%{$search}%")
+                    ->orWhere('voen', 'like', "%{$search}%");
             });
         }
         
-        if ($request->filled('status')) {
-            $query->where('status', $request->input('status'));
+        if ($status !== '') {
+            $query->where('status', $status);
         }
-        
-        $companies = $query->orderBy('name')->paginate(10)->withQueryString();
+
+        $query->orderBy(
+            $sort === 'debt' ? 'calculated_debt' : 'name',
+            $direction
+        )->orderBy('id', $direction);
+
+        $companies = $query->paginate(10)->withQueryString();
         
         $summaries = $this->financialSummaries($companies->getCollection());
 
@@ -62,7 +85,43 @@ class CompanyController extends Controller
             return $company;
         });
         
-        return view('companies.index', compact('companies'));
+        return view('companies.index', compact(
+            'companies',
+            'search',
+            'status',
+            'sort',
+            'direction'
+        ));
+    }
+
+    public function autocomplete(Request $request)
+    {
+        $search = trim((string) $request->query('q', ''));
+
+        if (Str::length($search) < 2) {
+            return response()->json([]);
+        }
+
+        $companies = Company::query()
+            ->where(function ($query) use ($search) {
+                $query->where('name', 'like', "%{$search}%")
+                    ->orWhere('short_name', 'like', "%{$search}%")
+                    ->orWhere('voen', 'like', "%{$search}%");
+            })
+            ->orderBy('name')
+            ->orderBy('id')
+            ->limit(10)
+            ->get(['id', 'name', 'type', 'voen'])
+            ->map(fn(Company $company): array => [
+                'id' => $company->id,
+                'name' => $company->name,
+                'type_label' => $company->type === 'company'
+                    ? 'Юридическое лицо'
+                    : 'Индивидуальный предприниматель',
+                'voen' => $company->voen,
+            ]);
+
+        return response()->json($companies);
     }
 
     /**
@@ -280,12 +339,30 @@ class CompanyController extends Controller
         });
     }
 
+    private function companyDebtSubquery()
+    {
+        $confirmedPayments = "(
+            SELECT COALESCE(SUM(company_debt_payments.amount), 0)
+            FROM payments AS company_debt_payments
+            WHERE company_debt_payments.invoice_id = invoices.id
+              AND company_debt_payments.status = 'confirmed'
+        )";
+
+        return Invoice::query()
+            ->selectRaw("COALESCE(SUM(CASE
+                WHEN {$confirmedPayments} >= invoices.total_amount THEN 0
+                ELSE invoices.total_amount - {$confirmedPayments}
+            END), 0)")
+            ->whereColumn('invoices.company_id', 'companies.id')
+            ->whereIn('invoices.status', ['issued', 'partially_paid', 'paid']);
+    }
+
     /**
      * Show the form for editing the specified resource.
      */
     public function edit(Request $request, Company $company)
     {
-        $returnContext = $this->companyReturnContext($request);
+        $returnContext = $this->companyEditReturnContext($request, $company);
 
         return view('companies.edit', compact('company', 'returnContext'));
     }
@@ -317,13 +394,55 @@ class CompanyController extends Controller
 
         $company->update($validated);
 
-        $returnContext = $this->companyReturnContext($request);
+        $returnContext = $this->companyEditReturnContext($request, $company);
 
-        return redirect()->route('companies.show', [
-            'company' => $company,
-            'return_url' => $returnContext['is_contextual'] ? $returnContext['url'] : null,
-        ])
+        return redirect()->route(
+            $returnContext['route'],
+            $returnContext['route_parameters']
+        )
             ->with('success', 'Данные компании успешно обновлены.');
+    }
+
+    private function companyEditReturnContext(Request $request, Company $company): array
+    {
+        if ($request->input('origin') !== 'index') {
+            return [
+                'origin' => 'show',
+                'url' => route('companies.show', $company),
+                'label' => 'Назад к просмотру',
+                'route' => 'companies.show',
+                'route_parameters' => ['company' => $company],
+                'hidden' => ['origin' => 'show'],
+            ];
+        }
+
+        $parameters = [];
+        $search = trim((string) $request->input('search', ''));
+        if ($search !== '') {
+            $parameters['search'] = $search;
+        }
+        if (in_array($request->input('status'), ['active', 'suspended', 'archived'], true)) {
+            $parameters['status'] = $request->input('status');
+        }
+        if (in_array($request->input('sort'), ['name', 'debt'], true)) {
+            $parameters['sort'] = $request->input('sort');
+        }
+        if (in_array($request->input('direction'), ['asc', 'desc'], true)) {
+            $parameters['direction'] = $request->input('direction');
+        }
+        $page = filter_var($request->input('page'), FILTER_VALIDATE_INT);
+        if ($page !== false && $page > 0) {
+            $parameters['page'] = $page;
+        }
+
+        return [
+            'origin' => 'index',
+            'url' => route('companies.index', $parameters),
+            'label' => 'Назад к компаниям',
+            'route' => 'companies.index',
+            'route_parameters' => $parameters,
+            'hidden' => ['origin' => 'index', ...$parameters],
+        ];
     }
 
     /**

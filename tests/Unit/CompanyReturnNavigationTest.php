@@ -32,15 +32,19 @@ class CompanyReturnNavigationTest extends TestCase
         $this->assertStringContainsString("parse_url(route('companies.index'), PHP_URL_PATH)", $source);
     }
 
-    public function test_edit_flow_preserves_validated_return_context(): void
+    public function test_edit_flow_uses_explicit_safe_origin_context(): void
     {
         $show = file_get_contents(resource_path('views/companies/show.blade.php'));
         $edit = file_get_contents(resource_path('views/companies/edit.blade.php'));
+        $controller = file_get_contents(app_path('Http/Controllers/Web/CompanyController.php'));
 
         $this->assertStringContainsString("\$returnContext['label']", $show);
-        $this->assertStringContainsString("'return_url' => \$returnContext['is_contextual']", $show);
-        $this->assertStringContainsString('name="return_url"', $edit);
+        $this->assertStringContainsString("'origin' => 'show'", $show);
+        $this->assertStringContainsString("\$returnContext['hidden']", $edit);
         $this->assertStringContainsString("\$returnContext['url']", $edit);
+        $this->assertStringContainsString("\$request->input('origin') !== 'index'", $controller);
+        $this->assertStringContainsString("route('companies.index', \$parameters)", $controller);
+        $this->assertStringNotContainsString('return_url', $edit);
     }
 
     public function test_safe_return_context_preserves_internal_query_and_rejects_external_host(): void

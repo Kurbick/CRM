@@ -72,7 +72,7 @@
                     'status' => $contract->effective_status,
                 ])
 
-                <a href="{{ route('contracts.edit', ['contract' => $contract, ...$companyContext['query']]) }}"
+                <a href="{{ route('contracts.edit', ['contract' => $contract, 'edit_origin' => 'show', ...$companyContext['query']]) }}"
                     class="text-sm border border-gray-200 hover:bg-gray-50 text-gray-600
                           px-4 py-2 rounded-lg transition">
                     Редактировать

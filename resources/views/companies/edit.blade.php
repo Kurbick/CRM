@@ -5,11 +5,11 @@
 @section('content')
 
     <div class="mb-6">
-        <a href="{{ route('companies.show', ['company' => $company, 'return_url' => $returnContext['is_contextual'] ? $returnContext['url'] : null]) }}" class="text-sm text-gray-500 hover:text-gray-900 transition flex items-center gap-1.5 mb-2">
+        <a href="{{ $returnContext['url'] }}" class="text-sm text-gray-500 hover:text-gray-900 transition flex items-center gap-1.5 mb-2">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
             </svg>
-            Назад к просмотру
+            {{ $returnContext['label'] }}
         </a>
         <h1 class="text-2xl font-bold text-gray-900">Редактировать компанию</h1>
         <p class="text-sm text-gray-500 mt-1">Изменение реквизитов и настроек контрагента</p>
@@ -18,9 +18,9 @@
     <form action="{{ route('companies.update', $company) }}" method="POST" class="space-y-6">
         @csrf
         @method('PUT')
-        @if ($returnContext['is_contextual'])
-            <input type="hidden" name="return_url" value="{{ $returnContext['url'] }}">
-        @endif
+        @foreach ($returnContext['hidden'] as $contextName => $contextValue)
+            <input type="hidden" name="{{ $contextName }}" value="{{ $contextValue }}">
+        @endforeach
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
@@ -250,7 +250,7 @@
                             class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm transition shadow-sm">
                         Сохранить изменения
                     </button>
-                    <a href="{{ route('companies.show', ['company' => $company, 'return_url' => $returnContext['is_contextual'] ? $returnContext['url'] : null]) }}"
+                    <a href="{{ $returnContext['url'] }}"
                        class="w-full py-2.5 border border-gray-200 hover:bg-gray-50 text-gray-700 font-medium rounded-lg text-sm transition text-center">
                         Отмена
                     </a>

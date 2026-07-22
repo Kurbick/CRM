@@ -30,6 +30,11 @@ Route::get(
 |--------------------------------------------------------------------------
 */
 
+Route::get(
+    'companies/autocomplete',
+    [CompanyController::class, 'autocomplete']
+)->name('companies.autocomplete');
+
 Route::resource(
     'companies',
     CompanyController::class
