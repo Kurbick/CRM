@@ -5,13 +5,15 @@ namespace App\Http\Controllers\Web;
 use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\CompanyContact;
+use App\Support\CompanyPageContext;
 use Illuminate\Http\Request;
 
 class CompanyContactController extends Controller
 {
-    public function create(Company $company)
+    public function create(Request $request, Company $company)
     {
-        return view('contacts.create', compact('company'));
+        $companyContext = CompanyPageContext::resolve($request, $company, 'contacts');
+        return view('contacts.create', compact('company', 'companyContext'));
     }
 
     public function store(Request $request, Company $company)
@@ -27,15 +29,17 @@ class CompanyContactController extends Controller
         ]);
 
         $company->contacts()->create($request->all());
+        $companyContext = CompanyPageContext::resolve($request, $company, 'contacts');
 
-        return redirect()->route('companies.show', $company)
+        return redirect()->to($companyContext['active'] ? $companyContext['company_url'] : route('companies.show', $company))
             ->with('success', 'Контакт успешно добавлен.');
     }
 
-    public function edit(CompanyContact $contact)
+    public function edit(Request $request, CompanyContact $contact)
     {
         $company = $contact->company;
-        return view('contacts.edit', compact('contact', 'company'));
+        $companyContext = CompanyPageContext::resolve($request, $company, 'contacts');
+        return view('contacts.edit', compact('contact', 'company', 'companyContext'));
     }
 
     public function update(Request $request, CompanyContact $contact)
@@ -51,8 +55,9 @@ class CompanyContactController extends Controller
         ]);
 
         $contact->update($request->all());
+        $companyContext = CompanyPageContext::resolve($request, $contact->company, 'contacts');
 
-        return redirect()->route('companies.show', $contact->company)
+        return redirect()->to($companyContext['active'] ? $companyContext['company_url'] : route('companies.show', $contact->company))
             ->with('success', 'Контакт обновлён.');
     }
 

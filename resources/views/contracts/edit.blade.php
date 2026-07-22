@@ -3,7 +3,7 @@
 @section('content')
 
     <div class="mb-6">
-        <a href="{{ route('contracts.show', $contract) }}" class="text-sm text-gray-500 hover:text-gray-700">
+        <a href="{{ route('contracts.show', ['contract' => $contract, ...$companyContext['query']]) }}" class="text-sm text-gray-500 hover:text-gray-700">
             ← Назад к договору
         </a>
         <h1 class="text-2xl font-bold text-gray-900 mt-2">Редактировать договор</h1>
@@ -14,6 +14,9 @@
         <form action="{{ route('contracts.update', $contract) }}" method="POST" class="space-y-4">
             @csrf
             @method('PUT')
+            @if ($companyContext['active'])
+                <input type="hidden" name="origin" value="company"><input type="hidden" name="tab" value="contracts">
+            @endif
 
             <div>
                 <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Номер договора <span
@@ -63,7 +66,7 @@
                     class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-6 py-2.5 rounded-lg transition">
                     Сохранить
                 </button>
-                <a href="{{ route('companies.show', $company) }}"
+                <a href="{{ route('contracts.show', ['contract' => $contract, ...$companyContext['query']]) }}"
                     class="px-6 py-2.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition">
                     Отмена
                 </a>

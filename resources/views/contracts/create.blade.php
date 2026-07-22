@@ -5,7 +5,7 @@
 @section('content')
 
     <div class="mb-6">
-        <a href="{{ $company ? route('companies.show', $company) : route('contracts.index') }}"
+        <a href="{{ ($companyContext['active'] ?? false) ? $companyContext['company_url'] : ($company ? route('companies.show', $company) : route('contracts.index')) }}"
             class="text-sm text-gray-500 hover:text-gray-700">
             ← {{ $company ? 'Назад к компании' : 'Назад к договорам' }}
         </a>
@@ -23,12 +23,19 @@
         <form action="{{ route('contracts.store') }}" method="POST" class="space-y-4">
 
             @csrf
+            @if ($companyContext['active'] ?? false)
+                <input type="hidden" name="origin" value="company"><input type="hidden" name="tab" value="contracts">
+            @endif
 
             <div>
                 <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">
                     Компания <span class="text-red-500">*</span>
                 </label>
 
+                @if ($company)
+                    <input type="hidden" name="company_id" value="{{ $company->id }}">
+                    <p class="text-sm font-medium text-gray-900">{{ $company->name }}</p>
+                @else
                 <select name="company_id"
                     class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition"
                     required>
@@ -40,6 +47,7 @@
                         </option>
                     @endforeach
                 </select>
+                @endif
 
                 @error('company_id')
                     <p class="text-xs text-red-500 mt-1">
@@ -127,7 +135,7 @@
                     Сохранить договор
                 </button>
 
-                <a href="{{ $company ? route('companies.show', $company) : route('contracts.index') }}"
+                <a href="{{ ($companyContext['active'] ?? false) ? $companyContext['company_url'] : ($company ? route('companies.show', $company) : route('contracts.index')) }}"
                     class="px-6 py-2.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition">
                     Отмена
                 </a>

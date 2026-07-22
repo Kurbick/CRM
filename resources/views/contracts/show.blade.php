@@ -57,9 +57,9 @@
 
     {{-- Заголовок страницы --}}
     <div class="mb-6">
-        <a href="{{ route('contracts.index') }}"
+        <a href="{{ $companyContext['active'] ? $companyContext['company_url'] : route('contracts.index') }}"
             class="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 transition">
-            ← Назад к договорам
+            ← {{ $companyContext['active'] ? $companyContext['label'] : 'Назад к договорам' }}
         </a>
 
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mt-3">
@@ -72,7 +72,7 @@
                     'status' => $contract->effective_status,
                 ])
 
-                <a href="{{ route('contracts.edit', $contract) }}"
+                <a href="{{ route('contracts.edit', ['contract' => $contract, ...$companyContext['query']]) }}"
                     class="text-sm border border-gray-200 hover:bg-gray-50 text-gray-600
                           px-4 py-2 rounded-lg transition">
                     Редактировать

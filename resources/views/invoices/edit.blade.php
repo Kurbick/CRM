@@ -28,7 +28,7 @@
         ->values();
 @endphp
 <div class="mb-6">
-    <a href="{{ route('invoices.show', $invoice) }}" class="text-sm text-gray-500 hover:text-gray-700">← Назад к просмотру</a>
+    <a href="{{ route('invoices.show', ['invoice' => $invoice, ...$companyContext['query']]) }}" class="text-sm text-gray-500 hover:text-gray-700">← Назад к просмотру</a>
     <h1 class="mt-2 text-2xl font-bold text-gray-900">Редактировать счёт</h1>
 </div>
 
@@ -53,6 +53,9 @@
     inputDate(date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` },
     formatDate(value) { if (!value) return '—'; const [y,m,d] = value.slice(0,10).split('-'); return `${d}/${m}/${y}` }
 }" x-init="init()">
+    @if ($companyContext['active'])
+        <input type="hidden" name="origin" value="company"><input type="hidden" name="tab" value="{{ $companyContext['tab'] }}">
+    @endif
     @csrf
     @method('PUT')
 

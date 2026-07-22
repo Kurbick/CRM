@@ -25,12 +25,12 @@
     {{-- Верхний заголовок и действия --}}
     <div class="mb-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4 print:hidden">
         <div>
-            <a href="{{ route('invoices.index') }}"
+            <a href="{{ $companyContext['active'] ? $companyContext['company_url'] : route('invoices.index') }}"
                 class="text-sm text-gray-500 hover:text-gray-900 transition flex items-center gap-1.5 mb-2">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
-                Назад к списку
+                {{ $companyContext['active'] ? $companyContext['label'] : 'Назад к списку' }}
             </a>
             <div class="flex items-center gap-3">
                 <h1 class="text-2xl font-bold text-gray-900">Счёт {{ $invoice->invoice_number }}</h1>
@@ -75,7 +75,7 @@
 
             <div class="flex items-center gap-2">
                 @if ($invoice->status === 'draft')
-                    <a href="{{ route('invoices.edit', $invoice) }}"
+                    <a href="{{ route('invoices.edit', $invoice) }}{{ $companyContext['active'] ? '?'.http_build_query($companyContext['query']) : '' }}"
                         class="px-4 py-2 border border-gray-200 text-gray-600
                    text-sm font-medium rounded-lg hover:bg-gray-50 transition">
 

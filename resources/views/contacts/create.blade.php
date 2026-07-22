@@ -3,7 +3,7 @@
 @section('content')
 
 <div class="mb-6">
-    <a href="{{ route('companies.show', $company) }}" class="text-sm text-gray-500 hover:text-gray-700">← Назад к компании</a>
+    <a href="{{ $companyContext['active'] ? $companyContext['company_url'] : route('companies.show', $company) }}" class="text-sm text-gray-500 hover:text-gray-700">← Назад к компании</a>
     <h1 class="text-2xl font-bold text-gray-900 mt-2">Добавить контакт</h1>
     <p class="text-sm text-gray-500">{{ $company->name }}</p>
 </div>
@@ -11,6 +11,9 @@
 <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 max-w-2xl">
     <form action="{{ route('companies.contacts.store', $company) }}" method="POST" class="space-y-4">
         @csrf
+        @if ($companyContext['active'])
+            <input type="hidden" name="origin" value="company"><input type="hidden" name="tab" value="contacts">
+        @endif
 
         {{-- Имя и Фамилия --}}
         <div class="grid grid-cols-2 gap-4">
@@ -76,7 +79,7 @@
                     class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-6 py-2.5 rounded-lg transition">
                 Сохранить контакт
             </button>
-            <a href="{{ route('companies.show', $company) }}"
+            <a href="{{ $companyContext['active'] ? $companyContext['company_url'] : route('companies.show', $company) }}"
                class="px-6 py-2.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition">
                 Отмена
             </a>

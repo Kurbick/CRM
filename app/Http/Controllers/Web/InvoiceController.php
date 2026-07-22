@@ -13,6 +13,7 @@ use App\Models\InvoiceLine;
 use App\Models\Order;
 use App\Models\Subscription;
 use App\Services\InvoicePaymentAllocationWriter;
+use App\Support\CompanyPageContext;
 use Illuminate\Validation\ValidationException;
 
 class InvoiceController extends Controller
@@ -508,7 +509,7 @@ class InvoiceController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(Invoice $invoice)
+    public function show(Request $request, Invoice $invoice)
     {
         $invoice->load([
             'company',
@@ -519,17 +520,20 @@ class InvoiceController extends Controller
                 ->orderByDesc('payment_date'),
         ]);
 
-        return view('invoices.show', compact('invoice'));
+        $companyContext = $this->invoiceCompanyContext($request, $invoice);
+
+        return view('invoices.show', compact('invoice', 'companyContext'));
     }
 
     /**
      * Show the form for editing the specified resource.
      */
-    public function edit(Invoice $invoice)
+    public function edit(Request $request, Invoice $invoice)
     {
+        $companyContext = $this->invoiceCompanyContext($request, $invoice);
         if ($invoice->status !== 'draft') {
             return redirect()
-                ->route('invoices.show', $invoice)
+                ->route('invoices.show', ['invoice' => $invoice, ...$companyContext['query']])
                 ->with(
                     'error',
                     'Редактировать можно только черновик инвойса.'
@@ -542,7 +546,7 @@ class InvoiceController extends Controller
             ->exists()
         ) {
             return redirect()
-                ->route('invoices.show', $invoice)
+                ->route('invoices.show', ['invoice' => $invoice, ...$companyContext['query']])
                 ->with(
                     'error',
                     'Нельзя редактировать инвойс с подтверждёнными платежами.'
@@ -556,7 +560,7 @@ class InvoiceController extends Controller
             'contract',
         ]);
 
-        return view('invoices.edit', compact('invoice'));
+        return view('invoices.edit', compact('invoice', 'companyContext'));
     }
 
     /**
@@ -566,9 +570,10 @@ class InvoiceController extends Controller
         Request $request,
         Invoice $invoice
     ) {
+        $companyContext = $this->invoiceCompanyContext($request, $invoice);
         if ($invoice->status !== 'draft') {
             return redirect()
-                ->route('invoices.show', $invoice)
+                ->route('invoices.show', ['invoice' => $invoice, ...$companyContext['query']])
                 ->with(
                     'error',
                     'Изменять можно только черновик инвойса.'
@@ -581,7 +586,7 @@ class InvoiceController extends Controller
             ->exists()
         ) {
             return redirect()
-                ->route('invoices.show', $invoice)
+                ->route('invoices.show', ['invoice' => $invoice, ...$companyContext['query']])
                 ->with(
                     'error',
                     'Нельзя изменять инвойс с подтверждёнными платежами.'
@@ -783,7 +788,7 @@ class InvoiceController extends Controller
         });
 
         return redirect()
-            ->route('invoices.show', $invoice)
+            ->route('invoices.show', ['invoice' => $invoice, ...$companyContext['query']])
             ->with(
                 'success',
                 'Черновик инвойса успешно обновлён.'
@@ -1567,5 +1572,12 @@ class InvoiceController extends Controller
             'orders' => $orders,
             'subscriptions' => $subscriptions,
         ]);
+    }
+
+    private function invoiceCompanyContext(Request $request, Invoice $invoice): array
+    {
+        $tab = $request->input('tab') === 'payments' ? 'payments' : 'invoices';
+
+        return CompanyPageContext::resolve($request, $invoice->company, $tab);
     }
 }

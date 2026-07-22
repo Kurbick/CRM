@@ -5,11 +5,31 @@ namespace App\Http\Controllers\Web;
 use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\Invoice;
+use App\Models\InvoiceLine;
+use App\Services\OneTimeServiceDebtCalculator;
+use App\Services\SubscriptionPeriodDebtCalculator;
+use App\Support\CompanyPageContext;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 
 class CompanyController extends Controller
 {
+    private const RUSSIAN_MONTHS = [
+        1 => 'Январь',
+        2 => 'Февраль',
+        3 => 'Март',
+        4 => 'Апрель',
+        5 => 'Май',
+        6 => 'Июнь',
+        7 => 'Июль',
+        8 => 'Август',
+        9 => 'Сентябрь',
+        10 => 'Октябрь',
+        11 => 'Ноябрь',
+        12 => 'Декабрь',
+    ];
+
     /**
      * Display a listing of the resource.
      */
@@ -87,11 +107,18 @@ class CompanyController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(Request $request, Company $company)
-{
+    public function show(
+        Request $request,
+        Company $company,
+        SubscriptionPeriodDebtCalculator $periodDebtCalculator,
+        OneTimeServiceDebtCalculator $oneTimeDebtCalculator
+    )
+    {
         $company->load([
             'contacts'     => fn($q) => $q->orderBy('first_name'),
-            'contracts'    => fn($q) => $q->orderBy('start_date', 'desc'),
+            'contracts'    => fn($q) => $q
+                ->withCount(['orders', 'subscriptions'])
+                ->orderBy('start_date', 'desc'),
             'invoices'     => fn($q) => $q
                 ->withSum([
                     'payments as confirmed_paid_amount' => fn($paymentQuery) => $paymentQuery
@@ -107,9 +134,105 @@ class CompanyController extends Controller
             $company->invoices
         )->get($company->id);
 
+        $invoiceLines = InvoiceLine::query()
+            ->whereHas(
+                'invoice',
+                fn($query) => $query->where('company_id', $company->id)
+            )
+            ->with([
+                'invoice',
+                'subscription',
+                'order',
+                'allocations.payment',
+            ])
+            ->orderBy('id')
+            ->get();
+
+        $asOf = CarbonImmutable::today();
+        $subscriptionPeriodDebts = $periodDebtCalculator->calculate($invoiceLines, $asOf);
+        $oneTimeServiceDebts = $oneTimeDebtCalculator->calculate($invoiceLines, $asOf);
+        $subscriptionPeriodDebtGroups = array_values(array_filter(array_map(
+            function (array $subscription): array {
+                $subscription['periods'] = array_values(array_map(
+                    fn(array $period): array => $this->presentDebtPeriod($period),
+                    array_filter(
+                        $subscription['periods'],
+                        fn(array $period): bool => $period['remaining'] !== '0.00'
+                    )
+                ));
+
+                return $subscription;
+            },
+            $subscriptionPeriodDebts['subscriptions']
+        ), fn(array $subscription): bool => $subscription['periods'] !== []));
+        $subscriptionPeriodDebtAnomalyCount = count(array_unique(array_column(
+            $subscriptionPeriodDebts['anomalies'],
+            'invoice_line_id'
+        )));
+        $oneTimeServiceDebtLines = array_values(array_map(
+            fn(array $line): array => [
+                ...$line,
+                'due_date_label' => $line['due_date'] === null
+                    ? 'Не указан'
+                    : CarbonImmutable::parse($line['due_date'])->format('d.m.Y'),
+            ],
+            array_filter(
+                $oneTimeServiceDebts['lines'],
+                fn(array $line): bool => $line['remaining'] !== '0.00'
+            )
+        ));
+        $overdueRemaining = $this->addMoneyStrings(
+            $subscriptionPeriodDebts['totals']['overdue_remaining'],
+            $oneTimeServiceDebts['totals']['overdue_remaining']
+        );
+        $activeTab = CompanyPageContext::activeTab($request);
+
         $returnContext = $this->companyReturnContext($request);
 
-        return view('companies.show', compact('company', 'stats', 'returnContext'));
+        return view('companies.show', compact(
+            'company',
+            'stats',
+            'subscriptionPeriodDebts',
+            'subscriptionPeriodDebtGroups',
+            'subscriptionPeriodDebtAnomalyCount',
+            'oneTimeServiceDebts',
+            'oneTimeServiceDebtLines',
+            'overdueRemaining',
+            'activeTab',
+            'returnContext'
+        ));
+    }
+
+    private function addMoneyStrings(string $left, string $right): string
+    {
+        $minor = static function (string $amount): int {
+            if (preg_match('/^(\d+)\.(\d{2})$/', $amount, $matches) !== 1) {
+                throw new \LogicException("Invalid normalized money value: {$amount}.");
+            }
+
+            return ((int) $matches[1] * 100) + (int) $matches[2];
+        };
+        $total = $minor($left) + $minor($right);
+
+        return intdiv($total, 100).'.'.str_pad((string) ($total % 100), 2, '0', STR_PAD_LEFT);
+    }
+
+    private function presentDebtPeriod(array $period): array
+    {
+        $periodStart = CarbonImmutable::parse($period['period_start']);
+        $periodEnd = CarbonImmutable::parse($period['period_end']);
+        $isFullMonth = $periodStart->day === 1
+            && $periodEnd->isSameDay($periodStart->endOfMonth());
+
+        return [
+            ...$period,
+            'period_label' => $isFullMonth
+                ? self::RUSSIAN_MONTHS[$periodStart->month].' '.$periodStart->year
+                : $periodStart->format('d.m.Y').'–'.$periodEnd->format('d.m.Y'),
+            'due_date_label' => $period['due_date'] === null
+                ? 'Не указан'
+                : CarbonImmutable::parse($period['due_date'])->format('d.m.Y'),
+        ];
     }
 
     /**

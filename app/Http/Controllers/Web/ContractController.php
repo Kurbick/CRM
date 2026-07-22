@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Web;
 use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\Contract;
+use App\Support\CompanyPageContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -185,15 +186,17 @@ class ContractController extends Controller
         );
     }
 
-    public function create(?Company $company = null)
+    public function create(Request $request, ?Company $company = null)
     {
         $companies = Company::query()
             ->orderBy('name')
             ->get();
 
+        $companyContext = $company ? CompanyPageContext::resolve($request, $company, 'contracts') : null;
+
         return view(
             'contracts.create',
-            compact('company', 'companies')
+            compact('company', 'companies', 'companyContext')
         );
     }
 
@@ -209,13 +212,14 @@ class ContractController extends Controller
         ]);
 
         $contract = Contract::create($validated);
+        $companyContext = CompanyPageContext::resolve($request, $contract->company, 'contracts');
 
         return redirect()
-            ->route('contracts.show', $contract)
+            ->route('contracts.show', ['contract' => $contract, ...$companyContext['query']])
             ->with('success', 'Договор успешно добавлен.');
     }
 
-    public function show(Contract $contract)
+    public function show(Request $request, Contract $contract)
     {
         $contract->load([
             'company',
@@ -226,19 +230,23 @@ class ContractController extends Controller
             },
         ]);
 
+        $companyContext = CompanyPageContext::resolve($request, $contract->company, 'contracts');
+
         return view(
             'contracts.show',
-            compact('contract')
+            compact('contract', 'companyContext')
         );
     }
 
-    public function edit(Contract $contract)
+    public function edit(Request $request, Contract $contract)
     {
         $company = $contract->company;
 
+        $companyContext = CompanyPageContext::resolve($request, $company, 'contracts');
+
         return view(
             'contracts.edit',
-            compact('contract', 'company')
+            compact('contract', 'company', 'companyContext')
         );
     }
 
@@ -253,9 +261,10 @@ class ContractController extends Controller
         ]);
 
         $contract->update($validated);
+        $companyContext = CompanyPageContext::resolve($request, $contract->company, 'contracts');
 
         return redirect()
-            ->route('contracts.show', $contract)
+            ->route('contracts.show', ['contract' => $contract, ...$companyContext['query']])
             ->with('success', 'Договор обновлён.');
     }
 
