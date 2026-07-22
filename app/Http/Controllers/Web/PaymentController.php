@@ -7,6 +7,7 @@ use App\Models\CreditBalance;
 use App\Models\CreditBalanceEntry;
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Services\InvoicePaymentAllocationWriter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -15,6 +16,11 @@ use Illuminate\Validation\ValidationException;
 
 class PaymentController extends Controller
 {
+    public function __construct(
+        private readonly InvoicePaymentAllocationWriter $allocationWriter
+    ) {
+    }
+
     /**
      * Регистрация нового платежа.
      */
@@ -117,7 +123,7 @@ class PaymentController extends Controller
                 ]);
             }
 
-            Payment::query()->create([
+            $payment = Payment::query()->create([
                 'company_id' => $lockedInvoice->company_id,
                 'invoice_id' => $lockedInvoice->id,
                 'payment_date' => $validated['payment_date'],
@@ -130,6 +136,10 @@ class PaymentController extends Controller
                 'status' => $validated['status'],
                 'comment' => $validated['comment'] ?? null,
             ]);
+
+            if ($payment->status === 'confirmed') {
+                $this->allocationWriter->synchronize($lockedInvoice);
+            }
 
             /*
              * Пересчёт статуса инвойса и создание переплаты
@@ -163,24 +173,6 @@ class PaymentController extends Controller
             &$invoiceId
         ): void {
             /*
-         * Блокируем платёж, чтобы два запроса
-         * не смогли подтвердить его одновременно.
-         */
-            $lockedPayment = Payment::query()
-                ->whereKey($payment->id)
-                ->lockForUpdate()
-                ->firstOrFail();
-
-            $invoiceId = $lockedPayment->invoice_id;
-
-            if ($lockedPayment->status !== 'pending') {
-                throw ValidationException::withMessages([
-                    'payment_confirm' =>
-                    'Подтвердить можно только платёж со статусом «Ожидает подтверждения».',
-                ]);
-            }
-
-            /*
          * Блокируем связанный инвойс и проверяем,
          * что он допускает подтверждение платежа.
          *
@@ -188,9 +180,34 @@ class PaymentController extends Controller
          * создать переплату и увеличить Credit Balance.
          */
             $invoice = Invoice::query()
-                ->whereKey($lockedPayment->invoice_id)
+                ->whereKey($payment->invoice_id)
                 ->lockForUpdate()
                 ->firstOrFail();
+
+            /*
+             * Единый порядок блокировок lifecycle:
+             * Invoice, затем изменяемый Payment.
+             */
+            $lockedPayment = Payment::query()
+                ->whereKey($payment->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $invoiceId = $lockedPayment->invoice_id;
+
+            if ((int) $lockedPayment->invoice_id !== (int) $invoice->id) {
+                throw ValidationException::withMessages([
+                    'payment_confirm' =>
+                    'Платёж не принадлежит заблокированному инвойсу.',
+                ]);
+            }
+
+            if ($lockedPayment->status !== 'pending') {
+                throw ValidationException::withMessages([
+                    'payment_confirm' =>
+                    'Подтвердить можно только платёж со статусом «Ожидает подтверждения».',
+                ]);
+            }
 
             if (
                 !in_array(
@@ -224,6 +241,8 @@ class PaymentController extends Controller
                 'cancelled_at' => null,
                 'cancel_reason' => null,
             ])->save();
+
+            $this->allocationWriter->synchronize($invoice);
         });
 
         return redirect()
@@ -283,14 +302,26 @@ class PaymentController extends Controller
             $validated,
             &$invoiceId
         ): void {
+            $invoice = Invoice::query()
+                ->whereKey($payment->invoice_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
             /*
-             * Повторно получаем и блокируем платёж,
-             * чтобы исключить двойную отмену.
+             * Единый порядок блокировок lifecycle:
+             * Invoice, затем изменяемый Payment.
              */
             $lockedPayment = Payment::query()
                 ->whereKey($payment->id)
                 ->lockForUpdate()
                 ->firstOrFail();
+
+            if ((int) $lockedPayment->invoice_id !== (int) $invoice->id) {
+                throw ValidationException::withMessages([
+                    'cancel_reason' =>
+                    'Платёж не принадлежит заблокированному инвойсу.',
+                ]);
+            }
 
             if (!in_array($lockedPayment->status, ['pending', 'confirmed'], true)) {
                 throw ValidationException::withMessages([
@@ -309,11 +340,6 @@ class PaymentController extends Controller
                     'Автоматическое применение Credit Balance нельзя отменить как обычный платёж.',
                 ]);
             }
-
-            $invoice = Invoice::query()
-                ->whereKey($lockedPayment->invoice_id)
-                ->lockForUpdate()
-                ->firstOrFail();
 
             $invoiceId = $invoice->id;
 
@@ -398,6 +424,8 @@ class PaymentController extends Controller
                     invoiceTotal: (float) $invoice->total_amount
                 ),
             ])->save();
+
+            $this->allocationWriter->synchronize($invoice);
         });
 
         return redirect()

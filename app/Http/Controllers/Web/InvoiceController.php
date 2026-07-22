@@ -12,6 +12,7 @@ use Illuminate\Support\Carbon;
 use App\Models\InvoiceLine;
 use App\Models\Order;
 use App\Models\Subscription;
+use App\Services\InvoicePaymentAllocationWriter;
 use Illuminate\Validation\ValidationException;
 
 class InvoiceController extends Controller
@@ -789,9 +790,12 @@ class InvoiceController extends Controller
             );
     }
 
-    public function issue(Invoice $invoice)
+    public function issue(
+        Invoice $invoice,
+        InvoicePaymentAllocationWriter $allocationWriter
+    )
     {
-        DB::transaction(function () use ($invoice) {
+        DB::transaction(function () use ($invoice, $allocationWriter) {
             /*
          * Блокируем инвойс, чтобы его нельзя было
          * выставить одновременно двумя запросами.
@@ -1116,6 +1120,8 @@ class InvoiceController extends Controller
                         ->where('invoice_id', $invoice->id)
                         ->whereNull('payment_id')
                         ->update(['payment_id' => $payment->id]);
+
+                    $allocationWriter->synchronize($invoice);
                 }
             }
         });
