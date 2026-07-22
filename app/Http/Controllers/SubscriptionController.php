@@ -6,7 +6,9 @@ use App\Models\Contract;
 use App\Models\Subscription;
 use App\Http\Requests\StoreSubscriptionRequest;
 use App\Http\Requests\UpdateSubscriptionRequest;
+use App\Services\InvoiceDueDateSynchronizer;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 
 class SubscriptionController extends Controller
 {
@@ -33,9 +35,16 @@ class SubscriptionController extends Controller
         return response()->json($subscription);
     }
 
-    public function update(UpdateSubscriptionRequest $request, Subscription $subscription): JsonResponse
+    public function update(
+        UpdateSubscriptionRequest $request,
+        Subscription $subscription,
+        InvoiceDueDateSynchronizer $dueDateSynchronizer
+    ): JsonResponse
     {
-        $subscription->update($request->validated());
+        DB::transaction(function () use ($request, $subscription, $dueDateSynchronizer): void {
+            $subscription->update($request->validated());
+            $dueDateSynchronizer->synchronizeForSubscription($subscription);
+        });
 
         return response()->json($subscription);
     }

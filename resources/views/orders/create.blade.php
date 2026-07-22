@@ -28,19 +28,13 @@
                 @enderror
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
-                <div>
+            <div>
                     <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Дата заказа <span
                             class="text-red-500">*</span></label>
                     <x-form.date-input name="order_date" :value="old('order_date', now()->toDateString())" required />
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Дедлайн</label>
-                    <x-form.date-input name="deadline" :value="old('deadline')" />
-                </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Сумма (₼) <span
                             class="text-red-500">*</span></label>
@@ -52,10 +46,13 @@
                     @enderror
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Срок оплаты (дней)</label>
-                    <input type="number" name="payment_terms" value="{{ old('payment_terms', 14) }}" min="1"
-                        max="365"
+                    <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Срок оплаты (дней) <span class="text-red-500">*</span></label>
+                    <input type="number" name="payment_terms" value="{{ old('payment_terms') }}" min="0"
+                        max="3650" placeholder="Количество дней" required
                         class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:border-blue-500 outline-none transition">
+                    @error('payment_terms')
+                        <p class="text-xs text-red-500 mt-1">{{ $message }}</p>
+                    @enderror
                 </div>
             </div>
 

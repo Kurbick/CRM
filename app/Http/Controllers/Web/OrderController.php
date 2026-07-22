@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Contract;
 use App\Models\Order;
 use App\Models\ServiceType;
+use App\Services\InvoiceDueDateSynchronizer;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class OrderController extends Controller
 {
@@ -20,11 +22,13 @@ class OrderController extends Controller
         $validated = $request->validate([
             'service_name'  => 'required|string|max:255',
             'order_date'    => 'required|date',
-            'deadline'      => 'nullable|date|after:order_date',
             'price'         => 'required|numeric|min:0',
-            'payment_terms' => 'nullable|integer|min:1|max:365',
+            'payment_terms' => 'required|integer|min:0|max:3650',
             'status'        => 'required|in:in_progress,completed,cancelled',
             'comment'       => 'nullable|string',
+        ], [
+            'payment_terms.required' => 'Укажите срок оплаты в днях.',
+            'payment_terms.integer' => 'Срок оплаты должен быть целым числом дней.',
         ]);
 
         $serviceType = ServiceType::firstOrCreate(
@@ -55,22 +59,31 @@ class OrderController extends Controller
         return view('orders.edit', compact('order', 'contract'));
     }
 
-    public function update(Request $request, Order $order)
+    public function update(
+        Request $request,
+        Order $order,
+        InvoiceDueDateSynchronizer $dueDateSynchronizer
+    )
     {
         $validated = $request->validate([
             'title'         => 'required|string|max:255',
             'order_date'    => 'required|date',
-            'deadline'      => 'nullable|date|after:order_date',
             'price'         => 'required|numeric|min:0',
-            'payment_terms' => 'nullable|integer|min:1|max:365',
+            'payment_terms' => 'required|integer|min:0|max:3650',
             'status'        => 'required|in:in_progress,completed,cancelled',
             'comment'       => 'nullable|string',
+        ], [
+            'payment_terms.required' => 'Укажите срок оплаты в днях.',
+            'payment_terms.integer' => 'Срок оплаты должен быть целым числом дней.',
         ]);
 
         $validated['title'] = trim($validated['title']);
         $validated['service_type_id'] = null;
 
-        $order->update($validated);
+        DB::transaction(function () use ($order, $validated, $dueDateSynchronizer): void {
+            $order->update($validated);
+            $dueDateSynchronizer->synchronizeForOrder($order);
+        });
 
         return redirect()
             ->route('contracts.show', $order->contract)

@@ -6,7 +6,9 @@ use App\Models\Contract;
 use App\Models\Order;
 use App\Http\Requests\StoreOrderRequest;
 use App\Http\Requests\UpdateOrderRequest;
+use App\Services\InvoiceDueDateSynchronizer;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 
 class OrderController extends Controller
 {
@@ -41,9 +43,16 @@ class OrderController extends Controller
         return response()->json($order);
     }
 
-    public function update(UpdateOrderRequest $request, Order $order): JsonResponse
+    public function update(
+        UpdateOrderRequest $request,
+        Order $order,
+        InvoiceDueDateSynchronizer $dueDateSynchronizer
+    ): JsonResponse
     {
-        $order->update($request->validated());
+        DB::transaction(function () use ($request, $order, $dueDateSynchronizer): void {
+            $order->update($request->validated());
+            $dueDateSynchronizer->synchronizeForOrder($order);
+        });
 
         return response()->json($order);
     }

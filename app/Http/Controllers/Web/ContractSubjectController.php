@@ -23,7 +23,6 @@ class ContractSubjectController extends Controller
             'title' => 'required|string|max:255',
 
             'order_date' => 'nullable|required_if:subject_type,one_time|date',
-            'deadline' => 'nullable|date|after_or_equal:order_date',
             'price' => 'nullable|required_if:subject_type,one_time|numeric|min:0',
 
             'start_date' => 'nullable|required_if:subject_type,subscription|date',
@@ -31,8 +30,13 @@ class ContractSubjectController extends Controller
             'billing_period_custom' => 'nullable|required_if:billing_period,custom|string|max:255',
             'amount' => 'nullable|required_if:subject_type,subscription|numeric|min:0',
 
-            'payment_terms' => 'exclude_unless:subject_type,subscription|required|integer|min:1|max:365',
+            'payment_terms' => $request->input('subject_type') === 'one_time'
+                ? 'required|integer|min:0|max:3650'
+                : 'required|integer|min:1|max:365',
             'comment' => 'nullable|string',
+        ], [
+            'payment_terms.required' => 'Укажите срок оплаты в днях.',
+            'payment_terms.integer' => 'Срок оплаты должен быть целым числом дней.',
         ]);
 
         if ($validated['subject_type'] === 'one_time') {
@@ -40,8 +44,8 @@ class ContractSubjectController extends Controller
                 'title' => trim($validated['title']),
                 'service_type_id' => null,
                 'order_date' => $validated['order_date'],
-                'deadline' => $validated['deadline'] ?? null,
                 'price' => $validated['price'],
+                'payment_terms' => $validated['payment_terms'],
                 'status' => 'in_progress',
                 'comment' => $validated['comment'] ?? null,
             ]);

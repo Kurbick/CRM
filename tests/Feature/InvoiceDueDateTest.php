@@ -3,6 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\Invoice;
+use App\Models\Order;
+use App\Models\Subscription;
+use App\Services\InvoiceDueDateSynchronizer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -26,19 +29,34 @@ class InvoiceDueDateTest extends TestCase
         $this->assertSame('2026-08-11', Invoice::query()->sole()->due_date);
     }
 
-    public function test_order_uses_fifteen_calendar_days(): void
+    public function test_order_uses_thirty_calendar_days(): void
     {
-        [$companyId, $contractId] = $this->companyAndContract('ORDER-15');
-        $orderId = $this->order($contractId, 15);
+        [$companyId, $contractId] = $this->companyAndContract('ORDER-30');
+        $orderId = $this->order($contractId, 30);
 
         $this->post(route('invoices.store'), $this->storePayload(
             $companyId,
             $contractId,
             [$this->orderLine($orderId)],
-            'INV-ORDER-15'
+            'INV-ORDER-30'
         ))->assertSessionDoesntHaveErrors();
 
-        $this->assertSame('2026-08-16', Invoice::query()->sole()->due_date);
+        $this->assertSame('2026-08-31', Invoice::query()->sole()->due_date);
+    }
+
+    public function test_order_with_zero_payment_terms_is_due_on_issue_date(): void
+    {
+        [$companyId, $contractId] = $this->companyAndContract('ORDER-0');
+        $orderId = $this->order($contractId, 0);
+
+        $this->post(route('invoices.store'), $this->storePayload(
+            $companyId,
+            $contractId,
+            [$this->orderLine($orderId)],
+            'INV-ORDER-0'
+        ))->assertSessionDoesntHaveErrors();
+
+        $this->assertSame('2026-08-01', Invoice::query()->sole()->due_date);
     }
 
     public function test_minimum_payment_terms_are_used_for_multiple_linked_items(): void
@@ -163,10 +181,184 @@ class InvoiceDueDateTest extends TestCase
         $this->assertSame('2026-08-21', $invoice->due_date);
     }
 
+    public function test_changing_order_terms_recalculates_issued_invoice_in_both_directions(): void
+    {
+        [$invoice, $contractId] = $this->draftInvoice('ISSUED-STABLE');
+        $orderId = $this->order($contractId, 30);
+        $invoice->lines()->create($this->orderLine($orderId));
+
+        $this->post(route('invoices.issue', $invoice))
+            ->assertSessionDoesntHaveErrors();
+
+        $invoice->refresh();
+        $this->assertSame('issued', $invoice->status);
+        $this->assertSame('2026-08-31', $invoice->due_date);
+
+        $order = Order::findOrFail($orderId);
+        $this->put(route('orders.update', $order), $this->orderUpdatePayload(7))
+            ->assertSessionDoesntHaveErrors();
+
+        $invoice->refresh();
+        $this->assertSame('issued', $invoice->status);
+        $this->assertSame('2026-08-08', $invoice->due_date);
+
+        $this->put(route('orders.update', $order), $this->orderUpdatePayload(30))
+            ->assertSessionDoesntHaveErrors();
+
+        $invoice->refresh();
+        $this->assertSame('issued', $invoice->status);
+        $this->assertSame('2026-08-31', $invoice->due_date);
+    }
+
+    public function test_updating_order_terms_recalculates_linked_draft_in_both_directions(): void
+    {
+        [$invoice, $contractId] = $this->draftInvoice('ORDER-SYNC');
+        $orderId = $this->order($contractId, 30);
+        $invoice->lines()->create($this->orderLine($orderId));
+        $order = Order::findOrFail($orderId);
+
+        $this->put(route('orders.update', $order), $this->orderUpdatePayload(7))
+            ->assertSessionDoesntHaveErrors();
+        $this->assertSame('2026-08-08', $invoice->fresh()->due_date);
+
+        $this->put(route('orders.update', $order), $this->orderUpdatePayload(30))
+            ->assertSessionDoesntHaveErrors();
+        $this->assertSame('2026-08-31', $invoice->fresh()->due_date);
+    }
+
+    public function test_order_update_recalculates_whole_invoice_using_remaining_minimum(): void
+    {
+        [$invoice, $contractId] = $this->draftInvoice('WHOLE-INVOICE');
+        $thirtyDayOrder = $this->order($contractId, 30);
+        $sevenDayOrder = $this->order($contractId, 7);
+        $invoice->lines()->createMany([
+            $this->orderLine($thirtyDayOrder),
+            $this->orderLine($sevenDayOrder),
+        ]);
+
+        $this->put(
+            route('orders.update', Order::findOrFail($sevenDayOrder)),
+            $this->orderUpdatePayload(40)
+        )->assertSessionDoesntHaveErrors();
+
+        $this->assertSame('2026-08-31', $invoice->fresh()->due_date);
+    }
+
+    public function test_order_update_changes_all_open_invoices_but_not_paid_cancelled_or_unrelated(): void
+    {
+        [$firstDraft, $contractId] = $this->draftInvoice('MULTI-FIRST');
+        $orderId = $this->order($contractId, 30);
+        $firstDraft->lines()->create($this->orderLine($orderId));
+
+        $affected = [$firstDraft];
+        foreach (['MULTI-SECOND', 'ISSUED', 'PARTIAL', 'PAID', 'CANCELLED'] as $suffix) {
+            [$invoice] = $this->draftInvoiceForContract($contractId, $suffix);
+            $invoice->lines()->create($this->orderLine($orderId));
+            $affected[] = $invoice;
+        }
+
+        $statuses = ['draft', 'draft', 'issued', 'partially_paid', 'paid', 'cancelled'];
+        foreach ($affected as $index => $invoice) {
+            $invoice->update(['status' => $statuses[$index], 'due_date' => '2026-08-31']);
+        }
+
+        [$unrelated, $otherContractId] = $this->draftInvoice('UNRELATED');
+        $unrelatedOrder = $this->order($otherContractId, 30);
+        $unrelated->lines()->create($this->orderLine($unrelatedOrder));
+
+        $this->put(
+            route('orders.update', Order::findOrFail($orderId)),
+            $this->orderUpdatePayload(7)
+        )->assertSessionDoesntHaveErrors();
+
+        foreach (array_slice($affected, 0, 4) as $index => $invoice) {
+            $invoice->refresh();
+            $this->assertSame('2026-08-08', $invoice->due_date);
+            $this->assertSame($statuses[$index], $invoice->status);
+            $this->assertSame('100.00', $invoice->total_amount);
+            $this->assertCount(0, $invoice->payments);
+            $this->assertCount(0, $invoice->lines->flatMap->allocations);
+        }
+        foreach (array_slice($affected, 4) as $invoice) {
+            $this->assertSame('2026-08-31', $invoice->fresh()->due_date);
+        }
+        $this->assertSame('2026-08-02', $unrelated->fresh()->due_date);
+    }
+
+    public function test_api_order_update_recalculates_linked_draft(): void
+    {
+        [$invoice, $contractId] = $this->draftInvoice('API-ORDER-SYNC');
+        $orderId = $this->order($contractId, 30);
+        $invoice->lines()->create($this->orderLine($orderId));
+
+        $this->putJson(route('api.orders.update', $orderId), ['payment_terms' => 7])
+            ->assertOk();
+
+        $this->assertSame('2026-08-08', $invoice->fresh()->due_date);
+    }
+
+    public function test_subscription_update_recalculates_linked_partially_paid_invoice(): void
+    {
+        [$invoice, $contractId] = $this->draftInvoice('SUBSCRIPTION-SYNC');
+        $subscriptionId = $this->subscription($contractId, 30);
+        $invoice->lines()->create($this->subscriptionLine($subscriptionId));
+        $invoice->update(['status' => 'partially_paid', 'due_date' => '2026-08-31']);
+
+        $this->putJson(route('api.subscriptions.update', $subscriptionId), ['payment_terms' => 7])
+            ->assertOk();
+
+        $invoice->refresh();
+        $this->assertSame('2026-08-08', $invoice->due_date);
+        $this->assertSame('partially_paid', $invoice->status);
+        $this->assertSame('100.00', $invoice->total_amount);
+    }
+
+    public function test_web_subscription_update_recalculates_linked_issued_invoice(): void
+    {
+        [$invoice, $contractId] = $this->draftInvoice('WEB-SUBSCRIPTION-SYNC');
+        $subscriptionId = $this->subscription($contractId, 30);
+        $invoice->lines()->create($this->subscriptionLine($subscriptionId));
+        $invoice->update(['status' => 'issued', 'due_date' => '2026-08-31']);
+
+        $subscription = Subscription::findOrFail($subscriptionId);
+        $this->put(route('subscriptions.update', $subscription), [
+            'title' => 'Subscription',
+            'start_date' => '2026-01-01',
+            'billing_period' => 'monthly',
+            'amount' => 100,
+            'payment_terms' => 7,
+            'status' => 'active',
+        ])->assertSessionDoesntHaveErrors();
+
+        $invoice->refresh();
+        $this->assertSame('2026-08-08', $invoice->due_date);
+        $this->assertSame('issued', $invoice->status);
+    }
+
+    public function test_synchronization_failure_rolls_back_order_update(): void
+    {
+        [, $contractId] = $this->companyAndContract('ROLLBACK-SYNC');
+        $order = Order::findOrFail($this->order($contractId, 30));
+
+        $this->mock(InvoiceDueDateSynchronizer::class)
+            ->shouldReceive('synchronizeForOrder')
+            ->once()
+            ->andThrow(new \RuntimeException('Broken linked invoice'));
+
+        try {
+            $this->put(route('orders.update', $order), $this->orderUpdatePayload(7));
+            $this->fail('The synchronization exception should escape the request.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('Broken linked invoice', $exception->getMessage());
+        }
+
+        $this->assertSame(30, (int) $order->fresh()->payment_terms);
+    }
+
     public function test_payment_terms_outside_allowed_range_are_rejected(): void
     {
         [$companyId, $contractId] = $this->companyAndContract('INVALID');
-        $orderId = $this->order($contractId, 366);
+        $orderId = $this->order($contractId, 3651);
 
         $this->post(route('invoices.store'), $this->storePayload(
             $companyId,
@@ -231,6 +423,21 @@ class InvoiceDueDateTest extends TestCase
         [$companyId, $contractId] = $this->companyAndContract($suffix);
         $invoice = Invoice::create([
             'company_id' => $companyId,
+            'contract_id' => $contractId,
+            'invoice_number' => 'INV-'.$suffix,
+            'issue_date' => '2026-08-01',
+            'due_date' => '2026-08-02',
+            'total_amount' => 100,
+            'status' => 'draft',
+        ]);
+
+        return [$invoice, $contractId];
+    }
+
+    private function draftInvoiceForContract(int $contractId, string $suffix): array
+    {
+        $invoice = Invoice::create([
+            'company_id' => DB::table('contracts')->where('id', $contractId)->value('company_id'),
             'contract_id' => $contractId,
             'invoice_number' => 'INV-'.$suffix,
             'issue_date' => '2026-08-01',
@@ -317,6 +524,17 @@ class InvoiceDueDateTest extends TestCase
             'order_id' => $orderId,
             'period_start' => null,
             'period_end' => null,
+        ];
+    }
+
+    private function orderUpdatePayload(int $paymentTerms): array
+    {
+        return [
+            'title' => 'One-time service',
+            'order_date' => '2026-08-01',
+            'price' => 100,
+            'payment_terms' => $paymentTerms,
+            'status' => 'in_progress',
         ];
     }
 

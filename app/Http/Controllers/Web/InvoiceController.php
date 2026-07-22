@@ -12,12 +12,18 @@ use Illuminate\Support\Carbon;
 use App\Models\InvoiceLine;
 use App\Models\Order;
 use App\Models\Subscription;
+use App\Services\InvoiceDueDateCalculator;
 use App\Services\InvoicePaymentAllocationWriter;
 use App\Support\CompanyPageContext;
 use Illuminate\Validation\ValidationException;
 
 class InvoiceController extends Controller
 {
+    public function __construct(
+        private readonly InvoiceDueDateCalculator $dueDateCalculator
+    ) {
+    }
+
     /**
      * Display a listing of the resource.
      */
@@ -442,7 +448,7 @@ class InvoiceController extends Controller
             );
         }
 
-        $validated['due_date'] = $this->resolveInvoiceDueDate(
+        $validated['due_date'] = $this->dueDateCalculator->calculate(
             issueDate: $validated['issue_date'],
             manualDueDate: $validated['due_date'] ?? null,
             contractId: $contract->id,
@@ -754,7 +760,7 @@ class InvoiceController extends Controller
             $remainingLinkedLines = $originalLines
                 ->only($submittedExistingIds);
 
-            $validated['due_date'] = $this->resolveInvoiceDueDate(
+            $validated['due_date'] = $this->dueDateCalculator->calculate(
                 issueDate: $validated['issue_date'],
                 manualDueDate: $validated['due_date'] ?? null,
                 contractId: (int) $lockedInvoice->contract_id,
@@ -1063,7 +1069,7 @@ class InvoiceController extends Controller
                     ->toDateString();
             }
 
-            $dueDate = $this->resolveInvoiceDueDate(
+            $dueDate = $this->dueDateCalculator->calculate(
                 issueDate: $invoice->issue_date,
                 manualDueDate: $invoice->due_date,
                 contractId: $invoice->contract_id,
@@ -1386,115 +1392,6 @@ class InvoiceController extends Controller
             ->get(['id', 'contract_number', 'start_date', 'end_date']);
 
         return response()->json($contracts);
-    }
-
-    private function resolveInvoiceDueDate(
-        string $issueDate,
-        ?string $manualDueDate,
-        int $contractId,
-        array $orderIds,
-        array $subscriptionIds
-    ): string {
-        $paymentTerms = $this->resolveInvoicePaymentTerms(
-            contractId: $contractId,
-            orderIds: $orderIds,
-            subscriptionIds: $subscriptionIds
-        );
-
-        $issueDateValue = Carbon::parse($issueDate)->startOfDay();
-
-        if ($paymentTerms !== null) {
-            return $issueDateValue
-                ->copy()
-                ->addDays($paymentTerms)
-                ->toDateString();
-        }
-
-        if (!$manualDueDate) {
-            throw ValidationException::withMessages([
-                'due_date' =>
-                'Укажите срок оплаты для инвойса без условий оплаты в позициях.',
-            ]);
-        }
-
-        $manualDueDateValue = Carbon::parse($manualDueDate)
-            ->startOfDay();
-
-        if ($manualDueDateValue->lt($issueDateValue)) {
-            throw ValidationException::withMessages([
-                'due_date' =>
-                'Срок оплаты не может быть раньше даты выставления.',
-            ]);
-        }
-
-        return $manualDueDateValue->toDateString();
-    }
-
-    private function resolveInvoicePaymentTerms(
-        int $contractId,
-        array $orderIds,
-        array $subscriptionIds
-    ): ?int {
-        $orderIds = collect($orderIds)
-            ->filter()
-            ->map(fn($id) => (int) $id)
-            ->unique()
-            ->values();
-
-        $subscriptionIds = collect($subscriptionIds)
-            ->filter()
-            ->map(fn($id) => (int) $id)
-            ->unique()
-            ->values();
-
-        $orders = $orderIds->isEmpty()
-            ? collect()
-            : Order::query()
-                ->whereIn('id', $orderIds)
-                ->where('contract_id', $contractId)
-                ->get(['id', 'payment_terms']);
-
-        if ($orders->count() !== $orderIds->count()) {
-            throw ValidationException::withMessages([
-                'due_date' =>
-                'Одна из разовых услуг не принадлежит договору инвойса.',
-            ]);
-        }
-
-        $subscriptions = $subscriptionIds->isEmpty()
-            ? collect()
-            : Subscription::query()
-                ->whereIn('id', $subscriptionIds)
-                ->where('contract_id', $contractId)
-                ->get(['id', 'payment_terms']);
-
-        if ($subscriptions->count() !== $subscriptionIds->count()) {
-            throw ValidationException::withMessages([
-                'due_date' =>
-                'Одна из подписок не принадлежит договору инвойса.',
-            ]);
-        }
-
-        $paymentTerms = $orders
-            ->concat($subscriptions)
-            ->pluck('payment_terms')
-            ->filter(fn($terms) => $terms !== null && $terms !== '')
-            ->map(function ($terms): int {
-                $terms = (int) $terms;
-
-                if ($terms < 1 || $terms > 365) {
-                    throw ValidationException::withMessages([
-                        'due_date' =>
-                        'Условия оплаты связанных позиций должны быть от 1 до 365 дней.',
-                    ]);
-                }
-
-                return $terms;
-            });
-
-        return $paymentTerms->isEmpty()
-            ? null
-            : $paymentTerms->min();
     }
 
     /**

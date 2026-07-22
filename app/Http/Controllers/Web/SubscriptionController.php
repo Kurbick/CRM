@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Contract;
 use App\Models\ServiceType;
 use App\Models\Subscription;
+use App\Services\InvoiceDueDateSynchronizer;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class SubscriptionController extends Controller
 {
@@ -57,7 +59,11 @@ class SubscriptionController extends Controller
         return view('subscriptions.edit', compact('subscription', 'contract'));
     }
 
-    public function update(Request $request, Subscription $subscription)
+    public function update(
+        Request $request,
+        Subscription $subscription,
+        InvoiceDueDateSynchronizer $dueDateSynchronizer
+    )
     {
         $validated = $request->validate([
             'title' => 'required|string|max:255',
@@ -78,7 +84,10 @@ class SubscriptionController extends Controller
             $validated['billing_period_custom'] = null;
         }
 
-        $subscription->update($validated);
+        DB::transaction(function () use ($subscription, $validated, $dueDateSynchronizer): void {
+            $subscription->update($validated);
+            $dueDateSynchronizer->synchronizeForSubscription($subscription);
+        });
 
         return redirect()
             ->route('contracts.show', $subscription->contract)

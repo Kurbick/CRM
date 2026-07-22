@@ -37,7 +37,7 @@
     issueDate: @js(old('issue_date', \Illuminate\Support\Carbon::parse($invoice->issue_date)->toDateString())),
     dueDate: @js(old('due_date', \Illuminate\Support\Carbon::parse($invoice->due_date)->toDateString())),
     dueDateWasAutomatic: false,
-    get paymentTerms() { return this.lines.filter(line => line.order_id || line.subscription_id).map(line => Number(line.payment_terms)).filter(terms => Number.isInteger(terms) && terms >= 1 && terms <= 365) },
+    get paymentTerms() { return this.lines.filter(line => line.order_id || line.subscription_id).map(line => line.payment_terms).filter(terms => terms !== null && terms !== '').map(Number).filter(terms => Number.isInteger(terms) && terms >= 0 && terms <= 3650) },
     get hasAutomaticPaymentTerms() { return this.paymentTerms.length > 0 },
     get minimumPaymentTerms() { return this.hasAutomaticPaymentTerms ? Math.min(...this.paymentTerms) : null },
     get hasDifferentPaymentTerms() { return new Set(this.paymentTerms).size > 1 },

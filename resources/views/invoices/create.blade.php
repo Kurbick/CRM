@@ -232,7 +232,7 @@ document.addEventListener('alpine:init', () => {
         get filteredCompanies() { const q = this.companyQuery.trim().toLocaleLowerCase(); return q ? this.companies.filter(c => c.name.toLocaleLowerCase().startsWith(q)) : this.companies },
         get selectedContract() { return this.contracts.find(c => String(c.id) === String(this.selectedContractId)) || null },
         get total() { return this.lines.reduce((sum, line) => sum + (Number.parseFloat(line.amount) || 0), 0) },
-        get paymentTerms() { return this.lines.filter(line => line.order_id || line.subscription_id).map(line => Number(line.payment_terms)).filter(terms => Number.isInteger(terms) && terms >= 1 && terms <= 365) },
+        get paymentTerms() { return this.lines.filter(line => line.order_id || line.subscription_id).map(line => line.payment_terms).filter(terms => terms !== null && terms !== '').map(Number).filter(terms => Number.isInteger(terms) && terms >= 0 && terms <= 3650) },
         get hasAutomaticPaymentTerms() { return this.paymentTerms.length > 0 },
         get minimumPaymentTerms() { return this.hasAutomaticPaymentTerms ? Math.min(...this.paymentTerms) : null },
         get hasDifferentPaymentTerms() { return new Set(this.paymentTerms).size > 1 },
@@ -353,7 +353,7 @@ document.addEventListener('alpine:init', () => {
                 if (requestId === this.itemsRequestId) this.loadingItems = false;
             }
         },
-        mergeOldMetadata() { this.lines.forEach(line => { const item = this.availableItems.find(i => this.itemKey(i) === line.key); if (item) { line.billing_period = item.billing_period || null; line.payment_terms = item.payment_terms || null } }) },
+        mergeOldMetadata() { this.lines.forEach(line => { const item = this.availableItems.find(i => this.itemKey(i) === line.key); if (item) { line.billing_period = item.billing_period || null; line.payment_terms = item.payment_terms ?? null } }) },
         normaliseOldLine(line, i) { const type = line.subscription_id ? 'subscription' : (line.order_id ? 'order' : 'manual'); const id = line.subscription_id || line.order_id || i; return { key: type === 'manual' ? `manual-old-${i}` : `${type}-${id}`, description: line.description || '', amount: line.amount || '', subscription_id: line.subscription_id || null, order_id: line.order_id || null, period_start: line.period_start || null, period_end: line.period_end || null, billing_period: line.billing_period || null, payment_terms: null } },
         itemKey(item) { return `${item.type}-${item.id}` }, isSelected(item) { return this.lines.some(line => line.key === this.itemKey(item)) },
         isCustomLine(line) { return Boolean(line.subscription_id && line.billing_period === 'custom') },
