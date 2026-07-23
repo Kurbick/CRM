@@ -34,8 +34,10 @@ class InvoicePaymentBreakdownTest extends TestCase
             ->assertSee('50,00 ₼')
             ->assertSee('Частично')
             ->assertSee('Применено к счёту:')
-            ->assertSee('Показать распределение')
+            ->assertDontSeeText('Показать распределение')
+            ->assertDontSeeText('Скрыть распределение')
             ->assertSee('Текущее распределение')
+            ->assertDontSee('Отображается актуальное распределение после подтверждений и отмен платежей.')
             ->assertSee('Поддержка')
             ->assertSee('Разработка сайта');
     }
@@ -90,7 +92,10 @@ class InvoicePaymentBreakdownTest extends TestCase
         $response = $this->get(route('invoices.show', $invoice));
 
         $response->assertOk();
-        $this->assertSame(1, substr_count($response->getContent(), 'Оплата из Credit Balance'));
+        $this->assertSame(2, substr_count($response->getContent(), 'Из баланса: 10,00 ₼'));
+        $this->assertSame(3, substr_count($response->getContent(), 'Из баланса'));
+        $response->assertDontSee('Частично из баланса')
+            ->assertDontSee('Оплата из Credit Balance');
     }
 
     public function test_subscription_order_and_manual_lines_are_rendered_in_fifo_order(): void
@@ -112,12 +117,32 @@ class InvoicePaymentBreakdownTest extends TestCase
 
         $response->assertOk()
             ->assertSee('Подписка')
+            ->assertDontSee('Подписка ·')
             ->assertSee('Разовая услуга')
             ->assertSee('Ручная позиция')
             ->assertSee('0,00 ₼')
             ->assertSee('Не оплачено');
         $this->assertLessThan(strpos($content, 'Разовая услуга'), strpos($content, 'Подписка июля'));
         $this->assertLessThan(strpos($content, 'Ручная позиция'), strpos($content, 'Разовая услуга'));
+    }
+
+    public function test_subscription_subtitle_contains_only_available_period_boundaries(): void
+    {
+        $invoice = $this->invoice('draft', '40.00');
+        $this->line($invoice, 'Обе даты', '10.00', '2026-07-23', '2026-08-22', $this->subscription($invoice));
+        $this->line($invoice, 'Только начало', '10.00', '2026-07-23', null, $this->subscription($invoice));
+        $this->line($invoice, 'Только окончание', '10.00', null, '2026-08-22', $this->subscription($invoice));
+        $this->line($invoice, 'Без периода', '10.00', null, null, $this->subscription($invoice));
+
+        $this->get(route('invoices.show', $invoice))
+            ->assertOk()
+            ->assertSee('Обе даты')
+            ->assertSee('23/07/2026 — 22/08/2026')
+            ->assertSee('с 23/07/2026')
+            ->assertSee('до 22/08/2026')
+            ->assertSee('Без периода')
+            ->assertDontSee('Подписка ·')
+            ->assertDontSee('>Подписка<', false);
     }
 
     public function test_show_eager_loads_breakdown_relations_and_keeps_payment_actions(): void

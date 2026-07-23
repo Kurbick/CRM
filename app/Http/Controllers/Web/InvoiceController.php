@@ -14,6 +14,7 @@ use App\Models\Order;
 use App\Models\Subscription;
 use App\Services\InvoiceDueDateCalculator;
 use App\Services\InvoicePaymentBreakdownPresenter;
+use App\Services\InvoicePaymentSourceResolver;
 use App\Services\InvoicePaymentAllocationWriter;
 use App\Support\CompanyPageContext;
 use Illuminate\Validation\ValidationException;
@@ -22,7 +23,8 @@ class InvoiceController extends Controller
 {
     public function __construct(
         private readonly InvoiceDueDateCalculator $dueDateCalculator,
-        private readonly InvoicePaymentBreakdownPresenter $paymentBreakdownPresenter
+        private readonly InvoicePaymentBreakdownPresenter $paymentBreakdownPresenter,
+        private readonly InvoicePaymentSourceResolver $paymentSourceResolver
     ) {
     }
 
@@ -38,6 +40,8 @@ class InvoiceController extends Controller
                     $paymentQuery->where('status', 'confirmed');
                 },
             ], 'amount');
+
+        $this->paymentSourceResolver->addAggregates($query);
 
         $allowedStatuses = [
             'draft',
@@ -114,7 +118,12 @@ class InvoiceController extends Controller
                 'name',
             ]);
 
-        return view('invoices.index', compact('invoices', 'companies'));
+        $invoicePaymentSources = $invoices->getCollection()
+            ->mapWithKeys(fn(Invoice $invoice): array => [
+                $invoice->id => $this->paymentSourceResolver->fromAggregates($invoice),
+            ]);
+
+        return view('invoices.index', compact('invoices', 'companies', 'invoicePaymentSources'));
     }
 
     /**
@@ -532,12 +541,14 @@ class InvoiceController extends Controller
         $companyContext = $this->invoiceCompanyContext($request, $invoice);
         $paymentBreakdown = $this->paymentBreakdownPresenter->present($invoice);
         $paymentsById = $invoice->payments->keyBy('id');
+        $paymentSource = $this->paymentSourceResolver->fromLoadedInvoice($invoice);
 
         return view('invoices.show', compact(
             'invoice',
             'companyContext',
             'paymentBreakdown',
-            'paymentsById'
+            'paymentsById',
+            'paymentSource'
         ));
     }
 

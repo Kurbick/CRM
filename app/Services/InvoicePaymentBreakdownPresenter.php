@@ -293,9 +293,7 @@ class InvoicePaymentBreakdownPresenter
                 },
                 'period_start' => $periodStart,
                 'period_end' => $periodEnd,
-                'period_label' => $periodStart !== null && $periodEnd !== null
-                    ? Carbon::parse($periodStart)->format('d/m/Y').' — '.Carbon::parse($periodEnd)->format('d/m/Y')
-                    : null,
+                'period_label' => $this->periodLabel($periodStart, $periodEnd),
                 'amount_minor' => $this->toMinorUnits($line->amount, "Invoice line {$id} amount"),
             ];
         }
@@ -313,6 +311,24 @@ class InvoicePaymentBreakdownPresenter
         });
 
         return $lines;
+    }
+
+    private function periodLabel(?string $periodStart, ?string $periodEnd): ?string
+    {
+        if ($periodStart !== null && $periodEnd !== null) {
+            return Carbon::parse($periodStart)->format('d/m/Y')
+                .' — '.Carbon::parse($periodEnd)->format('d/m/Y');
+        }
+
+        if ($periodStart !== null) {
+            return 'с '.Carbon::parse($periodStart)->format('d/m/Y');
+        }
+
+        if ($periodEnd !== null) {
+            return 'до '.Carbon::parse($periodEnd)->format('d/m/Y');
+        }
+
+        return null;
     }
 
     /** @return list<array<string, mixed>> */

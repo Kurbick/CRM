@@ -39,4 +39,16 @@ class InvoiceIndexViewTest extends TestCase
         $this->assertStringContainsString('$value == 0.0', $source);
         $this->assertStringContainsString("number_format(\$value, 2, ',', ' ')", $source);
     }
+
+    public function test_index_renders_compact_precalculated_payment_source_marker(): void
+    {
+        $source = file_get_contents(resource_path('views/invoices/index.blade.php'));
+
+        $this->assertStringContainsString('$paymentSource = $invoicePaymentSources->get($invoice->id)', $source);
+        $this->assertStringContainsString("\$paymentSource['credit_balance_applied_minor'] > 0", $source);
+        $this->assertStringContainsString("Из баланса: {{ \$formatMoney(\$paymentSource['credit_balance_applied_amount']) }}", $source);
+        $this->assertStringNotContainsString('Частично из баланса', $source);
+        $this->assertStringNotContainsString('creditBalanceEntries()', $source);
+        $this->assertStringNotContainsString('allocations()', $source);
+    }
 }

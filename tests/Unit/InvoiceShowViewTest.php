@@ -71,12 +71,21 @@ class InvoiceShowViewTest extends TestCase
         $this->assertStringNotContainsString('>Состояние</th>', $source);
         $this->assertStringNotContainsString('>Тип / период</th>', $source);
         $this->assertStringContainsString('$line[\'payment_state_label\']', $source);
-        $this->assertStringContainsString("{{ \$line['type_label'] }}@if (\$line['period_label'])", $source);
+        $this->assertStringContainsString("\$line['type'] === 'subscription'", $source);
+        $this->assertStringContainsString("{{ \$line['period_label'] }}", $source);
+        $this->assertStringNotContainsString("\$line['type_label'] }}@if (\$line['period_label'])", $source);
         $this->assertStringContainsString('print:hidden', $source);
         $this->assertStringContainsString('overflow-x-auto', $source);
         $this->assertStringNotContainsString('min-w-[860px]', $source);
-        $this->assertStringContainsString('Показать распределение', $source);
+        $this->assertStringContainsString(":aria-label=\"allocationOpen ? 'Скрыть распределение' : 'Показать распределение'\"", $source);
+        $this->assertStringNotContainsString("x-text=\"allocationOpen ? 'Скрыть распределение' : 'Показать распределение'\"", $source);
+        $this->assertStringContainsString('x-show="!allocationOpen"', $source);
+        $this->assertStringContainsString('x-show="allocationOpen" x-cloak aria-hidden="true"', $source);
+        $this->assertStringContainsString(':aria-expanded="allocationOpen.toString()"', $source);
+        $this->assertStringContainsString('aria-controls="payment-allocation-{{ $paymentRow[\'id\'] }}"', $source);
+        $this->assertStringContainsString('id="payment-allocation-{{ $paymentRow[\'id\'] }}"', $source);
         $this->assertStringContainsString('Текущее распределение', $source);
+        $this->assertStringNotContainsString('Отображается актуальное распределение после подтверждений и отмен платежей.', $source);
         $this->assertStringContainsString('Будет распределён после подтверждения.', $source);
         $this->assertStringNotContainsString('Текущее распределение отсутствует: платёж отменён.', $source);
         $this->assertStringNotContainsString("str_starts_with(\n", $source);
@@ -129,5 +138,10 @@ class InvoiceShowViewTest extends TestCase
         $this->assertStringContainsString('$refs.paymentHistoryTrigger?.focus()', $source);
         $this->assertStringContainsString('class="invoice-payment-history crm-print-hide print:hidden"', $source);
         $this->assertStringNotContainsString('<div class="mt-3 rounded-lg border border-red-100 bg-red-50 p-3">', $source);
+        $this->assertSame(2, substr_count($source, "\$paymentSource['credit_balance_applied_minor'] > 0"));
+        $this->assertSame(2, substr_count($source, "Из баланса: {{ \$formatMoney(\$paymentSource['credit_balance_applied_amount']) }}"));
+        $this->assertStringNotContainsString('Частично из баланса', $source);
+        $this->assertStringContainsString("\$paymentSource['credit_balance_payment_ids']", $source);
+        $this->assertStringNotContainsString('Оплата из Credit Balance', $source);
     }
 }

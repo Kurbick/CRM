@@ -246,6 +246,22 @@ class InvoicePaymentBreakdownPresenterTest extends TestCase
         $this->assertNull($result['latest_payment']);
     }
 
+    public function test_subscription_period_labels_support_both_one_or_no_boundaries(): void
+    {
+        $both = $this->line(11, '10.00', subscriptionId: 1, periodStart: '2026-07-23', periodEnd: '2026-08-22');
+        $start = $this->line(12, '10.00', subscriptionId: 2, periodStart: '2026-07-23');
+        $end = $this->line(13, '10.00', subscriptionId: 3, periodEnd: '2026-08-22');
+        $none = $this->line(14, '10.00', subscriptionId: 4);
+
+        $rows = collect($this->presenter->present($this->invoice([$both, $start, $end, $none]))['lineRows'])
+            ->keyBy('id');
+
+        $this->assertSame('23/07/2026 — 22/08/2026', $rows[11]['period_label']);
+        $this->assertSame('с 23/07/2026', $rows[12]['period_label']);
+        $this->assertSame('до 22/08/2026', $rows[13]['period_label']);
+        $this->assertNull($rows[14]['period_label']);
+    }
+
     public function test_payment_summary_counts_statuses_without_changing_financial_totals(): void
     {
         $line = $this->line(11, '10.00');

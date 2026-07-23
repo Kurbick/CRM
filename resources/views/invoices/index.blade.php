@@ -310,6 +310,7 @@
                             $appliedAmount = $invoice->applied_amount;
                             $overpaymentAmount = $invoice->overpayment_amount;
                             $remainingAmount = $invoice->remaining_amount;
+                            $paymentSource = $invoicePaymentSources->get($invoice->id);
                         @endphp
                         <tr class="hover:bg-gray-50/50 transition">
 
@@ -372,6 +373,12 @@
                                         Оплачено:
                                         {{ $formatMoney($appliedAmount) }}
                                     </div>
+
+                                    @if ($paymentSource['credit_balance_applied_minor'] > 0)
+                                        <div class="mt-0.5 text-[11px] text-gray-400">
+                                            Из баланса: {{ $formatMoney($paymentSource['credit_balance_applied_amount']) }}
+                                        </div>
+                                    @endif
 
                                     @if ($overpaymentAmount > 0)
                                         <div class="text-blue-600 font-medium mt-0.5">

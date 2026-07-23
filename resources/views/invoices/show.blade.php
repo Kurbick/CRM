@@ -233,12 +233,16 @@
                                     <td class="w-8 py-4 pr-2 font-medium text-gray-400">{{ $index + 1 }}</td>
                                     <td class="py-4 pr-4">
                                         <div class="font-semibold text-gray-900 break-words">{{ $line['description'] }}</div>
-                                        <div class="crm-print-hide mt-0.5 text-xs text-gray-500 break-words">
-                                            {{ $line['type_label'] }}@if ($line['period_label']) · {{ $line['period_label'] }}@endif
-                                        </div>
+                                        @if ($line['type'] === 'subscription')
+                                            @if ($line['period_label'])
+                                                <div class="crm-print-hide mt-0.5 text-xs text-gray-500 break-words">{{ $line['period_label'] }}</div>
+                                            @endif
+                                        @else
+                                            <div class="crm-print-hide mt-0.5 text-xs text-gray-500 break-words">{{ $line['type_label'] }}</div>
+                                        @endif
                                     </td>
                                     <td class="invoice-print-only hidden py-4 pr-4 text-xs text-gray-600">
-                                        {{ $line['type_label'] }}
+                                        {{ $line['type'] === 'subscription' ? '' : $line['type_label'] }}
                                     </td>
                                     <td class="invoice-print-only hidden py-4 pr-4 text-xs text-gray-600">
                                         {{ $line['period_label'] ?: '—' }}
@@ -286,6 +290,12 @@
                             {{ $formatMoney($invoice->applied_amount) }}
                         </span>
                     </div>
+
+                    @if ($paymentSource['credit_balance_applied_minor'] > 0)
+                        <div class="w-64 text-right text-xs text-gray-400">
+                            Из баланса: {{ $formatMoney($paymentSource['credit_balance_applied_amount']) }}
+                        </div>
+                    @endif
 
                     @if ($invoice->overpayment_amount > 0)
                         <div class="flex justify-between w-64 text-blue-600">
@@ -483,6 +493,12 @@
                             </div>
                         @endif
 
+                        @if ($paymentSource['credit_balance_applied_minor'] > 0)
+                            <div class="mt-3 text-xs text-gray-400">
+                                Из баланса: {{ $formatMoney($paymentSource['credit_balance_applied_amount']) }}
+                            </div>
+                        @endif
+
                         <button type="button" x-ref="paymentHistoryTrigger" @click="openPaymentHistory()"
                             aria-haspopup="dialog" aria-controls="payment-history-drawer"
                             class="mt-4 inline-flex w-full items-center justify-between border-t border-gray-100 pt-3 text-sm font-medium text-blue-600 transition hover:text-blue-800">
@@ -537,7 +553,11 @@
                              * нельзя отменять как обычный банковский/наличный платёж.
                              * Сервер дополнительно проверяет это в PaymentController.
                              */
-                            $isCreditBalancePayment = $paymentRow['is_credit_balance'];
+                            $isCreditBalancePayment = in_array(
+                                $paymentRow['id'],
+                                $paymentSource['credit_balance_payment_ids'],
+                                true
+                            );
 
                             /*
                              * После ошибки валидации повторно открываем форму
@@ -579,17 +599,38 @@
                                     class="mt-2 inline-flex items-center rounded-md bg-blue-50 px-2 py-1
                                            text-[11px] font-medium text-blue-700">
 
-                                    Оплата из Credit Balance
+                                    Из баланса
                                 </div>
                             @endif
 
                             @if ($payment->status === 'confirmed')
                                 <div class="mt-3 space-y-1 text-xs text-gray-600">
-                                    <div>
-                                        Применено к счёту:
-                                        <span class="font-semibold text-gray-900 tabular-nums whitespace-nowrap">
-                                            {{ $formatMoney($paymentRow['applied_amount']) }}
-                                        </span>
+                                    <div class="flex min-w-0 items-center justify-between gap-3">
+                                        <div class="min-w-0">
+                                            Применено к счёту:
+                                            <span class="font-semibold text-gray-900 tabular-nums whitespace-nowrap">
+                                                {{ $formatMoney($paymentRow['applied_amount']) }}
+                                            </span>
+                                        </div>
+
+                                        @if ($paymentRow['allocations'] !== [])
+                                            <button type="button" @click="allocationOpen = !allocationOpen"
+                                                class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                                                :aria-expanded="allocationOpen.toString()"
+                                                :aria-label="allocationOpen ? 'Скрыть распределение' : 'Показать распределение'"
+                                                aria-controls="payment-allocation-{{ $paymentRow['id'] }}">
+                                                <svg x-show="!allocationOpen" aria-hidden="true" class="h-4 w-4" fill="none"
+                                                    stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                        d="m6 9 6 6 6-6" />
+                                                </svg>
+                                                <svg x-show="allocationOpen" x-cloak aria-hidden="true" class="h-4 w-4" fill="none"
+                                                    stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                        d="m18 15-6-6-6 6" />
+                                                </svg>
+                                            </button>
+                                        @endif
                                     </div>
 
                                     @if ($paymentRow['unallocated_amount'] !== '0.00')
@@ -605,13 +646,7 @@
 
                                 @if ($paymentRow['allocations'] !== [])
                                     <div class="mt-3">
-                                        <button type="button" @click="allocationOpen = !allocationOpen"
-                                            class="text-xs font-medium text-blue-600 hover:text-blue-800 transition"
-                                            :aria-expanded="allocationOpen.toString()">
-                                            <span x-text="allocationOpen ? 'Скрыть распределение' : 'Показать распределение'">Показать распределение</span>
-                                        </button>
-
-                                        <div x-show="allocationOpen" x-cloak
+                                        <div id="payment-allocation-{{ $paymentRow['id'] }}" x-show="allocationOpen" x-cloak
                                             class="mt-2 rounded-lg border border-gray-100 bg-gray-50 p-3">
                                             <div class="mb-2 text-xs font-semibold text-gray-700">Текущее распределение</div>
 
@@ -622,9 +657,15 @@
                                                             <div class="text-xs font-medium text-gray-800 break-words">
                                                                 {{ $allocation['line_description'] }}
                                                             </div>
-                                                            <div class="mt-0.5 break-words text-[11px] text-gray-500">
-                                                                {{ $allocation['line_type_label'] }}@if ($allocation['period_label']) · {{ $allocation['period_label'] }}@endif
-                                                            </div>
+                                                            @if ($allocation['line_type'] !== 'subscription' || $allocation['period_label'])
+                                                                <div class="mt-0.5 break-words text-[11px] text-gray-500">
+                                                                    @if ($allocation['line_type'] === 'subscription')
+                                                                        {{ $allocation['period_label'] }}
+                                                                    @else
+                                                                        {{ $allocation['line_type_label'] }}
+                                                                    @endif
+                                                                </div>
+                                                            @endif
                                                         </div>
                                                         <span class="shrink-0 whitespace-nowrap text-xs font-semibold text-gray-900 tabular-nums">
                                                             {{ $formatMoney($allocation['allocated_amount']) }}
@@ -632,10 +673,6 @@
                                                     </div>
                                                 @endforeach
                                             </div>
-
-                                            <p class="mt-3 text-[11px] text-gray-500">
-                                                Отображается актуальное распределение после подтверждений и отмен платежей.
-                                            </p>
                                         </div>
                                     </div>
                                 @endif
