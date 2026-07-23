@@ -26,7 +26,7 @@
         'partially_paid'=> 'Частично оплачен',
         'paid'          => 'Оплачен',
         'cancelled'     => 'Отменён',
-        'pending'       => 'Ожидает',
+        'pending'       => 'Ожидает подтверждения',
         'confirmed'     => 'Подтверждён',
         'in_progress'   => 'В работе',
         'completed'     => 'Завершён',

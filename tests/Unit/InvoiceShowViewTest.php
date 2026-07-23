@@ -30,8 +30,10 @@ class InvoiceShowViewTest extends TestCase
 
         $this->assertStringContainsString('$value == 0.0', $source);
         $this->assertStringContainsString("number_format(\$value, 2, ',', ' ')", $source);
-        $this->assertStringContainsString('$formatBreakdownMoney($line[\'amount\'])', $source);
-        $this->assertStringContainsString('$formatBreakdownMoney($paymentRow[\'amount\'])', $source);
+        $this->assertSame(1, substr_count($source, '$formatMoney = static function'));
+        $this->assertStringNotContainsString('$formatBreakdownMoney', $source);
+        $this->assertStringContainsString('$formatMoney($line[\'amount\'])', $source);
+        $this->assertStringContainsString('$formatMoney($paymentRow[\'amount\'])', $source);
         $this->assertStringContainsString('$formatMoney($invoice->remaining_amount)', $source);
     }
 
@@ -52,7 +54,7 @@ class InvoiceShowViewTest extends TestCase
 
         $this->assertSame(1, substr_count($source, $issueRoute));
         $this->assertGreaterThan(strpos($source, 'Остаток к оплате:'), strpos($source, $issueRoute));
-        $this->assertStringContainsString('class="mt-4 flex justify-end print:hidden"', $source);
+        $this->assertStringContainsString('class="crm-print-hide mt-4 flex justify-end print:hidden"', $source);
         $this->assertStringContainsString('class="w-64 max-w-full"', $source);
         $this->assertStringContainsString("route('invoices.edit', \$invoice)", $source);
         $this->assertStringContainsString("route('invoices.destroy', \$invoice)", $source);
@@ -106,8 +108,8 @@ class InvoiceShowViewTest extends TestCase
         $this->assertStringContainsString('paymentHistoryOpen:', $source);
         $this->assertStringContainsString('x-show="paymentHistoryOpen" x-cloak', $source);
         $this->assertStringContainsString('id="payment-history-drawer"', $source);
-        $this->assertStringContainsString('class="fixed inset-0 z-50"', $source);
-        $this->assertStringContainsString('class="absolute inset-0 bg-gray-900/40" @click="closePaymentHistory()"', $source);
+        $this->assertStringContainsString('payment-history-drawer crm-print-hide fixed inset-0 z-50 print:hidden', $source);
+        $this->assertStringContainsString('payment-history-backdrop crm-print-hide absolute inset-0 bg-gray-900/40 print:hidden', $source);
         $this->assertStringContainsString('x-on:keydown.escape.window=', $source);
         $this->assertStringContainsString('aria-label="Закрыть историю платежей"', $source);
         $this->assertStringContainsString('overflow-y-auto', $source);
@@ -125,7 +127,7 @@ class InvoiceShowViewTest extends TestCase
         $this->assertStringContainsString("document.body.style.overflow = ''", $source);
         $this->assertStringContainsString('$refs.paymentHistoryClose.focus()', $source);
         $this->assertStringContainsString('$refs.paymentHistoryTrigger?.focus()', $source);
-        $this->assertStringContainsString('class="print:hidden"', $source);
+        $this->assertStringContainsString('class="invoice-payment-history crm-print-hide print:hidden"', $source);
         $this->assertStringNotContainsString('<div class="mt-3 rounded-lg border border-red-100 bg-red-50 p-3">', $source);
     }
 }

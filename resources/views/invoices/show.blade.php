@@ -5,19 +5,13 @@
 @section('content')
     @php
         $formatMoney = static function ($amount): string {
-            $value = (float) $amount;
+            $value = round((float) $amount, 2);
 
             if ($value == 0.0) {
                 $value = 0.0;
             }
 
             return number_format($value, 2, ',', ' ') . ' ₼';
-        };
-
-        $formatBreakdownMoney = static function (string $amount): string {
-            [$whole, $fraction] = array_pad(explode('.', $amount, 2), 2, '00');
-
-            return number_format((int) $whole, 0, ',', ' ') . ',' . $fraction . ' ₼';
         };
 
         $remainingColor = match (true) {
@@ -29,7 +23,7 @@
     @endphp
 
     {{-- Верхний заголовок и действия --}}
-    <div class="mb-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4 print:hidden">
+    <div class="invoice-page-header crm-print-hide mb-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4 print:hidden">
         <div>
             <a href="{{ $companyContext['active'] ? $companyContext['company_url'] : route('invoices.index') }}"
                 class="text-sm text-gray-500 hover:text-gray-900 transition flex items-center gap-1.5 mb-2">
@@ -123,17 +117,17 @@
         </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="invoice-screen-grid grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {{-- Основной документ инвойса (2/3 ширины) --}}
-        <div class="lg:col-span-2 print:w-full print:col-span-3">
+        <div class="invoice-document-column lg:col-span-2 print:w-full print:col-span-3">
 
             {{-- Печатный бланк счета --}}
             <div
-                class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:p-8 relative overflow-hidden print:border-none print:shadow-none print:p-0">
+                class="invoice-document bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:p-8 relative overflow-hidden print:border-none print:shadow-none print:p-0">
 
                 {{-- Верхняя декоративная полоса (скрывается при печати) --}}
-                <div class="absolute top-0 left-0 right-0 h-1.5 bg-blue-600 print:hidden"></div>
+                <div class="crm-print-hide absolute top-0 left-0 right-0 h-1.5 bg-blue-600 print:hidden"></div>
 
                 {{-- Шапка бланка --}}
                 <div class="flex flex-col md:flex-row justify-between gap-5 pb-6 border-b border-gray-100 mb-6">
@@ -198,7 +192,7 @@
 
                 {{-- Получатель счета (Плательщик) --}}
                 <div
-                    class="bg-gray-50 rounded-lg px-4 py-3.5 mb-6 grid grid-cols-1 md:grid-cols-2 gap-3 print:bg-gray-100 print:rounded-none">
+                    class="invoice-payer bg-gray-50 rounded-lg px-4 py-3.5 mb-6 grid grid-cols-1 md:grid-cols-2 gap-3 print:bg-gray-100 print:rounded-none">
                     <div>
                         <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Плательщик</div>
                         <h3 class="font-bold text-gray-900">{{ $invoice->payer_name ?: 'Не указан' }}</h3>
@@ -225,32 +219,40 @@
                                 class="border-b border-gray-200 text-gray-400 font-semibold uppercase tracking-wider text-xs pb-3">
                                 <th class="w-8 pb-3 pr-2">№</th>
                                 <th class="pb-3 pr-4">Позиция</th>
+                                <th class="invoice-print-only hidden pb-3 pr-4">Описание / тип</th>
+                                <th class="invoice-print-only hidden pb-3 pr-4">Расчётный период</th>
                                 <th class="pb-3 text-right pr-4">Сумма</th>
-                                <th class="pb-3 text-right pr-4 print:hidden">Оплачено</th>
-                                <th class="pb-3 text-right pr-4 print:hidden">Остаток</th>
-                                <th class="pb-3 print:hidden">Статус</th>
+                                <th class="crm-print-hide pb-3 text-right pr-4 print:hidden">Оплачено</th>
+                                <th class="crm-print-hide pb-3 text-right pr-4 print:hidden">Остаток</th>
+                                <th class="crm-print-hide pb-3 print:hidden">Статус</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100 text-gray-700">
                             @foreach ($paymentBreakdown['lineRows'] as $index => $line)
-                                <tr>
+                                <tr class="invoice-line-row">
                                     <td class="w-8 py-4 pr-2 font-medium text-gray-400">{{ $index + 1 }}</td>
                                     <td class="py-4 pr-4">
                                         <div class="font-semibold text-gray-900 break-words">{{ $line['description'] }}</div>
-                                        <div class="mt-0.5 text-xs text-gray-500 break-words">
+                                        <div class="crm-print-hide mt-0.5 text-xs text-gray-500 break-words">
                                             {{ $line['type_label'] }}@if ($line['period_label']) · {{ $line['period_label'] }}@endif
                                         </div>
                                     </td>
+                                    <td class="invoice-print-only hidden py-4 pr-4 text-xs text-gray-600">
+                                        {{ $line['type_label'] }}
+                                    </td>
+                                    <td class="invoice-print-only hidden py-4 pr-4 text-xs text-gray-600">
+                                        {{ $line['period_label'] ?: '—' }}
+                                    </td>
                                     <td class="py-4 text-right font-semibold text-gray-900 font-mono pr-4">
-                                        <span class="whitespace-nowrap tabular-nums">{{ $formatBreakdownMoney($line['amount']) }}</span>
+                                        <span class="whitespace-nowrap tabular-nums">{{ $formatMoney($line['amount']) }}</span>
                                     </td>
-                                    <td class="py-4 text-right font-semibold text-green-600 font-mono pr-4 print:hidden">
-                                        <span class="whitespace-nowrap tabular-nums">{{ $formatBreakdownMoney($line['paid_amount']) }}</span>
+                                    <td class="crm-print-hide py-4 text-right font-semibold text-green-600 font-mono pr-4 print:hidden">
+                                        <span class="whitespace-nowrap tabular-nums">{{ $formatMoney($line['paid_amount']) }}</span>
                                     </td>
-                                    <td class="py-4 text-right font-semibold text-gray-900 font-mono pr-4 print:hidden">
-                                        <span class="whitespace-nowrap tabular-nums">{{ $formatBreakdownMoney($line['remaining_amount']) }}</span>
+                                    <td class="crm-print-hide py-4 text-right font-semibold text-gray-900 font-mono pr-4 print:hidden">
+                                        <span class="whitespace-nowrap tabular-nums">{{ $formatMoney($line['remaining_amount']) }}</span>
                                     </td>
-                                    <td class="py-4 print:hidden">
+                                    <td class="crm-print-hide py-4 print:hidden">
                                         <span @class([
                                             'inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium',
                                             'bg-green-50 text-green-700' => $line['payment_state'] === 'paid',
@@ -268,9 +270,9 @@
                 </div>
 
                 {{-- Расчет итога --}}
-                <div class="border-t border-gray-100 pt-6 flex flex-col items-end gap-2 text-sm text-gray-600">
+                <div class="invoice-totals border-t border-gray-100 pt-6 flex flex-col items-end gap-2 text-sm text-gray-600">
                     <div class="flex justify-between w-64">
-                        <span>Итого сумма счета:</span>
+                        <span>Итоговая сумма счёта:</span>
 
                         <span class="font-bold text-gray-900 font-mono">
                             {{ $formatMoney($invoice->total_amount) }}
@@ -310,7 +312,7 @@
                 </div>
 
                 @if ($invoice->status === 'draft')
-                    <div class="mt-4 flex justify-end print:hidden">
+                    <div class="crm-print-hide mt-4 flex justify-end print:hidden">
                         <form action="{{ route('invoices.issue', $invoice) }}" method="POST"
                             class="w-64 max-w-full"
                             onsubmit="return confirm('Выставить этот инвойс? После этого свободное редактирование будет недоступно.')">
@@ -328,7 +330,7 @@
 
                 {{-- Примечание продавца --}}
                 @if (filled($invoice->comment))
-                    <div class="mt-6 pt-4 border-t border-gray-100 text-sm break-words">
+                    <div class="invoice-comment mt-6 pt-4 border-t border-gray-100 text-sm break-words">
                         <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Комментарий</div>
                         <p class="text-gray-600 whitespace-pre-line">{{ $invoice->comment }}</p>
                     </div>
@@ -339,7 +341,7 @@
         </div>
 
         {{-- Правая боковая колонка: Регистрация оплат и история (скрывается при печати) --}}
-        <div class="space-y-6 print:hidden">
+        <div class="invoice-sidebar crm-print-hide space-y-6 print:hidden">
 
             {{-- Форма добавления оплаты --}}
             @if (in_array($invoice->status, ['issued', 'partially_paid']) && $invoice->remaining_amount > 0)
@@ -399,8 +401,8 @@
                             <select name="status" id="status_payment" required
                                 class="w-full px-3 py-2 border @error('status') border-red-300 @else border-gray-200 @enderror rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition">
                                 <option value="confirmed"
-                                    {{ old('status', 'confirmed') === 'confirmed' ? 'selected' : '' }}>Проведен /
-                                    Подтвержден</option>
+                                    {{ old('status', 'confirmed') === 'confirmed' ? 'selected' : '' }}>Проведён /
+                                    подтверждён</option>
                                 <option value="pending" {{ old('status') === 'pending' ? 'selected' : '' }}>Ожидает
                                     подтверждения</option>
                             </select>
@@ -423,7 +425,7 @@
 
                         <button type="submit"
                             class="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg text-sm transition shadow-sm">
-                            Провести платеж
+                            Провести платёж
                         </button>
                     </form>
                 </div>
@@ -449,7 +451,7 @@
                 }"
                 x-init="if (paymentHistoryOpen) { document.body.style.overflow = 'hidden'; $nextTick(() => $refs.paymentHistoryClose.focus()); }"
                 x-on:keydown.escape.window="if (paymentHistoryOpen) closePaymentHistory()"
-                class="print:hidden">
+                class="invoice-payment-history crm-print-hide print:hidden">
 
                 {{-- Компактная карточка в основном потоке страницы --}}
                 <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -464,9 +466,9 @@
                         <div class="mt-4 text-sm">
                             <div class="text-xs text-gray-400">Последний платёж:</div>
                             <div class="mt-1 font-semibold text-gray-900">
-                                <span class="whitespace-nowrap tabular-nums">{{ $formatBreakdownMoney($latestPayment['amount']) }}</span>
+                                <span class="whitespace-nowrap tabular-nums">{{ $formatMoney($latestPayment['amount']) }}</span>
                                 <span class="font-normal text-gray-400">·</span>
-                                <span>{{ $latestPayment['status_label'] }}</span>
+                                <span>{{ $latestPayment['status'] === 'pending' ? 'Ожидает подтверждения' : $latestPayment['status_label'] }}</span>
                             </div>
                             @if ($latestPayment['payment_date'])
                                 <div class="mt-0.5 text-xs text-gray-500">
@@ -495,10 +497,10 @@
                 @if ($paymentBreakdown['payments_count'] > 0)
                     {{-- Drawer с полной историей --}}
                     <div x-show="paymentHistoryOpen" x-cloak id="payment-history-drawer"
-                        class="fixed inset-0 z-50"
+                        class="payment-history-drawer crm-print-hide fixed inset-0 z-50 print:hidden"
                         role="dialog" aria-modal="true" aria-labelledby="payment-history-title">
                         <div x-show="paymentHistoryOpen" x-transition.opacity
-                            class="absolute inset-0 bg-gray-900/40" @click="closePaymentHistory()"></div>
+                            class="payment-history-backdrop crm-print-hide absolute inset-0 bg-gray-900/40 print:hidden" @click="closePaymentHistory()"></div>
 
                         <aside x-show="paymentHistoryOpen"
                             x-transition:enter="transition ease-out duration-200"
@@ -508,7 +510,7 @@
                             x-transition:leave-start="translate-x-0"
                             x-transition:leave-end="translate-x-full"
                             @click.stop
-                            class="absolute inset-y-0 right-0 flex w-full max-w-[480px] flex-col bg-white shadow-2xl">
+                            class="absolute inset-y-0 right-0 flex w-full max-w-[480px] flex-col overflow-x-hidden bg-white shadow-2xl sm:w-[min(480px,calc(100vw-2rem))]">
                             <header class="sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-gray-200 bg-white px-5 py-4">
                                 <div>
                                     <h3 id="payment-history-title" class="font-bold text-gray-900">История платежей</h3>
@@ -524,7 +526,7 @@
                                 </button>
                             </header>
 
-                            <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+                            <div class="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-4 sm:px-5">
                 <div id="payment-history-list" class="space-y-3">
                     @forelse ($paymentBreakdown['paymentRows'] as $paymentRow)
                         @php
@@ -547,14 +549,14 @@
                         @endphp
 
                         <div x-data="{ cancelOpen: @js($shouldOpenCancellation), allocationOpen: false, cancelSubmitting: false }"
-                            class="rounded-lg border border-gray-200 p-4 text-sm">
+                            class="min-w-0 overflow-hidden rounded-lg border border-gray-200 p-4 text-sm">
 
                             <div class="flex items-center justify-between gap-3">
                                 <span
                                     class="font-semibold font-mono
                                         {{ $payment->status === 'cancelled' ? 'text-gray-400 line-through' : 'text-gray-900' }}">
 
-                                    {{ $formatBreakdownMoney($paymentRow['amount']) }}
+                                    {{ $formatMoney($paymentRow['amount']) }}
                                 </span>
 
                                 @include('partials.badge', [
@@ -584,18 +586,19 @@
                             @if ($payment->status === 'confirmed')
                                 <div class="mt-3 space-y-1 text-xs text-gray-600">
                                     <div>
-                                        Применено:
+                                        Применено к счёту:
                                         <span class="font-semibold text-gray-900 tabular-nums whitespace-nowrap">
-                                            {{ $formatBreakdownMoney($paymentRow['applied_amount']) }}
+                                            {{ $formatMoney($paymentRow['applied_amount']) }}
                                         </span>
                                     </div>
 
                                     @if ($paymentRow['unallocated_amount'] !== '0.00')
                                         <div>
-                                            Не распределено / Credit Balance:
+                                            Переплата по платежу:
                                             <span class="font-semibold text-blue-700 tabular-nums whitespace-nowrap">
-                                                {{ $formatBreakdownMoney($paymentRow['unallocated_amount']) }}
+                                                {{ $formatMoney($paymentRow['unallocated_amount']) }}
                                             </span>
+                                            <span class="block text-[11px] text-gray-400">Сумма сверх стоимости счёта</span>
                                         </div>
                                     @endif
                                 </div>
@@ -619,12 +622,12 @@
                                                             <div class="text-xs font-medium text-gray-800 break-words">
                                                                 {{ $allocation['line_description'] }}
                                                             </div>
-                                                            <div class="mt-0.5 text-[11px] text-gray-500">
+                                                            <div class="mt-0.5 break-words text-[11px] text-gray-500">
                                                                 {{ $allocation['line_type_label'] }}@if ($allocation['period_label']) · {{ $allocation['period_label'] }}@endif
                                                             </div>
                                                         </div>
                                                         <span class="shrink-0 whitespace-nowrap text-xs font-semibold text-gray-900 tabular-nums">
-                                                            {{ $formatBreakdownMoney($allocation['allocated_amount']) }}
+                                                            {{ $formatMoney($allocation['allocated_amount']) }}
                                                         </span>
                                                     </div>
                                                 @endforeach
@@ -756,7 +759,7 @@
                                             @endif
                                         </div>
 
-                                        <div class="flex justify-end gap-2">
+                                        <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                                             <button type="button" @click="cancelOpen = false"
                                                 class="px-3 py-2 text-xs font-medium text-gray-600
                                                        hover:text-gray-900 transition">

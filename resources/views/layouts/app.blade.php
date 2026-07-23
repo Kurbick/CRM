@@ -13,13 +13,61 @@
         [x-cloak] {
             display: none !important;
         }
+
+        @media print {
+            html,
+            body {
+                background: #fff !important;
+            }
+
+            .crm-print-hide {
+                display: none !important;
+            }
+
+            .crm-main {
+                width: 100% !important;
+                max-width: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+
+            .invoice-screen-grid {
+                display: block !important;
+            }
+
+            .invoice-document-column,
+            .invoice-document {
+                width: 100% !important;
+                max-width: none !important;
+            }
+
+            .invoice-document {
+                border: 0 !important;
+                border-radius: 0 !important;
+                box-shadow: none !important;
+                overflow: visible !important;
+                padding: 0 !important;
+            }
+
+            .invoice-print-only {
+                display: table-cell !important;
+            }
+
+            .invoice-line-row,
+            .invoice-payer,
+            .invoice-totals,
+            .invoice-comment {
+                break-inside: avoid;
+                page-break-inside: avoid;
+            }
+        }
     </style>
 </head>
 
 <body class="bg-gray-50 text-gray-900">
 
     {{-- Навигация --}}
-    <nav class="bg-white border-b border-gray-200 shadow-sm">
+    <nav class="crm-global-navigation crm-print-hide bg-white border-b border-gray-200 shadow-sm">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between h-16 items-center">
 
@@ -74,7 +122,7 @@
 
     {{-- Flash сообщения --}}
     @if (session('success'))
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+        <div class="crm-flash-message crm-print-hide max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
             <div class="bg-green-50 border border-green-200 text-green-800 rounded-lg px-4 py-3 text-sm">
                 {{ session('success') }}
             </div>
@@ -82,7 +130,7 @@
     @endif
 
     @if (session('error'))
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+        <div class="crm-flash-message crm-print-hide max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
             <div class="bg-red-50 border border-red-200 text-red-800 rounded-lg px-4 py-3 text-sm">
                 {{ session('error') }}
             </div>
@@ -90,12 +138,12 @@
     @endif
 
     {{-- Основной контент --}}
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <main class="crm-main max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         @yield('content')
     </main>
 
     {{-- Footer --}}
-    <footer class="border-t border-gray-200 mt-12">
+    <footer class="crm-global-footer crm-print-hide border-t border-gray-200 mt-12">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <p class="text-xs text-gray-400 text-center">CRM IT Company © {{ date('Y') }}</p>
         </div>

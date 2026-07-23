@@ -33,7 +33,7 @@ class InvoicePaymentBreakdownTest extends TestCase
             ->assertSee('30,00 ₼')
             ->assertSee('50,00 ₼')
             ->assertSee('Частично')
-            ->assertSee('Применено:')
+            ->assertSee('Применено к счёту:')
             ->assertSee('Показать распределение')
             ->assertSee('Текущее распределение')
             ->assertSee('Поддержка')
@@ -51,7 +51,8 @@ class InvoicePaymentBreakdownTest extends TestCase
 
         $this->get(route('invoices.show', $invoice))
             ->assertOk()
-            ->assertSee('Не распределено / Credit Balance:')
+            ->assertSee('Переплата по платежу:')
+            ->assertSee('Сумма сверх стоимости счёта')
             ->assertSee('30,00 ₼')
             ->assertSee('Будет распределён после подтверждения.')
             ->assertSee('Отменён:');
