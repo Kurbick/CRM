@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Редактировать счёт')
+@section('title', 'Редактировать инвойс')
 
 @section('content')
 @php
@@ -29,8 +29,14 @@
 @endphp
 <div class="mb-6">
     <a href="{{ route('invoices.show', ['invoice' => $invoice, ...$companyContext['query']]) }}" class="text-sm text-gray-500 hover:text-gray-700">← Назад к просмотру</a>
-    <h1 class="mt-2 text-2xl font-bold text-gray-900">Редактировать счёт</h1>
+    <h1 class="mt-2 text-2xl font-bold text-gray-900">Редактировать инвойс</h1>
 </div>
+
+@if ($editability['has_pending_payments'])
+    <div class="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        По инвойсу есть платёж, ожидающий подтверждения. После изменения инвойса сумма зарегистрированного платежа не изменится.
+    </div>
+@endif
 
 <form method="POST" action="{{ route('invoices.update', $invoice) }}" x-data="{
     lines: @js($editLines),
@@ -114,7 +120,8 @@
                             <input type="hidden" :name="`lines[${index}][period_end]`" :value="line.period_end || ''">
                             <div class="mb-2 flex items-center justify-between">
                                 <div><p class="text-xs font-medium text-gray-500" x-text="type(line)"></p><p x-show="line.subscription_id" class="text-xs text-gray-500">Расчётный период: <span x-text="`${formatDate(line.period_start)} — ${formatDate(line.period_end)}`"></span></p></div>
-                                <button type="button" x-on:click="removeLine(index)" class="text-sm text-red-500 hover:text-red-700">Удалить</button>
+                                <button type="button" x-show="@js($invoice->status !== 'issued') || (!line.subscription_id && !line.order_id)"
+                                    x-on:click="removeLine(index)" class="text-sm text-red-500 hover:text-red-700">Удалить</button>
                             </div>
                             <div class="grid grid-cols-1 gap-3 sm:grid-cols-12">
                                 <div class="sm:col-span-8"><label class="mb-1 block text-xs text-gray-500">Описание</label><input :name="`lines[${index}][description]`" x-model="line.description" required maxlength="255" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500"></div>

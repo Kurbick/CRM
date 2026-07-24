@@ -12,6 +12,9 @@
             ? request('direction')
             : 'desc';
         $preservedFilters = request()->only(['search', 'company_id', 'status', 'overdue']);
+        if ($activeStatusFilter === '') {
+            unset($preservedFilters['status']);
+        }
 
         $sortUrl = function (string $column) use ($currentSort, $currentDirection, $preservedFilters): string {
             $direction = $currentSort === $column && $currentDirection === 'desc' ? 'asc' : 'desc';
@@ -155,11 +158,10 @@
             {{-- Фильтр по статусу --}}
             <div class="relative w-full md:w-44" x-data="{
                 open: false,
-                selectedStatus: @js((string) request('status', '')),
+                selectedStatus: @js($activeStatusFilter),
                 statuses: [
                     { value: '', label: 'Все статусы' },
                     { value: 'draft', label: 'Черновик' },
-                    { value: 'issued', label: 'Выставлен' },
                     { value: 'partially_paid', label: 'Частично оплачен' },
                     { value: 'paid', label: 'Оплачен' },
                     { value: 'cancelled', label: 'Отменён' },

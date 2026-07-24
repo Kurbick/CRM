@@ -13,7 +13,9 @@ use App\Models\InvoiceLine;
 use App\Models\Order;
 use App\Models\Subscription;
 use App\Services\InvoiceDueDateCalculator;
+use App\Services\InvoiceEditabilityService;
 use App\Services\InvoicePaymentBreakdownPresenter;
+use App\Services\InvoicePaymentAvailabilityService;
 use App\Services\InvoicePaymentSourceResolver;
 use App\Services\InvoicePaymentAllocationWriter;
 use App\Support\CompanyPageContext;
@@ -23,6 +25,8 @@ class InvoiceController extends Controller
 {
     public function __construct(
         private readonly InvoiceDueDateCalculator $dueDateCalculator,
+        private readonly InvoiceEditabilityService $editabilityService,
+        private readonly InvoicePaymentAvailabilityService $paymentAvailabilityService,
         private readonly InvoicePaymentBreakdownPresenter $paymentBreakdownPresenter,
         private readonly InvoicePaymentSourceResolver $paymentSourceResolver
     ) {
@@ -45,7 +49,6 @@ class InvoiceController extends Controller
 
         $allowedStatuses = [
             'draft',
-            'issued',
             'partially_paid',
             'paid',
             'cancelled',
@@ -78,7 +81,9 @@ class InvoiceController extends Controller
             });
         }
 
-        if (in_array($request->input('status'), $allowedStatuses, true)) {
+        $hasAllowedStatusFilter = in_array($request->input('status'), $allowedStatuses, true);
+        $activeStatusFilter = $hasAllowedStatusFilter ? (string) $request->input('status') : '';
+        if ($hasAllowedStatusFilter) {
             $query->where('status', $request->input('status'));
         }
 
@@ -105,11 +110,16 @@ class InvoiceController extends Controller
             $direction = 'desc';
         }
 
+        $paginationParameters = $request->query();
+        if (!$hasAllowedStatusFilter) {
+            unset($paginationParameters['status']);
+        }
+
         $invoices = $query
             ->orderBy("invoices.{$sort}", $direction)
             ->orderByDesc('invoices.id')
             ->paginate(10)
-            ->withQueryString();
+            ->appends($paginationParameters);
 
         $companies = Company::query()
             ->orderBy('name')
@@ -123,7 +133,12 @@ class InvoiceController extends Controller
                 $invoice->id => $this->paymentSourceResolver->fromAggregates($invoice),
             ]);
 
-        return view('invoices.index', compact('invoices', 'companies', 'invoicePaymentSources'));
+        return view('invoices.index', compact(
+            'invoices',
+            'companies',
+            'invoicePaymentSources',
+            'activeStatusFilter'
+        ));
     }
 
     /**
@@ -542,13 +557,17 @@ class InvoiceController extends Controller
         $paymentBreakdown = $this->paymentBreakdownPresenter->present($invoice);
         $paymentsById = $invoice->payments->keyBy('id');
         $paymentSource = $this->paymentSourceResolver->fromLoadedInvoice($invoice);
+        $paymentAvailability = $this->paymentAvailabilityService->evaluate($invoice);
+        $editability = $this->editabilityService->evaluate($invoice);
 
         return view('invoices.show', compact(
             'invoice',
             'companyContext',
             'paymentBreakdown',
             'paymentsById',
-            'paymentSource'
+            'paymentSource',
+            'paymentAvailability',
+            'editability'
         ));
     }
 
@@ -558,26 +577,13 @@ class InvoiceController extends Controller
     public function edit(Request $request, Invoice $invoice)
     {
         $companyContext = $this->invoiceCompanyContext($request, $invoice);
-        if ($invoice->status !== 'draft') {
-            return redirect()
-                ->route('invoices.show', ['invoice' => $invoice, ...$companyContext['query']])
-                ->with(
-                    'error',
-                    'Редактировать можно только черновик инвойса.'
-                );
-        }
+        $invoice->loadMissing('payments:id,invoice_id,status');
+        $editability = $this->editabilityService->evaluate($invoice);
 
-        if (
-            $invoice->payments()
-            ->where('status', 'confirmed')
-            ->exists()
-        ) {
+        if (!$editability['editable']) {
             return redirect()
                 ->route('invoices.show', ['invoice' => $invoice, ...$companyContext['query']])
-                ->with(
-                    'error',
-                    'Нельзя редактировать инвойс с подтверждёнными платежами.'
-                );
+                ->with('error', $this->editabilityMessage($editability['reason']));
         }
 
         $invoice->load([
@@ -587,7 +593,7 @@ class InvoiceController extends Controller
             'contract',
         ]);
 
-        return view('invoices.edit', compact('invoice', 'companyContext'));
+        return view('invoices.edit', compact('invoice', 'companyContext', 'editability'));
     }
 
     /**
@@ -598,28 +604,6 @@ class InvoiceController extends Controller
         Invoice $invoice
     ) {
         $companyContext = $this->invoiceCompanyContext($request, $invoice);
-        if ($invoice->status !== 'draft') {
-            return redirect()
-                ->route('invoices.show', ['invoice' => $invoice, ...$companyContext['query']])
-                ->with(
-                    'error',
-                    'Изменять можно только черновик инвойса.'
-                );
-        }
-
-        if (
-            $invoice->payments()
-            ->where('status', 'confirmed')
-            ->exists()
-        ) {
-            return redirect()
-                ->route('invoices.show', ['invoice' => $invoice, ...$companyContext['query']])
-                ->with(
-                    'error',
-                    'Нельзя изменять инвойс с подтверждёнными платежами.'
-                );
-        }
-
         $validated = $request->validate([
             'invoice_number' => [
                 'required',
@@ -629,45 +613,70 @@ class InvoiceController extends Controller
             ],
             'issue_date' => ['required', 'date'],
             'due_date' => ['nullable', 'date'],
-            'seller_name' => ['nullable', 'string', 'max:255'],
-            'seller_voen' => ['nullable', 'string', 'max:20'],
-            'seller_bank_name' => ['nullable', 'string', 'max:255'],
-            'seller_iban' => ['nullable', 'string', 'max:50'],
-            'seller_bank_code' => ['nullable', 'string', 'max:20'],
-            'seller_bank_voen' => ['nullable', 'string', 'max:20'],
-            'seller_swift' => ['nullable', 'string', 'max:20'],
             'comment' => ['nullable', 'string'],
             'lines' => ['required', 'array', 'min:1'],
-            'lines.*.id' => ['nullable', 'integer'],
+            'lines.*.id' => ['nullable', 'integer', 'distinct'],
             'lines.*.description' => ['required', 'string', 'max:255'],
-            'lines.*.amount' => ['required', 'numeric', 'min:0.01'],
+            'lines.*.amount' => ['required', 'numeric', 'decimal:0,2', 'min:0.01'],
             'lines.*.subscription_id' => ['nullable', 'integer'],
             'lines.*.order_id' => ['nullable', 'integer'],
             'lines.*.period_start' => ['nullable', 'date'],
             'lines.*.period_end' => ['nullable', 'date'],
         ]);
 
-        DB::transaction(function () use (
+        $blockingMessage = DB::transaction(function () use (
             $invoice,
             $validated
-        ) {
+        ): ?string {
             $lockedInvoice = Invoice::query()
                 ->whereKey($invoice->id)
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            if ($lockedInvoice->status !== 'draft') {
+            $editability = $this->editabilityService->evaluate($lockedInvoice);
+            if (!$editability['editable']) {
+                return $this->editabilityMessage($editability['reason']);
+            }
+
+            $paymentAvailability = $this->paymentAvailabilityService->evaluate($lockedInvoice);
+            $newTotalMinor = $this->paymentAvailabilityService->sumToMinorUnits(
+                collect($validated['lines'])->pluck('amount')
+            );
+
+            if ($newTotalMinor < $paymentAvailability['pending_minor']) {
                 throw ValidationException::withMessages([
-                    'status' => 'Изменять можно только черновик инвойса.',
+                    'lines' => 'Сумма инвойса не может быть меньше суммы ожидающих платежей: '
+                        .$this->paymentAvailabilityService->formatMinorUnits($paymentAvailability['pending_minor']).'.',
                 ]);
             }
 
-            $originalLines = $invoice->lines()
+            $originalLines = $lockedInvoice->lines()
                 ->lockForUpdate()
                 ->get()
                 ->keyBy('id');
 
-            $submittedExistingIds = [];
+            $submittedExistingIds = collect($validated['lines'])
+                ->pluck('id')
+                ->filter()
+                ->map(fn($lineId): int => (int) $lineId)
+                ->values();
+
+            $lineIdsToDelete = $originalLines
+                ->keys()
+                ->diff($submittedExistingIds);
+
+            if (
+                $lockedInvoice->status === 'issued'
+                && $originalLines->only($lineIdsToDelete->all())->contains(
+                    fn(InvoiceLine $line): bool => $line->subscription_id !== null || $line->order_id !== null
+                )
+            ) {
+                throw ValidationException::withMessages([
+                    'lines' => 'Нельзя удалить связанную позицию из уже выставленного инвойса.',
+                ]);
+            }
+
+            $processedExistingIds = [];
 
             foreach ($validated['lines'] as $index => $line) {
                 $lineId = !empty($line['id'])
@@ -717,7 +726,7 @@ class InvoiceController extends Controller
 
                     if (
                         $linkedContractId !== null
-                        && (int) $linkedContractId !== (int) $invoice->contract_id
+                        && (int) $linkedContractId !== (int) $lockedInvoice->contract_id
                     ) {
                         throw ValidationException::withMessages([
                             "lines.{$index}.id" =>
@@ -730,7 +739,7 @@ class InvoiceController extends Controller
                         'amount' => $line['amount'],
                     ]);
 
-                    $submittedExistingIds[] = $lineId;
+                    $processedExistingIds[] = $lineId;
 
                     continue;
                 }
@@ -751,7 +760,7 @@ class InvoiceController extends Controller
              * Новая строка из формы редактирования
              * создаётся как ручная позиция.
              */
-                $invoice->lines()->create([
+                $lockedInvoice->lines()->create([
                     'description' => $line['description'],
                     'amount' => $line['amount'],
                     'subscription_id' => null,
@@ -765,12 +774,8 @@ class InvoiceController extends Controller
          * Удаляем только старые строки,
          * которые пользователь убрал из формы.
          */
-            $lineIdsToDelete = $originalLines
-                ->keys()
-                ->diff($submittedExistingIds);
-
             if ($lineIdsToDelete->isNotEmpty()) {
-                $invoice->lines()
+                $lockedInvoice->lines()
                     ->whereIn(
                         'id',
                         $lineIdsToDelete->all()
@@ -779,7 +784,7 @@ class InvoiceController extends Controller
             }
 
             $remainingLinkedLines = $originalLines
-                ->only($submittedExistingIds);
+                ->only($processedExistingIds);
 
             $validated['due_date'] = $this->dueDateCalculator->calculate(
                 issueDate: $validated['issue_date'],
@@ -788,9 +793,6 @@ class InvoiceController extends Controller
                 orderIds: $remainingLinkedLines->pluck('order_id')->filter()->all(),
                 subscriptionIds: $remainingLinkedLines->pluck('subscription_id')->filter()->all()
             );
-
-            $totalAmount = collect($validated['lines'])
-                ->sum(fn($line) => (float) $line['amount']);
 
             /*
          * Снимок компании и договора не изменяем.
@@ -808,17 +810,24 @@ class InvoiceController extends Controller
                 ])
                 ->toArray();
 
-            $invoiceData['status'] = 'draft';
-            $invoiceData['total_amount'] = $totalAmount;
+            $invoiceData['total_amount'] = $this->paymentAvailabilityService->fromMinorUnits($newTotalMinor);
 
-            $invoice->update($invoiceData);
+            $lockedInvoice->update($invoiceData);
+
+            return null;
         });
+
+        if ($blockingMessage !== null) {
+            return redirect()
+                ->route('invoices.show', ['invoice' => $invoice, ...$companyContext['query']])
+                ->with('error', $blockingMessage);
+        }
 
         return redirect()
             ->route('invoices.show', ['invoice' => $invoice, ...$companyContext['query']])
             ->with(
                 'success',
-                'Черновик инвойса успешно обновлён.'
+                'Инвойс успешно обновлён.'
             );
     }
 
@@ -1497,5 +1506,14 @@ class InvoiceController extends Controller
         $tab = $request->input('tab') === 'payments' ? 'payments' : 'invoices';
 
         return CompanyPageContext::resolve($request, $invoice->company, $tab);
+    }
+
+    private function editabilityMessage(?string $reason): string
+    {
+        return match ($reason) {
+            'confirmed_payment' => 'Инвойс уже получил оплату и больше не может быть изменён.',
+            'cancelled' => 'Отменённый инвойс нельзя редактировать.',
+            default => 'Инвойс в текущем состоянии нельзя редактировать.',
+        };
     }
 }

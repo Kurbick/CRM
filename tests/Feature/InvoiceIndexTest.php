@@ -46,7 +46,7 @@ class InvoiceIndexTest extends TestCase
 
     public function test_each_allowed_status_is_applied(): void
     {
-        $statuses = ['draft', 'issued', 'partially_paid', 'paid', 'cancelled'];
+        $statuses = ['draft', 'partially_paid', 'paid', 'cancelled'];
 
         foreach ($statuses as $status) {
             $this->invoice(['status' => $status, 'invoice_number' => 'INV-'.$status]);
@@ -69,6 +69,19 @@ class InvoiceIndexTest extends TestCase
         $this->get(route('invoices.index', ['status' => 'not-a-status']))
             ->assertOk()
             ->assertSee($invoice->invoice_number);
+    }
+
+    public function test_issued_filter_is_not_offered_and_is_ignored_by_backend(): void
+    {
+        $issued = $this->invoice(['status' => 'issued', 'invoice_number' => 'INV-ISSUED']);
+        $draft = $this->invoice(['status' => 'draft', 'invoice_number' => 'INV-DRAFT']);
+
+        $response = $this->get(route('invoices.index', ['status' => 'issued']))->assertOk();
+
+        $response->assertSee($issued->invoice_number)
+            ->assertSee($draft->invoice_number)
+            ->assertDontSee("{ value: 'issued', label: 'Выставлен' }", false)
+            ->assertSee('Выставлен');
     }
 
     public function test_sorts_issue_date_descending(): void
@@ -105,15 +118,15 @@ class InvoiceIndexTest extends TestCase
     public function test_search_company_status_and_sort_work_together(): void
     {
         $companyId = $this->company('Combined Company');
-        $this->invoice(['company_id' => $companyId, 'status' => 'issued', 'payer_name' => 'Shared Payer', 'issue_date' => '2026-01-01', 'invoice_number' => 'INV-FIRST']);
-        $this->invoice(['company_id' => $companyId, 'status' => 'issued', 'payer_name' => 'Shared Payer', 'issue_date' => '2026-02-01', 'invoice_number' => 'INV-SECOND']);
-        $this->invoice(['company_id' => $companyId, 'status' => 'paid', 'payer_name' => 'Shared Payer', 'invoice_number' => 'INV-WRONG-STATUS']);
-        $this->invoice(['status' => 'issued', 'payer_name' => 'Shared Payer', 'invoice_number' => 'INV-WRONG-COMPANY']);
+        $this->invoice(['company_id' => $companyId, 'status' => 'paid', 'payer_name' => 'Shared Payer', 'issue_date' => '2026-01-01', 'invoice_number' => 'INV-FIRST']);
+        $this->invoice(['company_id' => $companyId, 'status' => 'paid', 'payer_name' => 'Shared Payer', 'issue_date' => '2026-02-01', 'invoice_number' => 'INV-SECOND']);
+        $this->invoice(['company_id' => $companyId, 'status' => 'draft', 'payer_name' => 'Shared Payer', 'invoice_number' => 'INV-WRONG-STATUS']);
+        $this->invoice(['status' => 'paid', 'payer_name' => 'Shared Payer', 'invoice_number' => 'INV-WRONG-COMPANY']);
 
         $this->get(route('invoices.index', [
             'search' => 'Shared Payer',
             'company_id' => $companyId,
-            'status' => 'issued',
+            'status' => 'paid',
             'sort' => 'issue_date',
             'direction' => 'asc',
         ]))->assertOk()
@@ -129,7 +142,7 @@ class InvoiceIndexTest extends TestCase
         for ($index = 1; $index <= 11; $index++) {
             $this->invoice([
                 'company_id' => $companyId,
-                'status' => 'issued',
+                'status' => 'paid',
                 'payer_name' => 'Pagination Match',
                 'invoice_number' => sprintf('PAGE-%02d', $index),
             ]);
@@ -138,7 +151,7 @@ class InvoiceIndexTest extends TestCase
         $url = route('invoices.index', [
             'search' => 'Pagination Match',
             'company_id' => $companyId,
-            'status' => 'issued',
+            'status' => 'paid',
             'sort' => 'due_date',
             'direction' => 'asc',
             'page' => 2,
@@ -147,7 +160,7 @@ class InvoiceIndexTest extends TestCase
         $this->get(route('invoices.index', [
             'search' => 'Pagination Match',
             'company_id' => $companyId,
-            'status' => 'issued',
+            'status' => 'paid',
             'sort' => 'due_date',
             'direction' => 'asc',
         ]))->assertOk()->assertSee($url);

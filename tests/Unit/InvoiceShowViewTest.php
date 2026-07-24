@@ -61,6 +61,23 @@ class InvoiceShowViewTest extends TestCase
         $this->assertStringContainsString("@method('DELETE')", $source);
     }
 
+    public function test_issue_action_has_no_obsolete_browser_confirmation(): void
+    {
+        $source = file_get_contents(resource_path('views/invoices/show.blade.php'));
+        $issueRoutePosition = strpos($source, "route('invoices.issue', \$invoice)");
+        $issueButtonPosition = strpos($source, 'Выставить счёт', $issueRoutePosition);
+        $issueForm = substr($source, $issueRoutePosition, $issueButtonPosition - $issueRoutePosition);
+
+        $this->assertStringNotContainsString('confirm(', $issueForm);
+        $this->assertStringNotContainsString(
+            'После этого свободное редактирование будет недоступно',
+            $source
+        );
+        $this->assertStringContainsString('method="POST"', $issueForm);
+        $this->assertStringContainsString('@csrf', $issueForm);
+        $this->assertStringContainsString('Выставить счёт', $source);
+    }
+
     public function test_payment_breakdown_columns_and_current_allocation_details_are_present(): void
     {
         $source = file_get_contents(resource_path('views/invoices/show.blade.php'));

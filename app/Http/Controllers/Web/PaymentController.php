@@ -8,6 +8,7 @@ use App\Models\CreditBalanceEntry;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Services\InvoicePaymentAllocationWriter;
+use App\Services\InvoicePaymentAvailabilityService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -17,7 +18,8 @@ use Illuminate\Validation\ValidationException;
 class PaymentController extends Controller
 {
     public function __construct(
-        private readonly InvoicePaymentAllocationWriter $allocationWriter
+        private readonly InvoicePaymentAllocationWriter $allocationWriter,
+        private readonly InvoicePaymentAvailabilityService $paymentAvailabilityService
     ) {
     }
 
@@ -35,13 +37,14 @@ class PaymentController extends Controller
             ],
 
             /*
-             * Максимального ограничения нет:
-             * платёж может превышать остаток по счёту.
-             * Разница будет зачислена в Credit Balance.
+             * Без ожидающих платежей максимального ограничения нет:
+             * переплата по-прежнему зачисляется в Credit Balance.
+             * При наличии pending верхняя граница проверяется под lock ниже.
              */
             'amount' => [
                 'required',
                 'numeric',
+                'decimal:0,2',
                 'min:0.01',
             ],
 
@@ -72,6 +75,9 @@ class PaymentController extends Controller
 
             'amount.numeric' =>
             'Сумма платежа должна быть числом.',
+
+            'amount.decimal' =>
+            'Сумма платежа должна содержать не более двух знаков после запятой.',
 
             'amount.min' =>
             'Сумма платежа должна быть больше нуля.',
@@ -123,14 +129,26 @@ class PaymentController extends Controller
                 ]);
             }
 
+            $paymentAvailability = $this->paymentAvailabilityService->evaluate($lockedInvoice);
+            $paymentAmountMinor = $this->paymentAvailabilityService->toMinorUnits($validated['amount']);
+
+            if (
+                $paymentAvailability['pending_minor'] > 0
+                && $paymentAmountMinor > $paymentAvailability['available_minor']
+            ) {
+                throw ValidationException::withMessages([
+                    'amount' => 'Сумма платежа не может превышать остаток '
+                        .$this->paymentAvailabilityService->formatMinorUnits(
+                            $paymentAvailability['available_minor']
+                        ).'.',
+                ]);
+            }
+
             $payment = Payment::query()->create([
                 'company_id' => $lockedInvoice->company_id,
                 'invoice_id' => $lockedInvoice->id,
                 'payment_date' => $validated['payment_date'],
-                'amount' => round(
-                    (float) $validated['amount'],
-                    2
-                ),
+                'amount' => $this->paymentAvailabilityService->fromMinorUnits($paymentAmountMinor),
                 'payment_method' =>
                 $validated['payment_method'],
                 'status' => $validated['status'],

@@ -167,9 +167,9 @@ class InvoiceUpdateTest extends TestCase
         ]);
     }
 
-    public function test_issued_and_paid_invoice_lines_cannot_be_changed(): void
+    public function test_paid_invoice_lines_cannot_be_changed(): void
     {
-        foreach (['issued', 'paid'] as $status) {
+        foreach (['paid'] as $status) {
             [$invoice] = $this->invoice(strtoupper($status), $status);
             $line = $invoice->lines()->create([
                 'description' => 'Locked',
@@ -192,6 +192,182 @@ class InvoiceUpdateTest extends TestCase
                 'amount' => 20,
             ]);
         }
+    }
+
+    public function test_issued_linked_line_cannot_be_removed_and_transaction_rolls_back(): void
+    {
+        [$invoice, $contractId] = $this->invoice('ISSUED-LINK', 'issued');
+        $subscriptionId = $this->subscription($contractId);
+        $linked = $invoice->lines()->create([
+            'subscription_id' => $subscriptionId,
+            'description' => 'Linked subscription',
+            'amount' => 100,
+            'period_start' => '2026-07-01',
+            'period_end' => '2026-07-31',
+        ]);
+        $manual = $invoice->lines()->create(['description' => 'Manual', 'amount' => 20]);
+
+        $this->from(route('invoices.edit', $invoice))
+            ->put(route('invoices.update', $invoice), $this->payload($invoice, [[
+                'id' => $manual->id,
+                'description' => 'Changed before failure',
+                'amount' => 30,
+                'subscription_id' => null,
+                'order_id' => null,
+                'period_start' => null,
+                'period_end' => null,
+            ]]))
+            ->assertRedirect(route('invoices.edit', $invoice))
+            ->assertSessionHasErrors('lines');
+
+        $this->assertSame('Linked subscription', $linked->fresh()->description);
+        $this->assertSame('Manual', $manual->fresh()->description);
+        $this->assertSame('100.00', $invoice->fresh()->total_amount);
+    }
+
+    public function test_issued_linked_line_can_change_user_fields_and_manual_lines_can_be_replaced(): void
+    {
+        [$invoice, $contractId] = $this->invoice('ISSUED-EDIT', 'issued');
+        $orderId = $this->order($contractId);
+        $linked = $invoice->lines()->create([
+            'order_id' => $orderId,
+            'description' => 'Linked order',
+            'amount' => 80,
+        ]);
+        $manual = $invoice->lines()->create(['description' => 'Old manual', 'amount' => 20]);
+
+        $this->put(route('invoices.update', $invoice), $this->payload($invoice, [[
+            'id' => $linked->id,
+            'description' => 'Updated linked order',
+            'amount' => 90,
+            'subscription_id' => null,
+            'order_id' => $orderId,
+            'period_start' => null,
+            'period_end' => null,
+        ], [
+            'id' => null,
+            'description' => 'New manual',
+            'amount' => 15,
+            'subscription_id' => null,
+            'order_id' => null,
+            'period_start' => null,
+            'period_end' => null,
+        ]]))->assertRedirect(route('invoices.show', $invoice));
+
+        $this->assertDatabaseMissing('invoice_lines', ['id' => $manual->id]);
+        $this->assertDatabaseHas('invoice_lines', [
+            'id' => $linked->id,
+            'order_id' => $orderId,
+            'description' => 'Updated linked order',
+            'amount' => 90,
+        ]);
+        $this->assertDatabaseHas('invoice_lines', [
+            'invoice_id' => $invoice->id,
+            'description' => 'New manual',
+            'subscription_id' => null,
+            'order_id' => null,
+        ]);
+        $this->assertSame('issued', $invoice->fresh()->status);
+    }
+
+    public function test_draft_can_remove_linked_and_manual_lines_and_add_manual_line(): void
+    {
+        [$invoice, $contractId] = $this->invoice('DRAFT-DELETE', 'draft');
+        $subscription = $invoice->lines()->create([
+            'subscription_id' => $this->subscription($contractId),
+            'description' => 'Subscription to remove',
+            'amount' => 40,
+            'period_start' => '2026-07-01',
+            'period_end' => '2026-07-31',
+        ]);
+        $order = $invoice->lines()->create([
+            'order_id' => $this->order($contractId),
+            'description' => 'Order to remove',
+            'amount' => 40,
+        ]);
+        $manual = $invoice->lines()->create(['description' => 'Manual to remove', 'amount' => 20]);
+
+        $this->put(route('invoices.update', $invoice), $this->payload($invoice, [[
+            'id' => null,
+            'description' => 'New manual',
+            'amount' => 55,
+            'subscription_id' => null,
+            'order_id' => null,
+            'period_start' => null,
+            'period_end' => null,
+        ]]))->assertRedirect(route('invoices.show', $invoice));
+
+        foreach ([$subscription, $order, $manual] as $removedLine) {
+            $this->assertDatabaseMissing('invoice_lines', ['id' => $removedLine->id]);
+        }
+        $this->assertDatabaseHas('invoice_lines', [
+            'invoice_id' => $invoice->id,
+            'description' => 'New manual',
+            'amount' => 55,
+        ]);
+        $this->assertSame('draft', $invoice->fresh()->status);
+    }
+
+    public function test_issued_subscription_period_cannot_be_changed(): void
+    {
+        [$invoice, $contractId] = $this->invoice('ISSUED-PERIOD', 'issued');
+        $subscriptionId = $this->subscription($contractId);
+        $line = $invoice->lines()->create([
+            'subscription_id' => $subscriptionId,
+            'description' => 'Subscription',
+            'amount' => 100,
+            'period_start' => '2026-07-01',
+            'period_end' => '2026-07-31',
+        ]);
+
+        $this->from(route('invoices.edit', $invoice))
+            ->put(route('invoices.update', $invoice), $this->payload($invoice, [[
+                'id' => $line->id,
+                'description' => 'Tampered',
+                'amount' => 125,
+                'subscription_id' => $subscriptionId,
+                'order_id' => null,
+                'period_start' => '2026-08-01',
+                'period_end' => '2026-08-31',
+            ]]))
+            ->assertRedirect(route('invoices.edit', $invoice))
+            ->assertSessionHasErrors('lines.0.id');
+
+        $line->refresh();
+        $this->assertSame('2026-07-01', $line->period_start->toDateString());
+        $this->assertSame('2026-07-31', $line->period_end->toDateString());
+        $this->assertSame('Subscription', $line->description);
+    }
+
+    public function test_issued_subscription_edit_does_not_advance_billing_date_or_run_issue_side_effects(): void
+    {
+        [$invoice, $contractId] = $this->invoice('ISSUED-SUBSCRIPTION', 'issued');
+        $subscriptionId = $this->subscription($contractId);
+        $line = $invoice->lines()->create([
+            'subscription_id' => $subscriptionId,
+            'description' => 'Subscription',
+            'amount' => 100,
+            'period_start' => '2026-07-01',
+            'period_end' => '2026-07-31',
+        ]);
+
+        $this->put(route('invoices.update', $invoice), $this->payload($invoice, [[
+            'id' => $line->id,
+            'description' => 'Updated subscription',
+            'amount' => 125,
+            'subscription_id' => $subscriptionId,
+            'order_id' => null,
+            'period_start' => '2026-07-01',
+            'period_end' => '2026-07-31',
+        ]]))->assertRedirect(route('invoices.show', $invoice));
+
+        $this->assertSame(
+            '2026-07-01',
+            DB::table('subscriptions')->where('id', $subscriptionId)->value('next_billing_date')
+        );
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertDatabaseCount('credit_balance_entries', 0);
+        $this->assertSame('issued', $invoice->fresh()->status);
     }
 
     private function invoice(string $suffix = 'MAIN', string $status = 'draft'): array

@@ -156,6 +156,7 @@ class InvoicePaymentLifecycleTest extends TestCase
         $this->assertSame('cancelled', $payment->fresh()->status);
         $this->assertSame('issued', $invoice->fresh()->status);
         $this->assertSame(0.0, $invoice->fresh()->paid_amount);
+        $this->get(route('invoices.edit', $invoice))->assertOk();
     }
 
     public function test_cancelling_overpayment_creates_top_up_reversal(): void

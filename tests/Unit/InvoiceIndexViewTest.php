@@ -51,4 +51,15 @@ class InvoiceIndexViewTest extends TestCase
         $this->assertStringNotContainsString('creditBalanceEntries()', $source);
         $this->assertStringNotContainsString('allocations()', $source);
     }
+
+    public function test_issued_status_is_not_available_in_user_filter(): void
+    {
+        $source = file_get_contents(resource_path('views/invoices/index.blade.php'));
+
+        $this->assertStringNotContainsString("{ value: 'issued', label: 'Выставлен' }", $source);
+        $this->assertStringContainsString('selectedStatus: @js($activeStatusFilter)', $source);
+        $this->assertStringContainsString("unset(\$preservedFilters['status'])", $source);
+        $this->assertStringContainsString("{ value: 'partially_paid', label: 'Частично оплачен' }", $source);
+        $this->assertStringContainsString("{ value: 'cancelled', label: 'Отменён' }", $source);
+    }
 }

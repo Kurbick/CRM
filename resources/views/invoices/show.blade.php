@@ -74,14 +74,16 @@
             </button>
 
             <div class="flex items-center gap-2">
-                @if ($invoice->status === 'draft')
+                @if ($editability['editable'])
                     <a href="{{ route('invoices.edit', $invoice) }}{{ $companyContext['active'] ? '?'.http_build_query($companyContext['query']) : '' }}"
                         class="px-4 py-2 border border-gray-200 text-gray-600
                    text-sm font-medium rounded-lg hover:bg-gray-50 transition">
 
                         Редактировать
                     </a>
+                @endif
 
+                @if ($invoice->status === 'draft')
                     <form action="{{ route('invoices.destroy', $invoice) }}" method="POST"
                         onsubmit="return confirm('Вы уверены, что хотите удалить этот счет? Действие необратимо.')">
                         @csrf
@@ -324,8 +326,7 @@
                 @if ($invoice->status === 'draft')
                     <div class="crm-print-hide mt-4 flex justify-end print:hidden">
                         <form action="{{ route('invoices.issue', $invoice) }}" method="POST"
-                            class="w-64 max-w-full"
-                            onsubmit="return confirm('Выставить этот инвойс? После этого свободное редактирование будет недоступно.')">
+                            class="w-64 max-w-full">
 
                             @csrf
 
@@ -375,12 +376,12 @@
                             <label for="amount" class="block text-xs font-semibold text-gray-500 uppercase mb-1">Сумма
                                 (₼) <span class="text-red-500">*</span></label>
                             <input type="number" name="amount" id="amount"
-                                value="{{ old('amount', $invoice->remaining_amount) }}" required step="0.01"
-                                min="0.01"
+                                value="{{ old('amount', $paymentAvailability['available_amount']) }}" required step="0.01"
+                                min="0.01" @disabled($paymentAvailability['available_minor'] === 0)
                                 class="w-full px-3 py-2 border @error('amount') border-red-300 @else border-gray-200 @enderror rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition font-mono"
                                 placeholder="0.00">
                             <p class="text-[10px] text-gray-400 mt-1">Остаток к оплате:
-                                {{ $formatMoney($invoice->remaining_amount) }}</p>
+                                {{ $formatMoney($paymentAvailability['available_amount']) }}</p>
                             @error('amount')
                                 <p class="text-xs text-red-500 mt-1">{{ $message }}</p>
                             @enderror
@@ -434,7 +435,8 @@
                         </div>
 
                         <button type="submit"
-                            class="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg text-sm transition shadow-sm">
+                            @disabled($paymentAvailability['available_minor'] === 0)
+                            class="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg text-sm transition shadow-sm disabled:cursor-not-allowed disabled:opacity-50">
                             Провести платёж
                         </button>
                     </form>
