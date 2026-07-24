@@ -345,12 +345,17 @@ class InvoiceDueDateTest extends TestCase
             ->once()
             ->andThrow(new \RuntimeException('Broken linked invoice'));
 
+        $thrown = null;
+        $this->withoutExceptionHandling();
+
         try {
             $this->put(route('orders.update', $order), $this->orderUpdatePayload(7));
-            $this->fail('The synchronization exception should escape the request.');
         } catch (\RuntimeException $exception) {
-            $this->assertSame('Broken linked invoice', $exception->getMessage());
+            $thrown = $exception;
         }
+
+        $this->assertInstanceOf(\RuntimeException::class, $thrown);
+        $this->assertSame('Broken linked invoice', $thrown->getMessage());
 
         $this->assertSame(30, (int) $order->fresh()->payment_terms);
     }

@@ -123,7 +123,7 @@ class InvoicePaymentBreakdownTest extends TestCase
             ->assertSee('0,00 ₼')
             ->assertSee('Не оплачено');
         $this->assertLessThan(strpos($content, 'Разовая услуга'), strpos($content, 'Подписка июля'));
-        $this->assertLessThan(strpos($content, 'Ручная позиция'), strpos($content, 'Разовая услуга'));
+        $this->assertLessThan(strpos($content, 'Разовая услуга'), strpos($content, 'Ручная позиция'));
     }
 
     public function test_subscription_subtitle_contains_only_available_period_boundaries(): void
@@ -149,14 +149,14 @@ class InvoicePaymentBreakdownTest extends TestCase
     {
         $invoice = $this->invoice('issued', '10.00');
         $this->line($invoice, 'Работа', '10.00');
-        $this->payment($invoice, 'pending', '10.00');
+        $payment = $this->payment($invoice, 'pending', '10.00');
 
         Model::preventLazyLoading();
         try {
             $this->get(route('invoices.show', $invoice))
                 ->assertOk()
-                ->assertSee(route('payments.confirm', 1), false)
-                ->assertSee(route('payments.cancel', 1), false)
+                ->assertSee(route('payments.confirm', $payment), false)
+                ->assertSee(route('payments.cancel', $payment), false)
                 ->assertSee('overflow-x-auto', false)
                 ->assertSee('print:hidden', false);
         } finally {

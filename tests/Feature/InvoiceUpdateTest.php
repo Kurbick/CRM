@@ -412,6 +412,7 @@ class InvoiceUpdateTest extends TestCase
             'title' => 'One-time service',
             'order_date' => '2026-07-01',
             'price' => 80,
+            'payment_terms' => 14,
         ]);
     }
 

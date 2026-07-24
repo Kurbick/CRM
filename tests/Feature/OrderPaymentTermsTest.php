@@ -124,7 +124,8 @@ class OrderPaymentTermsTest extends TestCase
         $order->payment_terms = null;
         $order->setRelation('contract', $contract);
 
-        $html = view('orders.edit', compact('order', 'contract'))->render();
+        $errors = new \Illuminate\Support\ViewErrorBag();
+        $html = view('orders.edit', compact('order', 'contract', 'errors'))->render();
         $this->assertStringContainsString('name="payment_terms" value=""', $html);
         $this->assertStringNotContainsString('name="payment_terms" value="14"', $html);
     }

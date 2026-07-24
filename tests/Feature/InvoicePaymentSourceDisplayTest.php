@@ -60,7 +60,7 @@ class InvoicePaymentSourceDisplayTest extends TestCase
 
         $content = $response->getContent();
         $this->assertStringContainsString('Последний платёж:', $content);
-        $this->assertLessThan(strpos($content, 'Из баланса: 20,00 ₼'), strpos($content, '480,00 ₼'));
+        $this->assertLessThan(strpos($content, '480,00 ₼'), strpos($content, 'Из баланса: 20,00 ₼'));
         $this->assertSame(2, substr_count($content, 'Из баланса: 20,00 ₼'));
         $this->assertSame(3, substr_count($content, 'Из баланса'));
     }

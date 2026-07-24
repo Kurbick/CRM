@@ -45,7 +45,14 @@ class InvoicePendingPaymentAvailabilityTest extends TestCase
     public function test_confirmed_and_pending_amounts_are_kept_separate(): void
     {
         $invoice = $this->invoice('600.00', 'partially_paid');
-        $this->payment($invoice, 'confirmed', '200.00');
+        $confirmedPayment = $this->payment($invoice, 'confirmed', '200.00');
+        DB::table('payment_allocations')->insert([
+            'payment_id' => $confirmedPayment->id,
+            'invoice_line_id' => $invoice->lines()->firstOrFail()->id,
+            'amount' => '200.00',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
         $this->payment($invoice, 'pending', '300.00');
 
         $this->get(route('invoices.show', $invoice))->assertOk()

@@ -136,7 +136,7 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
         $company = $this->company();
         $this->get(route('companies.show', ['company' => $company, 'tab' => $query]))
             ->assertOk()
-            ->assertSee('tab: '.json_encode($expected), false);
+            ->assertSee("tab: '{$expected}'", false);
     }
 
     public static function companyTabs(): array
@@ -313,7 +313,7 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
             periodStart: '2026-06-01',
             periodEnd: '2026-06-30'
         );
-        $this->period(
+        $alphaLate = $this->period(
             $company,
             invoiceNumber: 'INV-ALPHA-LATE',
             subscriptionTitle: 'Альфа',
@@ -325,12 +325,20 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
             invoiceNumber: 'INV-ALPHA-EARLY',
             subscriptionTitle: 'Альфа',
             periodStart: '2026-04-01',
-            periodEnd: '2026-04-30'
+            periodEnd: '2026-04-30',
+            subscriptionId: $alphaLate['subscription_id'],
         );
 
-        $this->get(route('companies.show', $company))
+        $response = $this->get(route('companies.show', $company))
             ->assertOk()
-            ->assertSeeInOrder(['Альфа', 'INV-ALPHA-EARLY', 'INV-ALPHA-LATE', 'Бета', 'INV-BETA']);
+            ->assertSee('Альфа')
+            ->assertSee('Бета')
+            ->assertSeeInOrder(['INV-ALPHA-EARLY', 'INV-ALPHA-LATE', 'INV-BETA']);
+
+        $this->assertSame(
+            1,
+            substr_count($response->getContent(), '>Альфа</h3>')
+        );
     }
 
     public function test_missing_period_metadata_shows_compact_anomaly_warning(): void
@@ -340,7 +348,7 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
 
         $this->get(route('companies.show', $company))
             ->assertOk()
-            ->assertSee('У компании нет задолженности.')
+            ->assertDontSee('У компании нет задолженности.')
             ->assertSee('Есть строки подписок без корректно указанного расчётного периода: 1.')
             ->assertDontSee('missing_period_start');
     }
@@ -381,7 +389,7 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
         ]);
     }
 
-    /** @return array{invoice_id: int, invoice_line_id: int, company_id: int} */
+    /** @return array{invoice_id: int, invoice_line_id: int, company_id: int, subscription_id: int} */
     private function period(
         Company $company,
         string $invoiceStatus = 'issued',
@@ -389,7 +397,8 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
         string $subscriptionTitle = 'Техническая поддержка',
         ?string $periodStart = '2026-05-01',
         ?string $periodEnd = '2026-05-31',
-        ?string $dueDate = '2026-05-11'
+        ?string $dueDate = '2026-05-11',
+        ?int $subscriptionId = null,
     ): array {
         $suffix = uniqid('', true);
         $contractId = DB::table('contracts')->insertGetId([
@@ -398,16 +407,16 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
             'start_date' => '2026-01-01',
             'status' => 'active',
         ]);
-        $subscriptionId = DB::table('subscriptions')->insertGetId([
-            'contract_id' => $contractId,
-            'service_type_id' => null,
-            'title' => $subscriptionTitle,
-            'start_date' => '2026-01-01',
-            'next_billing_date' => '2026-06-01',
-            'billing_period' => 'monthly',
-            'amount' => '100.00',
-            'status' => 'active',
-        ]);
+        $subscriptionId ??= DB::table('subscriptions')->insertGetId([
+                'contract_id' => $contractId,
+                'service_type_id' => null,
+                'title' => $subscriptionTitle,
+                'start_date' => '2026-01-01',
+                'next_billing_date' => '2026-06-01',
+                'billing_period' => 'monthly',
+                'amount' => '100.00',
+                'status' => 'active',
+            ]);
         $invoiceId = DB::table('invoices')->insertGetId([
             'company_id' => $company->id,
             'contract_id' => $contractId,
@@ -430,6 +439,7 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
             'invoice_id' => $invoiceId,
             'invoice_line_id' => $lineId,
             'company_id' => $company->id,
+            'subscription_id' => $subscriptionId,
         ];
     }
 

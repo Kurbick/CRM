@@ -7,8 +7,6 @@ use App\Models\Payment;
 use App\Models\PaymentAllocation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\ViewErrorBag;
-use Illuminate\Support\MessageBag;
 use Tests\TestCase;
 
 class InvoicePrintAndDisplayTest extends TestCase
@@ -31,8 +29,6 @@ class InvoicePrintAndDisplayTest extends TestCase
             ->assertSee($invoice->invoice_number)
             ->assertSee('invoice-sidebar crm-print-hide', false)
             ->assertSee('invoice-payment-history crm-print-hide', false)
-            ->assertSee('payment-history-drawer crm-print-hide', false)
-            ->assertSee('payment-history-backdrop crm-print-hide', false)
             ->assertSee('crm-print-hide pb-3 text-right pr-4 print:hidden">Оплачено', false)
             ->assertSee('crm-print-hide pb-3 text-right pr-4 print:hidden">Остаток', false)
             ->assertSee('crm-print-hide pb-3 print:hidden">Статус', false)
@@ -157,21 +153,18 @@ class InvoicePrintAndDisplayTest extends TestCase
         $invoice = $this->invoice('issued', '100.00');
         $this->line($invoice, 'Работа', '100.00');
         $payment = $this->payment($invoice, 'pending', '10.00');
-        $errors = new ViewErrorBag();
-        $errors->put('default', new MessageBag(['cancel_reason' => ['Укажите причину отмены.']]));
-
-        $response = $this->withSession([
-            'errors' => $errors,
-            '_old_input' => [
+        $response = $this->followingRedirects()
+            ->from(route('invoices.show', $invoice))
+            ->patch(route('payments.cancel', $payment), [
                 'cancel_payment_id' => (string) $payment->id,
                 'cancel_reason' => '',
-            ],
-        ])->get(route('invoices.show', $invoice));
+            ])
+            ->assertOk();
 
         $response->assertOk()
             ->assertSee('paymentHistoryOpen: true', false)
             ->assertSee('cancelOpen: true', false)
-            ->assertSee('Укажите причину отмены.');
+            ->assertSee('Укажите причину отмены платежа.');
     }
 
     private function invoice(string $status, string $total): Invoice

@@ -98,6 +98,13 @@ class InvoiceEditabilityTest extends TestCase
         $invoice = $this->invoice('issued');
         $line = $invoice->lines()->firstOrFail();
         $confirmedPayment = $this->payment($invoice, 'confirmed', '10.00');
+        DB::table('payment_allocations')->insert([
+            'payment_id' => $confirmedPayment->id,
+            'invoice_line_id' => $line->id,
+            'amount' => '10.00',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
         $creditBalanceId = DB::table('credit_balances')->insertGetId([
             'company_id' => $invoice->company_id,
             'amount' => '0.00',
