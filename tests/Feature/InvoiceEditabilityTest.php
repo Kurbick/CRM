@@ -6,7 +6,8 @@ use App\Models\Invoice;
 use App\Models\Payment;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
-use Tests\TestCase;
+use Laravel\Sanctum\Sanctum;
+use Tests\AuthenticatedTestCase as TestCase;
 
 class InvoiceEditabilityTest extends TestCase
 {
@@ -181,6 +182,7 @@ class InvoiceEditabilityTest extends TestCase
 
     public function test_api_uses_same_rule_and_ignores_protected_fields(): void
     {
+        Sanctum::actingAs($this->authenticatedUser);
         $invoice = $this->invoice('issued');
         $originalTotal = $invoice->total_amount;
         $originalSeller = $invoice->seller_name;

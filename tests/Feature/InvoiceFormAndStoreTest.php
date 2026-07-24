@@ -5,7 +5,7 @@ namespace Tests\Feature;
 use App\Models\Invoice;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
-use Tests\TestCase;
+use Tests\AuthenticatedTestCase as TestCase;
 
 class InvoiceFormAndStoreTest extends TestCase
 {

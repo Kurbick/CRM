@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 // use Illuminate\Foundation\Testing\RefreshDatabase;
-use Tests\TestCase;
+use Tests\AuthenticatedTestCase as TestCase;
 
 class ExampleTest extends TestCase
 {

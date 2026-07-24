@@ -7,7 +7,7 @@ use App\Models\Invoice;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
-use Tests\TestCase;
+use Tests\AuthenticatedTestCase as TestCase;
 
 class InvoiceDeletionAndCancellationTest extends TestCase
 {

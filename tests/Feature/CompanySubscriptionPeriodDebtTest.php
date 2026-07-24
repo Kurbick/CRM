@@ -6,7 +6,7 @@ use App\Models\Company;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Tests\TestCase;
+use Tests\AuthenticatedTestCase as TestCase;
 
 class CompanySubscriptionPeriodDebtTest extends TestCase
 {

@@ -13,6 +13,17 @@ use App\Http\Controllers\Web\OrderController;
 use App\Http\Controllers\Web\PaymentController;
 use App\Http\Controllers\Web\SubscriptionController;
 
+Route::get('login', fn () => view('auth.login'))
+    ->middleware('guest')
+    ->name('login');
+
+Route::middleware(['auth', 'active'])->group(function (): void {
+    Route::get('password/change', fn () => view('auth.change-password'))
+        ->name('password.change');
+});
+
+Route::middleware(['auth', 'active', 'password.changed'])->group(function (): void {
+
 /*
 |--------------------------------------------------------------------------
 | Главная страница
@@ -272,3 +283,4 @@ Route::get(
     'ajax/contracts/{contract}/items',
     [InvoiceController::class, 'getContractItems']
 )->name('ajax.items');
+});

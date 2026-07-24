@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
 use Mockery;
 use RuntimeException;
-use Tests\TestCase;
+use Tests\AuthenticatedTestCase as TestCase;
 
 class PaymentAllocationLifecycleIntegrationTest extends TestCase
 {

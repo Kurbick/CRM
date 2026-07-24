@@ -114,6 +114,36 @@
                         Инвойсы
                     </a>
 
+                    <div class="relative ml-3 flex items-center gap-1.5" x-data="{ open: false }"
+                        x-on:click.outside="open = false" x-on:keydown.escape.window="open = false">
+                        <span class="text-sm text-gray-600">{{ auth()->user()->name }}</span>
+                        <button type="button" aria-label="Настройки" aria-haspopup="menu"
+                            x-bind:aria-expanded="open.toString()" x-on:click="open = !open"
+                            class="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <svg class="h-5 w-5" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                                    d="M9.6 3.2h4.8l.55 2.15c.5.2.98.47 1.4.8l2.12-.62 2.4 4.15-1.58 1.52c.04.27.06.53.06.8s-.02.53-.06.8l1.58 1.52-2.4 4.15-2.12-.62c-.42.33-.9.6-1.4.8l-.55 2.15H9.6l-.55-2.15a7.5 7.5 0 0 1-1.4-.8l-2.12.62-2.4-4.15 1.58-1.52A5.4 5.4 0 0 1 4.65 12c0-.27.02-.53.06-.8L3.13 9.68l2.4-4.15 2.12.62c.42-.33.9-.6 1.4-.8L9.6 3.2Z" />
+                                <circle cx="12" cy="12" r="2.75" stroke-width="1.8" />
+                            </svg>
+                        </button>
+
+                        <div x-show="open" x-cloak x-transition role="menu"
+                            class="absolute right-0 top-full z-50 mt-2 w-48 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                            <a href="{{ route('password.change') }}" role="menuitem"
+                                class="block px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50 focus:bg-gray-50 focus:outline-none">
+                                Сменить пароль
+                            </a>
+                            <div class="my-1 border-t border-gray-100"></div>
+                            <form method="POST" action="{{ route('logout') }}">
+                                @csrf
+                                <button type="submit" role="menuitem"
+                                    class="block w-full px-4 py-2.5 text-left text-sm text-red-600 transition hover:bg-red-50 focus:bg-red-50 focus:outline-none">
+                                    Выйти
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
                 </div>
 
             </div>

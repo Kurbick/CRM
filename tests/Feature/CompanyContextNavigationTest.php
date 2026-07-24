@@ -7,7 +7,7 @@ use App\Models\CompanyContact;
 use App\Models\Contract;
 use App\Models\Invoice;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Tests\TestCase;
+use Tests\AuthenticatedTestCase as TestCase;
 
 class CompanyContextNavigationTest extends TestCase
 {

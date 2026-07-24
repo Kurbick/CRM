@@ -12,7 +12,7 @@ use App\Http\Controllers\CompanyContactController;
 use App\Http\Controllers\ServiceTypeItemController;
 use App\Http\Controllers\DashboardController;
 
-Route::name('api.')->group(function () {
+Route::middleware(['auth:sanctum', 'active', 'password.changed'])->name('api.')->group(function () {
     Route::apiResource('companies', CompanyController::class);
 
     Route::apiResource('companies.contracts', ContractController::class)

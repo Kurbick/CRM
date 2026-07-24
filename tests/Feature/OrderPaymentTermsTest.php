@@ -8,7 +8,7 @@ use App\Models\Invoice;
 use App\Models\Order;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Tests\TestCase;
+use Tests\AuthenticatedTestCase as TestCase;
 
 class OrderPaymentTermsTest extends TestCase
 {
