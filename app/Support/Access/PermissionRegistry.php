@@ -48,4 +48,27 @@ final class PermissionRegistry
     {
         return PermissionName::tryFrom($ability) !== null;
     }
+
+    /** @return list<array{module: string, label: string, order: int, permissions: list<array{name: PermissionName, label: string, action_order: int}>}> */
+    public static function grouped(): array
+    {
+        $groups = [];
+
+        foreach (self::all() as $item) {
+            $module = $item['module'];
+            $groups[$module] ??= [
+                'module' => $module,
+                'label' => $item['module_label'],
+                'order' => $item['module_order'],
+                'permissions' => [],
+            ];
+            $groups[$module]['permissions'][] = [
+                'name' => $item['name'],
+                'label' => $item['label'],
+                'action_order' => $item['action_order'],
+            ];
+        }
+
+        return array_values($groups);
+    }
 }

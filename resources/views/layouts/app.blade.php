@@ -133,7 +133,7 @@
                                 class="block px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50 focus:bg-gray-50 focus:outline-none">
                                 Сменить пароль
                             </a>
-                            @if (auth()->user()->can('users.view') || auth()->user()->can('roles.view'))
+                            @if (auth()->user()->can('users.view') || auth()->user()->can('roles.view') || auth()->user()->can('access_permissions.view'))
                                 <div class="my-1 border-t border-gray-100"></div>
                                 @can('users.view')
                                     <a href="{{ route('admin.users.index') }}" role="menuitem"
@@ -145,6 +145,12 @@
                                     <a href="{{ route('admin.roles.index') }}" role="menuitem"
                                         class="block px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50 focus:bg-gray-50 focus:outline-none">
                                         Группы
+                                    </a>
+                                @endcan
+                                @can('access_permissions.view')
+                                    <a href="{{ route('admin.access-permissions.index') }}" role="menuitem"
+                                        class="block px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50 focus:bg-gray-50 focus:outline-none">
+                                        Права доступа
                                     </a>
                                 @endcan
                                 <div class="my-1 border-t border-gray-100"></div>

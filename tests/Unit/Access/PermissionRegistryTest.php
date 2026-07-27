@@ -20,4 +20,21 @@ class PermissionRegistryTest extends TestCase
         $this->assertSame($names, PermissionRegistry::names());
         $this->assertTrue(collect($names)->every(fn (string $name) => preg_match('/^[a-z_]+\.[a-z_]+(?:\.[a-z_]+)?$/', $name) === 1));
     }
+
+    public function test_grouped_registry_preserves_complete_catalog_and_order(): void
+    {
+        $groups = PermissionRegistry::grouped();
+        $flattened = collect($groups)->flatMap(fn (array $group) => array_map(
+            fn (array $permission) => $permission['name']->value,
+            $group['permissions'],
+        ))->values()->all();
+
+        $this->assertCount(11, $groups);
+        $this->assertSame(PermissionRegistry::names(), $flattened);
+        $this->assertTrue(collect($groups)->every(fn (array $group) => $group['module'] !== '' && $group['label'] !== '' && $group['permissions'] !== []));
+        $this->assertSame(collect($groups)->pluck('order')->sort()->values()->all(), collect($groups)->pluck('order')->all());
+        $access = collect($groups)->firstWhere('module', 'access_permissions');
+        $this->assertSame('Права доступа', $access['label']);
+        $this->assertSame(['access_permissions.view', 'access_permissions.update'], array_map(fn (array $permission) => $permission['name']->value, $access['permissions']));
+    }
 }
