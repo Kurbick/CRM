@@ -14,6 +14,6 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // Intentionally empty. Bootstrap administrators are created explicitly.
+        $this->call(AccessControlSeeder::class);
     }
 }
