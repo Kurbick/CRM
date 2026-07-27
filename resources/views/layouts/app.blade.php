@@ -134,6 +134,13 @@
                                 Сменить пароль
                             </a>
                             <div class="my-1 border-t border-gray-100"></div>
+                            @can('users.view')
+                                <a href="{{ route('admin.users.index') }}" role="menuitem"
+                                    class="block px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50 focus:bg-gray-50 focus:outline-none">
+                                    Пользователи
+                                </a>
+                                <div class="my-1 border-t border-gray-100"></div>
+                            @endcan
                             <form method="POST" action="{{ route('logout') }}">
                                 @csrf
                                 <button type="submit" role="menuitem"

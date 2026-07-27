@@ -1,7 +1,6 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
-
+use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Web\CompanyContactController;
 use App\Http\Controllers\Web\CompanyController;
 use App\Http\Controllers\Web\ContractController;
@@ -12,6 +11,7 @@ use App\Http\Controllers\Web\InvoiceController;
 use App\Http\Controllers\Web\OrderController;
 use App\Http\Controllers\Web\PaymentController;
 use App\Http\Controllers\Web\SubscriptionController;
+use Illuminate\Support\Facades\Route;
 
 Route::get('login', fn () => view('auth.login'))
     ->middleware('guest')
@@ -24,263 +24,275 @@ Route::middleware(['auth', 'active'])->group(function (): void {
 
 Route::middleware(['auth', 'active', 'password.changed'])->group(function (): void {
 
-/*
-|--------------------------------------------------------------------------
-| Главная страница
-|--------------------------------------------------------------------------
-*/
+    Route::prefix('admin/users')->name('admin.users.')->controller(AdminUserController::class)->group(function (): void {
+        Route::get('/', 'index')->middleware('can:users.view')->name('index');
+        Route::get('/create', 'create')->middleware(['can:users.create', 'can:users.assign_role'])->name('create');
+        Route::post('/', 'store')->middleware(['can:users.create', 'can:users.assign_role'])->name('store');
+        Route::get('/{user}/edit', 'edit')->middleware('can:users.view')->name('edit');
+        Route::put('/{user}', 'update')->middleware('can:users.update')->name('update');
+        Route::put('/{user}/role', 'updateRole')->middleware('can:users.assign_role')->name('role.update');
+        Route::patch('/{user}/activate', 'activate')->middleware('can:users.activate')->name('activate');
+        Route::patch('/{user}/deactivate', 'deactivate')->middleware('can:users.deactivate')->name('deactivate');
+        Route::put('/{user}/password', 'updatePassword')->middleware('can:users.reset_password')->name('password.update');
+    });
 
-Route::get(
-    '/',
-    [DashboardController::class, 'index']
-)->name('dashboard');
+    /*
+    |--------------------------------------------------------------------------
+    | Главная страница
+    |--------------------------------------------------------------------------
+    */
 
-/*
-|--------------------------------------------------------------------------
-| Компании
-|--------------------------------------------------------------------------
-*/
+    Route::get(
+        '/',
+        [DashboardController::class, 'index']
+    )->name('dashboard');
 
-Route::get(
-    'companies/autocomplete',
-    [CompanyController::class, 'autocomplete']
-)->name('companies.autocomplete');
+    /*
+    |--------------------------------------------------------------------------
+    | Компании
+    |--------------------------------------------------------------------------
+    */
 
-Route::resource(
-    'companies',
-    CompanyController::class
-);
+    Route::get(
+        'companies/autocomplete',
+        [CompanyController::class, 'autocomplete']
+    )->name('companies.autocomplete');
 
-/*
-|--------------------------------------------------------------------------
-| Контакты компаний
-|--------------------------------------------------------------------------
-*/
+    Route::resource(
+        'companies',
+        CompanyController::class
+    );
 
-Route::get(
-    'companies/{company}/contacts/create',
-    [CompanyContactController::class, 'create']
-)->name('companies.contacts.create');
+    /*
+    |--------------------------------------------------------------------------
+    | Контакты компаний
+    |--------------------------------------------------------------------------
+    */
 
-Route::post(
-    'companies/{company}/contacts',
-    [CompanyContactController::class, 'store']
-)->name('companies.contacts.store');
+    Route::get(
+        'companies/{company}/contacts/create',
+        [CompanyContactController::class, 'create']
+    )->name('companies.contacts.create');
 
-Route::get(
-    'contacts/{contact}/edit',
-    [CompanyContactController::class, 'edit']
-)->name('contacts.edit');
+    Route::post(
+        'companies/{company}/contacts',
+        [CompanyContactController::class, 'store']
+    )->name('companies.contacts.store');
 
-Route::put(
-    'contacts/{contact}',
-    [CompanyContactController::class, 'update']
-)->name('contacts.update');
+    Route::get(
+        'contacts/{contact}/edit',
+        [CompanyContactController::class, 'edit']
+    )->name('contacts.edit');
 
-Route::delete(
-    'contacts/{contact}',
-    [CompanyContactController::class, 'destroy']
-)->name('contacts.destroy');
+    Route::put(
+        'contacts/{contact}',
+        [CompanyContactController::class, 'update']
+    )->name('contacts.update');
 
-/*
-|--------------------------------------------------------------------------
-| Договоры
-|--------------------------------------------------------------------------
-*/
+    Route::delete(
+        'contacts/{contact}',
+        [CompanyContactController::class, 'destroy']
+    )->name('contacts.destroy');
 
-Route::get(
-    'companies/{company}/contracts/create',
-    [ContractController::class, 'create']
-)->name('companies.contracts.create');
+    /*
+    |--------------------------------------------------------------------------
+    | Договоры
+    |--------------------------------------------------------------------------
+    */
 
-Route::get(
-    'contracts',
-    [ContractController::class, 'index']
-)->name('contracts.index');
+    Route::get(
+        'companies/{company}/contracts/create',
+        [ContractController::class, 'create']
+    )->name('companies.contracts.create');
 
-Route::get(
-    'contracts/create',
-    [ContractController::class, 'create']
-)->name('contracts.create');
+    Route::get(
+        'contracts',
+        [ContractController::class, 'index']
+    )->name('contracts.index');
 
-Route::post(
-    'contracts',
-    [ContractController::class, 'store']
-)->name('contracts.store');
+    Route::get(
+        'contracts/create',
+        [ContractController::class, 'create']
+    )->name('contracts.create');
 
-Route::get(
-    'contracts/{contract}',
-    [ContractController::class, 'show']
-)->name('contracts.show');
+    Route::post(
+        'contracts',
+        [ContractController::class, 'store']
+    )->name('contracts.store');
 
-Route::get(
-    'contracts/{contract}/edit',
-    [ContractController::class, 'edit']
-)->name('contracts.edit');
+    Route::get(
+        'contracts/{contract}',
+        [ContractController::class, 'show']
+    )->name('contracts.show');
 
-Route::put(
-    'contracts/{contract}',
-    [ContractController::class, 'update']
-)->name('contracts.update');
+    Route::get(
+        'contracts/{contract}/edit',
+        [ContractController::class, 'edit']
+    )->name('contracts.edit');
 
-Route::delete(
-    'contracts/{contract}',
-    [ContractController::class, 'destroy']
-)->name('contracts.destroy');
+    Route::put(
+        'contracts/{contract}',
+        [ContractController::class, 'update']
+    )->name('contracts.update');
 
-/*
-|--------------------------------------------------------------------------
-| Предметы договоров
-|--------------------------------------------------------------------------
-*/
+    Route::delete(
+        'contracts/{contract}',
+        [ContractController::class, 'destroy']
+    )->name('contracts.destroy');
 
-Route::get(
-    'contracts/{contract}/subjects/create',
-    [ContractSubjectController::class, 'create']
-)->name('contracts.subjects.create');
+    /*
+    |--------------------------------------------------------------------------
+    | Предметы договоров
+    |--------------------------------------------------------------------------
+    */
 
-Route::post(
-    'contracts/{contract}/subjects',
-    [ContractSubjectController::class, 'store']
-)->name('contracts.subjects.store');
+    Route::get(
+        'contracts/{contract}/subjects/create',
+        [ContractSubjectController::class, 'create']
+    )->name('contracts.subjects.create');
 
-/*
-|--------------------------------------------------------------------------
-| Документы договоров
-|--------------------------------------------------------------------------
-*/
+    Route::post(
+        'contracts/{contract}/subjects',
+        [ContractSubjectController::class, 'store']
+    )->name('contracts.subjects.store');
 
-Route::post(
-    'contracts/{contract}/documents',
-    [ContractDocumentController::class, 'store']
-)->name('contracts.documents.store');
+    /*
+    |--------------------------------------------------------------------------
+    | Документы договоров
+    |--------------------------------------------------------------------------
+    */
 
-Route::get(
-    'contract-documents/{document}/download',
-    [ContractDocumentController::class, 'download']
-)->name('contract-documents.download');
+    Route::post(
+        'contracts/{contract}/documents',
+        [ContractDocumentController::class, 'store']
+    )->name('contracts.documents.store');
 
-Route::delete(
-    'contract-documents/{document}',
-    [ContractDocumentController::class, 'destroy']
-)->name('contract-documents.destroy');
+    Route::get(
+        'contract-documents/{document}/download',
+        [ContractDocumentController::class, 'download']
+    )->name('contract-documents.download');
 
-/*
-|--------------------------------------------------------------------------
-| Разовые услуги
-|--------------------------------------------------------------------------
-*/
+    Route::delete(
+        'contract-documents/{document}',
+        [ContractDocumentController::class, 'destroy']
+    )->name('contract-documents.destroy');
 
-Route::get(
-    'contracts/{contract}/orders/create',
-    [OrderController::class, 'create']
-)->name('contracts.orders.create');
+    /*
+    |--------------------------------------------------------------------------
+    | Разовые услуги
+    |--------------------------------------------------------------------------
+    */
 
-Route::post(
-    'contracts/{contract}/orders',
-    [OrderController::class, 'store']
-)->name('contracts.orders.store');
+    Route::get(
+        'contracts/{contract}/orders/create',
+        [OrderController::class, 'create']
+    )->name('contracts.orders.create');
 
-Route::get(
-    'orders/{order}/edit',
-    [OrderController::class, 'edit']
-)->name('orders.edit');
+    Route::post(
+        'contracts/{contract}/orders',
+        [OrderController::class, 'store']
+    )->name('contracts.orders.store');
 
-Route::put(
-    'orders/{order}',
-    [OrderController::class, 'update']
-)->name('orders.update');
+    Route::get(
+        'orders/{order}/edit',
+        [OrderController::class, 'edit']
+    )->name('orders.edit');
 
-Route::delete(
-    'orders/{order}',
-    [OrderController::class, 'destroy']
-)->name('orders.destroy');
+    Route::put(
+        'orders/{order}',
+        [OrderController::class, 'update']
+    )->name('orders.update');
 
-/*
-|--------------------------------------------------------------------------
-| Подписки
-|--------------------------------------------------------------------------
-*/
+    Route::delete(
+        'orders/{order}',
+        [OrderController::class, 'destroy']
+    )->name('orders.destroy');
 
-Route::get(
-    'contracts/{contract}/subscriptions/create',
-    [SubscriptionController::class, 'create']
-)->name('contracts.subscriptions.create');
+    /*
+    |--------------------------------------------------------------------------
+    | Подписки
+    |--------------------------------------------------------------------------
+    */
 
-Route::post(
-    'contracts/{contract}/subscriptions',
-    [SubscriptionController::class, 'store']
-)->name('contracts.subscriptions.store');
+    Route::get(
+        'contracts/{contract}/subscriptions/create',
+        [SubscriptionController::class, 'create']
+    )->name('contracts.subscriptions.create');
 
-Route::get(
-    'subscriptions/{subscription}/edit',
-    [SubscriptionController::class, 'edit']
-)->name('subscriptions.edit');
+    Route::post(
+        'contracts/{contract}/subscriptions',
+        [SubscriptionController::class, 'store']
+    )->name('contracts.subscriptions.store');
 
-Route::put(
-    'subscriptions/{subscription}',
-    [SubscriptionController::class, 'update']
-)->name('subscriptions.update');
+    Route::get(
+        'subscriptions/{subscription}/edit',
+        [SubscriptionController::class, 'edit']
+    )->name('subscriptions.edit');
 
-Route::delete(
-    'subscriptions/{subscription}',
-    [SubscriptionController::class, 'destroy']
-)->name('subscriptions.destroy');
+    Route::put(
+        'subscriptions/{subscription}',
+        [SubscriptionController::class, 'update']
+    )->name('subscriptions.update');
 
-/*
-|--------------------------------------------------------------------------
-| Инвойсы
-|--------------------------------------------------------------------------
-*/
+    Route::delete(
+        'subscriptions/{subscription}',
+        [SubscriptionController::class, 'destroy']
+    )->name('subscriptions.destroy');
 
-Route::post(
-    'invoices/{invoice}/issue',
-    [InvoiceController::class, 'issue']
-)->name('invoices.issue');
+    /*
+    |--------------------------------------------------------------------------
+    | Инвойсы
+    |--------------------------------------------------------------------------
+    */
 
-Route::patch(
-    'invoices/{invoice}/cancel',
-    [InvoiceController::class, 'cancel']
-)->name('invoices.cancel');
+    Route::post(
+        'invoices/{invoice}/issue',
+        [InvoiceController::class, 'issue']
+    )->name('invoices.issue');
 
-Route::resource(
-    'invoices',
-    InvoiceController::class
-);
+    Route::patch(
+        'invoices/{invoice}/cancel',
+        [InvoiceController::class, 'cancel']
+    )->name('invoices.cancel');
 
-/*
-|--------------------------------------------------------------------------
-| Платежи
-|--------------------------------------------------------------------------
-*/
+    Route::resource(
+        'invoices',
+        InvoiceController::class
+    );
 
-Route::post(
-    'invoices/{invoice}/payments',
-    [PaymentController::class, 'store']
-)->name('payments.store');
+    /*
+    |--------------------------------------------------------------------------
+    | Платежи
+    |--------------------------------------------------------------------------
+    */
 
-Route::patch(
-    'payments/{payment}/confirm',
-    [PaymentController::class, 'confirm']
-)->name('payments.confirm');
+    Route::post(
+        'invoices/{invoice}/payments',
+        [PaymentController::class, 'store']
+    )->name('payments.store');
 
-Route::patch(
-    'payments/{payment}/cancel',
-    [PaymentController::class, 'cancel']
-)->name('payments.cancel');
-/*
-|--------------------------------------------------------------------------
-| AJAX для формы инвойса
-|--------------------------------------------------------------------------
-*/
+    Route::patch(
+        'payments/{payment}/confirm',
+        [PaymentController::class, 'confirm']
+    )->name('payments.confirm');
 
-Route::get(
-    'ajax/companies/{company}/contracts',
-    [InvoiceController::class, 'getContracts']
-)->name('ajax.contracts');
+    Route::patch(
+        'payments/{payment}/cancel',
+        [PaymentController::class, 'cancel']
+    )->name('payments.cancel');
+    /*
+    |--------------------------------------------------------------------------
+    | AJAX для формы инвойса
+    |--------------------------------------------------------------------------
+    */
 
-Route::get(
-    'ajax/contracts/{contract}/items',
-    [InvoiceController::class, 'getContractItems']
-)->name('ajax.items');
+    Route::get(
+        'ajax/companies/{company}/contracts',
+        [InvoiceController::class, 'getContracts']
+    )->name('ajax.contracts');
+
+    Route::get(
+        'ajax/contracts/{contract}/items',
+        [InvoiceController::class, 'getContractItems']
+    )->name('ajax.items');
 });

@@ -35,4 +35,9 @@ final class UserSessionService
             ->where('user_id', $user->getKey())
             ->delete();
     }
+
+    public function invalidateAllFor(User $user): void
+    {
+        $this->deleteAllSessions($user);
+    }
 }

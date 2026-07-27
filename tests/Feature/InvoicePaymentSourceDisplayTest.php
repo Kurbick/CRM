@@ -83,6 +83,10 @@ class InvoicePaymentSourceDisplayTest extends TestCase
     public function test_index_source_state_does_not_add_queries_per_invoice(): void
     {
         $this->invoice('10.00', 'issued');
+        // The settings menu performs one permission check per request. Warm the
+        // test user's permission relations so this assertion remains focused on
+        // invoice-count-dependent queries.
+        $this->authenticatedUser->can('users.view');
         DB::flushQueryLog();
         DB::enableQueryLog();
         $this->get(route('invoices.index'))->assertOk();
@@ -134,7 +138,7 @@ class InvoicePaymentSourceDisplayTest extends TestCase
 
     private function payment(Invoice $invoice, string $amount, string $date = '2026-07-20'): Payment
     {
-        return Payment::withoutEvents(fn() => Payment::create([
+        return Payment::withoutEvents(fn () => Payment::create([
             'invoice_id' => $invoice->id,
             'company_id' => $invoice->company_id,
             'payment_date' => $date,
