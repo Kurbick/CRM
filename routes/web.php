@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\RoleController as AdminRoleController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Web\CompanyContactController;
 use App\Http\Controllers\Web\CompanyController;
@@ -23,6 +24,13 @@ Route::middleware(['auth', 'active'])->group(function (): void {
 });
 
 Route::middleware(['auth', 'active', 'password.changed'])->group(function (): void {
+
+    Route::prefix('admin/groups')->name('admin.roles.')->controller(AdminRoleController::class)->group(function (): void {
+        Route::get('/', 'index')->middleware('can:roles.view')->name('index');
+        Route::post('/', 'store')->middleware('can:roles.create')->name('store');
+        Route::put('/{role}', 'update')->middleware('can:roles.update')->name('update');
+        Route::delete('/{role}', 'destroy')->middleware('can:roles.delete')->name('destroy');
+    });
 
     Route::prefix('admin/users')->name('admin.users.')->controller(AdminUserController::class)->group(function (): void {
         Route::get('/', 'index')->middleware('can:users.view')->name('index');

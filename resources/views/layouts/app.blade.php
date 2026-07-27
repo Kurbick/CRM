@@ -133,14 +133,22 @@
                                 class="block px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50 focus:bg-gray-50 focus:outline-none">
                                 Сменить пароль
                             </a>
-                            <div class="my-1 border-t border-gray-100"></div>
-                            @can('users.view')
-                                <a href="{{ route('admin.users.index') }}" role="menuitem"
-                                    class="block px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50 focus:bg-gray-50 focus:outline-none">
-                                    Пользователи
-                                </a>
+                            @if (auth()->user()->can('users.view') || auth()->user()->can('roles.view'))
                                 <div class="my-1 border-t border-gray-100"></div>
-                            @endcan
+                                @can('users.view')
+                                    <a href="{{ route('admin.users.index') }}" role="menuitem"
+                                        class="block px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50 focus:bg-gray-50 focus:outline-none">
+                                        Пользователи
+                                    </a>
+                                @endcan
+                                @can('roles.view')
+                                    <a href="{{ route('admin.roles.index') }}" role="menuitem"
+                                        class="block px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50 focus:bg-gray-50 focus:outline-none">
+                                        Группы
+                                    </a>
+                                @endcan
+                                <div class="my-1 border-t border-gray-100"></div>
+                            @endif
                             <form method="POST" action="{{ route('logout') }}">
                                 @csrf
                                 <button type="submit" role="menuitem"
