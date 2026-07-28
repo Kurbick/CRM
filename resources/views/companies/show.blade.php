@@ -354,7 +354,7 @@
                         class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition">
                         Контакты ({{ $company->contacts->count() }})
                     </button>
-                    @can(\App\Support\Access\PermissionName::ContractsView->value)
+                    @can('viewAny', \App\Models\Contract::class)
                         <button @click="selectTab('contracts')"
                             :class="tab === 'contracts' ? 'border-blue-600 text-blue-600' :
                                 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
@@ -388,8 +388,8 @@
                             <span aria-hidden="true">+</span> Контакт
                         </a>
                     @endcan
-                    @can(\App\Support\Access\PermissionName::ContractsCreate->value)
-                        @can(\App\Support\Access\PermissionName::ContractsView->value)
+                    @can('create', \App\Models\Contract::class)
+                        @can('viewAny', \App\Models\Contract::class)
                             <a x-show="tab === 'contracts'" x-cloak href="{{ route('companies.contracts.create', ['company' => $company, 'origin' => 'company', 'tab' => 'contracts']) }}"
                                 class="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 transition">
                                 <span aria-hidden="true">+</span> Договор
@@ -477,7 +477,7 @@
             </div>
 
             {{-- Таб: Договоры --}}
-            @can(\App\Support\Access\PermissionName::ContractsView->value)
+            @can('viewAny', \App\Models\Contract::class)
             <div x-show="tab === 'contracts'" x-cloak class="p-5">
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm text-left">

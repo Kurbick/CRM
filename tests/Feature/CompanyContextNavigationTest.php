@@ -22,6 +22,8 @@ class CompanyContextNavigationTest extends TestCase
             PermissionName::CompaniesView->value,
             PermissionName::CompanyContactsCreate->value,
             PermissionName::CompanyContactsUpdate->value,
+            PermissionName::ContractsView->value,
+            PermissionName::ContractsUpdate->value,
         ]);
     }
 

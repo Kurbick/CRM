@@ -2,27 +2,36 @@
 
 namespace App\Http\Controllers\Web;
 
+use App\Actions\Contracts\DeleteContract;
+use App\Exceptions\ContractDeletionException;
 use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\Contract;
 use App\Support\CompanyPageContext;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Gate;
 
 class ContractController extends Controller
 {
     public function index(Request $request)
     {
+        Gate::authorize('viewAny', Contract::class);
+
+        $search = mb_substr(trim((string) $request->input('search', '')), 0, 255);
+        $status = in_array($request->input('status'), ['active', 'terminated'], true)
+            ? $request->input('status')
+            : null;
+        $companyId = filter_var($request->input('company_id'), FILTER_VALIDATE_INT);
+        $companyId = $companyId !== false && $companyId > 0 ? $companyId : null;
+
         $query = Contract::query()
-            ->with('company');
+            ->with('company:id,name');
 
         /*
      * Поиск по номеру договора
      * или названию компании.
      */
-        if ($request->filled('search')) {
-            $search = trim($request->input('search'));
-
+        if ($search !== '') {
             $query->where(function ($query) use ($search) {
                 $query
                     ->where(
@@ -46,8 +55,8 @@ class ContractController extends Controller
         /*
      * Фильтрация по фактическому статусу.
      */
-        if ($request->filled('status')) {
-            switch ($request->input('status')) {
+        if ($status !== null) {
+            switch ($status) {
                 case 'active':
                     $query
                         ->where('status', 'active')
@@ -76,11 +85,8 @@ class ContractController extends Controller
         /*
      * Фильтрация по компании.
      */
-        if ($request->filled('company_id')) {
-            $query->where(
-                'company_id',
-                $request->integer('company_id')
-            );
+        if ($companyId !== null) {
+            $query->where('company_id', $companyId);
         }
 
         /*
@@ -107,7 +113,7 @@ class ContractController extends Controller
         );
 
         if (
-            !in_array(
+            ! in_array(
                 $sortBy,
                 $allowedSortColumns,
                 true
@@ -117,7 +123,7 @@ class ContractController extends Controller
         }
 
         if (
-            !in_array(
+            ! in_array(
                 $sortDirection,
                 $allowedSortDirections,
                 true
@@ -151,9 +157,17 @@ class ContractController extends Controller
      */
         $query->orderByDesc('id');
 
+        $paginationParameters = array_filter([
+            'search' => $search !== '' ? $search : null,
+            'status' => $status,
+            'company_id' => $companyId,
+            'sort_by' => $sortBy,
+            'sort_direction' => $sortDirection,
+        ], static fn ($value): bool => $value !== null && $value !== '');
+
         $contracts = $query
             ->paginate(15)
-            ->withQueryString();
+            ->appends($paginationParameters);
 
         $companies = Company::query()
             ->orderBy('name')
@@ -172,48 +186,68 @@ class ContractController extends Controller
             compact(
                 'contracts',
                 'companies',
-                'contractEditContext'
+                'contractEditContext',
+                'search',
+                'status',
+                'companyId',
+                'sortBy',
+                'sortDirection',
+                'paginationParameters'
             )
         );
     }
 
     public function create(Request $request, ?Company $company = null)
     {
+        Gate::authorize('create', Contract::class);
+
         $companies = Company::query()
             ->orderBy('name')
-            ->get();
+            ->get(['id', 'name']);
 
-        $companyContext = $company ? CompanyPageContext::resolve($request, $company, 'contracts') : null;
+        if ($company !== null) {
+            $company = Company::query()
+                ->select(['id', 'name'])
+                ->findOrFail($company->getKey());
+        }
+
+        $companyContext = $company ? $this->safeCompanyContext($request, $company) : null;
+        $backUrl = $this->createBackUrl($company, $companyContext);
 
         return view(
             'contracts.create',
-            compact('company', 'companies', 'companyContext')
+            compact('company', 'companies', 'companyContext', 'backUrl')
         );
     }
 
     public function store(Request $request)
     {
+        Gate::authorize('create', Contract::class);
+
         $validated = $request->validate([
-            'company_id'      => 'required|exists:companies,id',
+            'company_id' => 'required|exists:companies,id',
             'contract_number' => 'required|string|max:50|unique:contracts,contract_number',
-            'start_date'      => 'required|date',
-            'end_date'        => 'nullable|date|after:start_date',
-            'status'          => 'required|in:active,terminated',
-            'comment'         => 'nullable|string',
+            'start_date' => 'required|date',
+            'end_date' => 'nullable|date|after:start_date',
+            'status' => 'required|in:active,terminated',
+            'comment' => 'nullable|string',
         ]);
 
         $contract = Contract::create($validated);
-        $companyContext = CompanyPageContext::resolve($request, $contract->company, 'contracts');
 
-        return redirect()
-            ->route('contracts.show', ['contract' => $contract, ...$companyContext['query']])
+        return $this->mutationRedirect($request, $contract)
             ->with('success', 'Договор успешно добавлен.');
     }
 
-    public function show(Request $request, Contract $contract)
-    {
+    public function show(
+        Request $request,
+        Contract $contract,
+        DeleteContract $deleteContract
+    ) {
+        Gate::authorize('view', $contract);
+
         $contract->load([
-            'company',
+            'company:id,name',
             'orders.serviceType',
             'subscriptions.serviceType',
             'documents' => function ($query) {
@@ -221,18 +255,23 @@ class ContractController extends Controller
             },
         ]);
 
-        $companyContext = CompanyPageContext::resolve($request, $contract->company, 'contracts');
+        $companyContext = $this->safeCompanyContext($request, $contract->company);
+        $contractCanBeDeleted = Gate::allows('delete', $contract)
+            && $deleteContract->canDelete($contract);
 
         return view(
             'contracts.show',
-            compact('contract', 'companyContext')
+            compact('contract', 'companyContext', 'contractCanBeDeleted')
         );
     }
 
     public function edit(Request $request, Contract $contract)
     {
+        Gate::authorize('update', $contract);
+
+        $contract->loadMissing('company:id,name');
         $company = $contract->company;
-        $returnContext = $this->contractEditReturnContext($request, $contract);
+        $returnContext = $this->editReturnContext($request, $contract);
 
         return view(
             'contracts.edit',
@@ -242,20 +281,43 @@ class ContractController extends Controller
 
     public function update(Request $request, Contract $contract)
     {
+        Gate::authorize('update', $contract);
+
         $validated = $request->validate([
-            'contract_number' => 'required|string|max:50|unique:contracts,contract_number,' . $contract->id,
-            'start_date'      => 'required|date',
-            'end_date'        => 'nullable|date|after:start_date',
-            'status'          => 'required|in:active,terminated',
-            'comment'         => 'nullable|string',
+            'contract_number' => 'required|string|max:50|unique:contracts,contract_number,'.$contract->id,
+            'start_date' => 'required|date',
+            'end_date' => 'nullable|date|after:start_date',
+            'status' => 'required|in:active,terminated',
+            'comment' => 'nullable|string',
         ]);
 
         $contract->update($validated);
-        $returnContext = $this->contractEditReturnContext($request, $contract);
 
-        return redirect()
-            ->route($returnContext['route'], $returnContext['route_parameters'])
+        return $this->mutationRedirect($request, $contract)
             ->with('success', 'Договор обновлён.');
+    }
+
+    private function editReturnContext(Request $request, Contract $contract): array
+    {
+        if (Gate::allows('view', $contract)) {
+            return $this->contractEditReturnContext($request, $contract);
+        }
+
+        if (Gate::allows('view', $contract->company)) {
+            return [
+                'url' => route('companies.show', $contract->company),
+                'route' => 'companies.show',
+                'route_parameters' => ['company' => $contract->company],
+                'hidden' => [],
+            ];
+        }
+
+        return [
+            'url' => route('dashboard'),
+            'route' => 'dashboard',
+            'route_parameters' => [],
+            'hidden' => [],
+        ];
     }
 
     private function contractEditReturnContext(Request $request, Contract $contract): array
@@ -313,50 +375,96 @@ class ContractController extends Controller
         return $parameters;
     }
 
-    public function destroy(Contract $contract)
+    public function destroy(Contract $contract, DeleteContract $deleteContract)
     {
-        // Не удаляем договор, пока у него есть предметы.
-        if (
-            $contract->orders()->exists() ||
-            $contract->subscriptions()->exists()
-        ) {
-            return redirect()
-                ->route('contracts.show', $contract)
-                ->with(
-                    'error',
-                    'Невозможно удалить договор — сначала удалите связанные заказы и подписки.'
-                );
-        }
+        Gate::authorize('delete', $contract);
 
-        // Сохраняем пути до удаления записей из базы.
-        $documentPaths = $contract->documents()
-            ->pluck('file_path')
-            ->all();
+        $contract->loadMissing('company:id,name');
+        $company = $contract->company;
 
         try {
-            /*
-             * После удаления договора записи contract_documents
-             * удалятся автоматически благодаря cascadeOnDelete().
-             */
-            $contract->delete();
-
-            // Удаляем физические файлы только после успешного удаления договора.
-            if (!empty($documentPaths)) {
-                Storage::disk('local')->delete($documentPaths);
-            }
-
-            return redirect()
-                ->route('contracts.index')
-                ->with('success', 'Договор удалён.');
-        } catch (\Throwable $exception) {
-            report($exception);
-
-            return redirect()
-                ->route('contracts.show', $contract)
-                ->with(
-                    'error',
-                    'Не удалось удалить договор. Попробуйте ещё раз.'
-                );
+            $deleteContract->handle($contract);
+        } catch (ContractDeletionException $exception) {
+            return $this->failedDeletionRedirect($contract, $company)
+                ->with('error', $exception->getMessage());
         }
+
+        return $this->deletedRedirect($company)
+            ->with('success', 'Договор удалён.');
+    }
+
+    private function safeCompanyContext(Request $request, Company $company): array
+    {
+        if (! Gate::allows('view', $company)) {
+            return [
+                'active' => false,
+                'company_url' => null,
+                'label' => null,
+                'query' => [],
+            ];
+        }
+
+        return CompanyPageContext::resolve($request, $company, 'contracts');
+    }
+
+    private function createBackUrl(?Company $company, ?array $companyContext): string
+    {
+        if ($company !== null && Gate::allows('view', $company)) {
+            return ($companyContext['active'] ?? false)
+                ? $companyContext['company_url']
+                : route('companies.show', $company);
+        }
+
+        if (Gate::allows('viewAny', Contract::class)) {
+            return route('contracts.index');
+        }
+
+        return route('dashboard');
+    }
+
+    private function mutationRedirect(Request $request, Contract $contract)
+    {
+        $contract->loadMissing('company:id,name');
+
+        if (Gate::allows('view', $contract)) {
+            $companyContext = $this->safeCompanyContext($request, $contract->company);
+
+            return redirect()->route('contracts.show', [
+                'contract' => $contract,
+                ...$companyContext['query'],
+            ]);
+        }
+
+        if (Gate::allows('view', $contract->company)) {
+            return redirect()->route('companies.show', $contract->company);
+        }
+
+        return redirect()->route('dashboard');
+    }
+
+    private function failedDeletionRedirect(Contract $contract, Company $company)
+    {
+        if (Gate::allows('view', $contract)) {
+            return redirect()->route('contracts.show', $contract);
+        }
+
+        if (Gate::allows('view', $company)) {
+            return redirect()->route('companies.show', $company);
+        }
+
+        return redirect()->route('dashboard');
+    }
+
+    private function deletedRedirect(Company $company)
+    {
+        if (Gate::allows('viewAny', Contract::class)) {
+            return redirect()->route('contracts.index');
+        }
+
+        if (Gate::allows('view', $company)) {
+            return redirect()->route('companies.show', $company);
+        }
+
+        return redirect()->route('dashboard');
     }
 }

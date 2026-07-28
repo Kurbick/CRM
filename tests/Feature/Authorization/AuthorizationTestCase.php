@@ -75,6 +75,21 @@ abstract class AuthorizationTestCase extends TestCase
         ]);
     }
 
+    /** @return array<string, string|int|null> */
+    protected function contractPayload(
+        Company $company,
+        string $number = 'AUTH-CONTRACT'
+    ): array {
+        return [
+            'company_id' => $company->id,
+            'contract_number' => $number.'-'.uniqid(),
+            'start_date' => '2026-08-01',
+            'end_date' => '2027-08-01',
+            'status' => 'active',
+            'comment' => 'Authorization contract comment',
+        ];
+    }
+
     protected function contact(
         Company $company,
         string $firstName = 'Authorization Contact'

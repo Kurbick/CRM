@@ -6,6 +6,7 @@ use App\Actions\Companies\DeleteCompany;
 use App\Exceptions\CompanyDeletionException;
 use App\Http\Controllers\Controller;
 use App\Models\Company;
+use App\Models\Contract;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
 use App\Models\Payment;
@@ -218,7 +219,7 @@ class CompanyController extends Controller
             && Gate::allows('viewAny', Invoice::class);
         $canViewPayments = $canViewFinancials
             && Gate::allows('viewAny', Payment::class);
-        $canViewContracts = Gate::allows(PermissionName::ContractsView->value);
+        $canViewContracts = Gate::allows('viewAny', Contract::class);
         $companyCanBeDeleted = Gate::allows('delete', $company)
             && $deleteCompany->canDelete($company);
 

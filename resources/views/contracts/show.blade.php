@@ -58,7 +58,7 @@
     {{-- Заголовок страницы --}}
     <div class="mb-6">
         @php
-            $canReturnToCompany = $companyContext['active'] && auth()->user()->can('view', $contract->company);
+            $canReturnToCompany = $companyContext['active'];
         @endphp
         <a href="{{ $canReturnToCompany ? $companyContext['company_url'] : route('contracts.index') }}"
             class="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 transition">
@@ -75,11 +75,27 @@
                     'status' => $contract->effective_status,
                 ])
 
-                <a href="{{ route('contracts.edit', ['contract' => $contract, 'edit_origin' => 'show', ...$companyContext['query']]) }}"
-                    class="text-sm border border-gray-200 hover:bg-gray-50 text-gray-600
+                @can('update', $contract)
+                    <a href="{{ route('contracts.edit', ['contract' => $contract, 'edit_origin' => 'show', ...$companyContext['query']]) }}"
+                        class="text-sm border border-gray-200 hover:bg-gray-50 text-gray-600
                           px-4 py-2 rounded-lg transition">
-                    Редактировать
-                </a>
+                        Редактировать
+                    </a>
+                @endcan
+
+                @can('delete', $contract)
+                    @if ($contractCanBeDeleted)
+                        <form action="{{ route('contracts.destroy', $contract) }}" method="POST"
+                            onsubmit="return confirm('Удалить договор?')">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit"
+                                class="text-sm border border-red-200 text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg transition">
+                                Удалить
+                            </button>
+                        </form>
+                    @endif
+                @endcan
             </div>
         </div>
     </div>

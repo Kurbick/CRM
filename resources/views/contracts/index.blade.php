@@ -5,14 +5,14 @@
 @section('content')
 
     @php
-        $currentSortBy = request('sort_by', 'start_date');
-        $currentSortDirection = request('sort_direction', 'desc');
+        $currentSortBy = $sortBy;
+        $currentSortDirection = $sortDirection;
 
         $startSortDirection = $currentSortBy === 'start_date' && $currentSortDirection === 'desc' ? 'asc' : 'desc';
 
         $endSortDirection = $currentSortBy === 'end_date' && $currentSortDirection === 'desc' ? 'asc' : 'desc';
 
-        $preservedFilters = request()->except(['page', 'sort_by', 'sort_direction']);
+        $preservedFilters = \Illuminate\Support\Arr::except($paginationParameters, ['sort_by', 'sort_direction']);
 
         $startSortUrl = route(
             'contracts.index',
@@ -43,8 +43,9 @@
             </p>
         </div>
 
-        <div>
-            <a href="{{ route('contracts.create') }}"
+        @can('create', \App\Models\Contract::class)
+            <div>
+                <a href="{{ route('contracts.create') }}"
                 class="inline-flex items-center text-sm bg-blue-600 hover:bg-blue-700
                       text-white px-4 py-2.5 rounded-lg transition shadow-sm font-medium">
 
@@ -54,8 +55,9 @@
                 </svg>
 
                 Создать договор
-            </a>
-        </div>
+                </a>
+            </div>
+        @endcan
     </div>
 
     {{-- Фильтры и поиск --}}
@@ -65,9 +67,9 @@
             class="flex flex-col md:flex-row md:items-center gap-4">
 
             {{-- Сохраняем сортировку при поиске и фильтрации --}}
-            <input type="hidden" name="sort_by" value="{{ request('sort_by', 'start_date') }}">
+            <input type="hidden" name="sort_by" value="{{ $sortBy }}">
 
-            <input type="hidden" name="sort_direction" value="{{ request('sort_direction', 'desc') }}">
+            <input type="hidden" name="sort_direction" value="{{ $sortDirection }}">
 
             {{-- Поиск --}}
             <div class="flex-1 relative">
@@ -84,7 +86,7 @@
                     </svg>
                 </span>
 
-                <input type="text" name="search" value="{{ request('search') }}"
+                <input type="text" name="search" value="{{ $search }}"
                     placeholder="Поиск по номеру договора или компании..."
                     class="w-full pl-10 pr-4 py-2 border border-gray-200
                               rounded-lg text-sm focus:border-blue-500
@@ -96,9 +98,9 @@
             <div class="relative w-full md:w-64" x-data="{
                 open: false,
             
-                selectedId: @js((string) request('company_id', '')),
+                selectedId: @js((string) ($companyId ?? '')),
             
-                query: @js($companies->firstWhere('id', (int) request('company_id'))?->name ?? ''),
+                query: @js($companies->firstWhere('id', $companyId)?->name ?? ''),
             
                 companies: @js(
     $companies
@@ -237,7 +239,7 @@
             <div class="relative w-full md:w-44" x-data="{
                 open: false,
             
-                selectedStatus: @js((string) request('status', '')),
+                selectedStatus: @js((string) ($status ?? '')),
             
                 statuses: [{
                         value: '',
@@ -344,7 +346,7 @@
                     Найти
                 </button>
 
-                @if (request('search') || request('status') || request('company_id') || request('sort_by') || request('sort_direction'))
+                @if ($search !== '' || $status || $companyId || $sortBy !== 'start_date' || $sortDirection !== 'desc')
                     <a href="{{ route('contracts.index') }}"
                         class="px-4 py-2 border border-gray-200 hover:bg-gray-50
                               text-gray-500 text-sm font-medium rounded-lg
@@ -453,7 +455,7 @@
                             <td class="px-6 py-4">
 
                                 @can('view', $contract->company)
-                                    <a href="{{ route('companies.show', ['company' => $contract->company, 'return_url' => request()->fullUrl()]) }}"
+                                    <a href="{{ route('companies.show', ['company' => $contract->company, 'return_url' => route('contracts.index', \Illuminate\Support\Arr::except($contractEditContext, 'edit_origin'))]) }}"
                                         class="font-medium text-gray-900
                                               hover:text-blue-600 transition">
                                         {{ $contract->company->name }}
@@ -512,8 +514,9 @@
                                         Открыть →
                                     </a>
 
-                                    <a href="{{ route('contracts.edit', ['contract' => $contract, ...$contractEditContext]) }}"
-                                        class="text-gray-400 hover:text-gray-600 transition" title="Редактировать">
+                                    @can('update', $contract)
+                                        <a href="{{ route('contracts.edit', ['contract' => $contract, ...$contractEditContext]) }}"
+                                            class="text-gray-400 hover:text-gray-600 transition" title="Редактировать">
 
                                         <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 
@@ -523,7 +526,8 @@
                                                                                                                                                                      113.536 3.536L6.5 21.036
                                                                                                                                                                      H3v-3.572L16.732 3.732z" />
                                         </svg>
-                                    </a>
+                                        </a>
+                                    @endcan
                                 </div>
                             </td>
                         </tr>
@@ -535,14 +539,16 @@
 
                                 Договоров не найдено.
 
-                                @if (request('search') || request('status') || request('company_id') || request('sort_by') || request('sort_direction'))
+                                @if ($search !== '' || $status || $companyId || $sortBy !== 'start_date' || $sortDirection !== 'desc')
                                     <a href="{{ route('contracts.index') }}" class="text-blue-600 hover:underline ml-1">
                                         Сбросить фильтры
                                     </a>
                                 @else
-                                    <a href="{{ route('contracts.create') }}" class="text-blue-600 hover:underline ml-1">
-                                        Создать первый договор
-                                    </a>
+                                    @can('create', \App\Models\Contract::class)
+                                        <a href="{{ route('contracts.create') }}" class="text-blue-600 hover:underline ml-1">
+                                            Создать первый договор
+                                        </a>
+                                    @endcan
                                 @endif
                             </td>
                         </tr>

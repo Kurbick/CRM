@@ -4,11 +4,13 @@ namespace Tests\Feature\Authorization;
 
 use App\Models\Company;
 use App\Models\CompanyContact;
+use App\Models\Contract;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\User;
 use App\Policies\CompanyContactPolicy;
 use App\Policies\CompanyPolicy;
+use App\Policies\ContractPolicy;
 use App\Policies\InvoicePolicy;
 use App\Policies\PaymentPolicy;
 use App\Support\Access\PermissionName;
@@ -22,6 +24,7 @@ class PolicyDiscoveryTest extends AuthorizationTestCase
         $this->assertInstanceOf(PaymentPolicy::class, Gate::getPolicyFor(Payment::class));
         $this->assertInstanceOf(CompanyPolicy::class, Gate::getPolicyFor(Company::class));
         $this->assertInstanceOf(CompanyContactPolicy::class, Gate::getPolicyFor(CompanyContact::class));
+        $this->assertInstanceOf(ContractPolicy::class, Gate::getPolicyFor(Contract::class));
     }
 
     public function test_payment_create_policy_receives_invoice_context_and_uses_only_permission(): void

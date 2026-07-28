@@ -16,7 +16,9 @@ class CompanyReturnNavigationTest extends TestCase
         $companyIndex = file_get_contents(resource_path('views/companies/index.blade.php'));
 
         $this->assertStringContainsString("'return_url' => request()->fullUrl()", $invoiceIndex);
-        $this->assertStringContainsString("'return_url' => request()->fullUrl()", $contractIndex);
+        $this->assertStringContainsString("'return_url' => route('contracts.index'", $contractIndex);
+        $this->assertStringContainsString("Arr::except(\$contractEditContext, 'edit_origin')", $contractIndex);
+        $this->assertStringNotContainsString("'return_url' => request()->fullUrl()", $contractIndex);
         $this->assertStringContainsString("'return_url' => \$companyIndexReturnUrl", $companyIndex);
         $this->assertStringNotContainsString("'return_url' => request()->fullUrl()", $companyIndex);
     }

@@ -100,13 +100,15 @@
                         </a>
                     @endcan
 
-                    <a href="{{ route('contracts.index') }}"
-                        class="px-3 py-2 rounded-lg text-sm font-medium transition
+                    @can('viewAny', \App\Models\Contract::class)
+                        <a href="{{ route('contracts.index') }}"
+                            class="px-3 py-2 rounded-lg text-sm font-medium transition
                 {{ request()->routeIs('contracts.*')
                     ? 'bg-blue-50 text-blue-600'
                     : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900' }}">
-                        Договоры
-                    </a>
+                            Договоры
+                        </a>
+                    @endcan
 
                     @can('viewAny', \App\Models\Invoice::class)
                         <a href="{{ route('invoices.index') }}"

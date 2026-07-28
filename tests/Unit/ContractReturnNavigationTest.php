@@ -111,7 +111,7 @@ class ContractReturnNavigationTest extends TestCase
         $this->assertStringContainsString("\$returnContext['url']", $edit);
         $this->assertStringContainsString("\$returnContext['hidden']", $edit);
         $this->assertStringContainsString("'edit_origin' => 'show'", $show);
-        $this->assertStringContainsString("->route(\$returnContext['route'], \$returnContext['route_parameters'])", $controller);
+        $this->assertStringContainsString('return $this->mutationRedirect($request, $contract)', $controller);
         $this->assertStringNotContainsString('return_url', $edit);
     }
 
@@ -120,7 +120,7 @@ class ContractReturnNavigationTest extends TestCase
         $method = new ReflectionMethod(ContractController::class, 'contractEditReturnContext');
 
         return $method->invoke(
-            new ContractController(),
+            new ContractController,
             Request::create('/contracts/'.$contract->id.'/edit', 'GET', $parameters),
             $contract
         );
