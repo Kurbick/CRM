@@ -3,7 +3,11 @@
 @section('content')
 
 <div class="mb-6">
-    <a href="{{ $companyContext['active'] ? $companyContext['company_url'] : route('companies.show', $company) }}" class="text-sm text-gray-500 hover:text-gray-700">← Назад к компании</a>
+    @can('view', $company)
+        <a href="{{ $companyContext['active'] ? $companyContext['company_url'] : route('companies.show', $company) }}" class="text-sm text-gray-500 hover:text-gray-700">← Назад к компании</a>
+    @else
+        <a href="{{ route('dashboard') }}" class="text-sm text-gray-500 hover:text-gray-700">← На Dashboard</a>
+    @endcan
     <h1 class="text-2xl font-bold text-gray-900 mt-2">Добавить контакт</h1>
     <p class="text-sm text-gray-500">{{ $company->name }}</p>
 </div>
@@ -79,10 +83,17 @@
                     class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-6 py-2.5 rounded-lg transition">
                 Сохранить контакт
             </button>
-            <a href="{{ $companyContext['active'] ? $companyContext['company_url'] : route('companies.show', $company) }}"
-               class="px-6 py-2.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition">
-                Отмена
-            </a>
+            @can('view', $company)
+                <a href="{{ $companyContext['active'] ? $companyContext['company_url'] : route('companies.show', $company) }}"
+                   class="px-6 py-2.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition">
+                    Отмена
+                </a>
+            @else
+                <a href="{{ route('dashboard') }}"
+                   class="px-6 py-2.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition">
+                    Отмена
+                </a>
+            @endcan
         </div>
     </form>
 </div>

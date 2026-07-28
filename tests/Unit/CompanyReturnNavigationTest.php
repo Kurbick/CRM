@@ -9,7 +9,7 @@ use Tests\TestCase;
 
 class CompanyReturnNavigationTest extends TestCase
 {
-    public function test_company_links_from_lists_include_the_complete_current_url(): void
+    public function test_company_links_from_lists_include_safe_return_urls(): void
     {
         $invoiceIndex = file_get_contents(resource_path('views/invoices/index.blade.php'));
         $contractIndex = file_get_contents(resource_path('views/contracts/index.blade.php'));
@@ -17,7 +17,8 @@ class CompanyReturnNavigationTest extends TestCase
 
         $this->assertStringContainsString("'return_url' => request()->fullUrl()", $invoiceIndex);
         $this->assertStringContainsString("'return_url' => request()->fullUrl()", $contractIndex);
-        $this->assertStringContainsString("'return_url' => request()->fullUrl()", $companyIndex);
+        $this->assertStringContainsString("'return_url' => \$companyIndexReturnUrl", $companyIndex);
+        $this->assertStringNotContainsString("'return_url' => request()->fullUrl()", $companyIndex);
     }
 
     public function test_company_controller_restricts_return_url_to_internal_list_routes(): void
@@ -50,7 +51,7 @@ class CompanyReturnNavigationTest extends TestCase
     public function test_safe_return_context_preserves_internal_query_and_rejects_external_host(): void
     {
         $method = new ReflectionMethod(CompanyController::class, 'companyReturnContext');
-        $controller = new CompanyController();
+        $controller = new CompanyController;
         $internalUrl = route('invoices.index', [
             'status' => 'draft',
             'sort' => 'due_date',

@@ -57,9 +57,12 @@
 
     {{-- Заголовок страницы --}}
     <div class="mb-6">
-        <a href="{{ $companyContext['active'] ? $companyContext['company_url'] : route('contracts.index') }}"
+        @php
+            $canReturnToCompany = $companyContext['active'] && auth()->user()->can('view', $contract->company);
+        @endphp
+        <a href="{{ $canReturnToCompany ? $companyContext['company_url'] : route('contracts.index') }}"
             class="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 transition">
-            ← {{ $companyContext['active'] ? $companyContext['label'] : 'Назад к договорам' }}
+            ← {{ $canReturnToCompany ? $companyContext['label'] : 'Назад к договорам' }}
         </a>
 
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mt-3">
@@ -96,11 +99,17 @@
                         Компания
                     </p>
 
-                    <a href="{{ route('companies.show', $contract->company) }}"
-                        class="inline-block mt-2 text-sm font-medium text-blue-600
-                              hover:text-blue-800 hover:underline transition">
-                        {{ $contract->company->name }}
-                    </a>
+                    @can('view', $contract->company)
+                        <a href="{{ route('companies.show', $contract->company) }}"
+                            class="inline-block mt-2 text-sm font-medium text-blue-600
+                                  hover:text-blue-800 hover:underline transition">
+                            {{ $contract->company->name }}
+                        </a>
+                    @else
+                        <span class="inline-block mt-2 text-sm font-medium text-gray-900">
+                            {{ $contract->company->name }}
+                        </span>
+                    @endcan
                 </div>
 
                 <div>

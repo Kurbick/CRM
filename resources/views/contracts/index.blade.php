@@ -452,12 +452,15 @@
                             {{-- Компания --}}
                             <td class="px-6 py-4">
 
-                                <a href="{{ route('companies.show', ['company' => $contract->company, 'return_url' => request()->fullUrl()]) }}"
-                                    class="font-medium text-gray-900
-                                          hover:text-blue-600 transition">
-
-                                    {{ $contract->company->name }}
-                                </a>
+                                @can('view', $contract->company)
+                                    <a href="{{ route('companies.show', ['company' => $contract->company, 'return_url' => request()->fullUrl()]) }}"
+                                        class="font-medium text-gray-900
+                                              hover:text-blue-600 transition">
+                                        {{ $contract->company->name }}
+                                    </a>
+                                @else
+                                    <span class="font-medium text-gray-900">{{ $contract->company->name }}</span>
+                                @endcan
                             </td>
 
                             {{-- Дата начала --}}

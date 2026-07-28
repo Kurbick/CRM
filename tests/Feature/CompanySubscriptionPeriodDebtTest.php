@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Company;
+use App\Support\Access\PermissionName;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -11,6 +12,15 @@ use Tests\Feature\CompanyFinancialTestCase as TestCase;
 class CompanySubscriptionPeriodDebtTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->authenticatedUser->givePermissionTo(
+            PermissionName::ContractsView->value
+        );
+    }
 
     public function test_company_without_invoice_lines_shows_empty_period_state(): void
     {
@@ -147,6 +157,10 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
     public function test_tabs_and_contextual_company_routes_are_rendered_without_extra_actions(): void
     {
         $company = $this->company();
+        $this->authenticatedUser->givePermissionTo([
+            PermissionName::CompanyContactsCreate->value,
+            PermissionName::ContractsCreate->value,
+        ]);
 
         $this->get(route('companies.show', $company))
             ->assertOk()

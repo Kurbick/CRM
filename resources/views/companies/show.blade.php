@@ -32,28 +32,34 @@
             </div>
 
             <div class="flex items-center gap-2">
-                <a href="{{ route('companies.edit', ['company' => $company, 'origin' => 'show']) }}"
-                    class="inline-flex items-center text-sm border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg font-medium transition shadow-sm">
-                    <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                    </svg>
-                    Редактировать
-                </a>
-
-                <form action="{{ route('companies.destroy', $company) }}" method="POST"
-                    onsubmit="return confirm('Вы уверены, что хотите удалить эту компанию? Действие необратимо.')">
-                    @csrf
-                    @method('DELETE')
-                    <button type="submit"
-                        class="inline-flex items-center text-sm bg-red-50 hover:bg-red-100 text-red-700 px-4 py-2 rounded-lg font-medium transition border border-red-200">
-                        <svg class="w-4 h-4 mr-1.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                @can('update', $company)
+                    <a href="{{ route('companies.edit', ['company' => $company, 'origin' => 'show']) }}"
+                        class="inline-flex items-center text-sm border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg font-medium transition shadow-sm">
+                        <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                         </svg>
-                        Удалить
-                    </button>
-                </form>
+                        Редактировать
+                    </a>
+                @endcan
+
+                @can('delete', $company)
+                    @if ($companyCanBeDeleted)
+                        <form action="{{ route('companies.destroy', $company) }}" method="POST"
+                            onsubmit="return confirm('Вы уверены, что хотите удалить эту компанию? Действие необратимо.')">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit"
+                                class="inline-flex items-center text-sm bg-red-50 hover:bg-red-100 text-red-700 px-4 py-2 rounded-lg font-medium transition border border-red-200">
+                                <svg class="w-4 h-4 mr-1.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                                Удалить
+                            </button>
+                        </form>
+                    @endif
+                @endcan
             </div>
         </div>
     </div>
@@ -348,12 +354,14 @@
                         class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition">
                         Контакты ({{ $company->contacts->count() }})
                     </button>
-                    <button @click="selectTab('contracts')"
-                        :class="tab === 'contracts' ? 'border-blue-600 text-blue-600' :
-                            'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
-                        class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition">
-                        Договоры ({{ $company->contracts->count() }})
-                    </button>
+                    @can(\App\Support\Access\PermissionName::ContractsView->value)
+                        <button @click="selectTab('contracts')"
+                            :class="tab === 'contracts' ? 'border-blue-600 text-blue-600' :
+                                'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition">
+                            Договоры ({{ $company->contracts->count() }})
+                        </button>
+                    @endcan
                     @can('viewFinancials', $company)
                         @can('viewAny', \App\Models\Invoice::class)
                             <button @click="selectTab('invoices')"
@@ -374,14 +382,25 @@
                     @endcan
                 </nav>
                 <div class="pb-3 sm:pb-0 sm:pl-4 shrink-0">
-                    <a x-show="tab === 'contacts'" href="{{ route('companies.contacts.create', ['company' => $company, 'origin' => 'company', 'tab' => 'contacts']) }}"
-                        class="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 transition">
-                        <span aria-hidden="true">+</span> Контакт
-                    </a>
-                    <a x-show="tab === 'contracts'" x-cloak href="{{ route('companies.contracts.create', ['company' => $company, 'origin' => 'company', 'tab' => 'contracts']) }}"
-                        class="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 transition">
-                        <span aria-hidden="true">+</span> Договор
-                    </a>
+                    @can('create', [\App\Models\CompanyContact::class, $company])
+                        <a x-show="tab === 'contacts'" href="{{ route('companies.contacts.create', ['company' => $company, 'origin' => 'company', 'tab' => 'contacts']) }}"
+                            class="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 transition">
+                            <span aria-hidden="true">+</span> Контакт
+                        </a>
+                    @endcan
+                    @can(\App\Support\Access\PermissionName::ContractsCreate->value)
+                        @can(\App\Support\Access\PermissionName::ContractsView->value)
+                            <a x-show="tab === 'contracts'" x-cloak href="{{ route('companies.contracts.create', ['company' => $company, 'origin' => 'company', 'tab' => 'contracts']) }}"
+                                class="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 transition">
+                                <span aria-hidden="true">+</span> Договор
+                            </a>
+                        @else
+                            <a href="{{ route('companies.contracts.create', ['company' => $company]) }}"
+                                class="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 transition">
+                                <span aria-hidden="true">+</span> Договор
+                            </a>
+                        @endcan
+                    @endcan
                 </div>
             </div>
 
@@ -424,8 +443,24 @@
                                     </td>
                                     <td class="py-3 text-xs text-gray-400">{{ $contact->comment ?? '—' }}</td>
                                     <td class="py-3 text-right">
-                                        <a href="{{ route('contacts.edit', ['contact' => $contact, 'origin' => 'company', 'tab' => 'contacts']) }}"
-                                            class="text-gray-400 hover:text-blue-600 text-xs transition">Редакт.</a>
+                                        <div class="inline-flex items-center gap-3">
+                                            @can('update', $contact)
+                                                <a href="{{ route('contacts.edit', ['contact' => $contact, 'origin' => 'company', 'tab' => 'contacts']) }}"
+                                                    class="text-gray-400 hover:text-blue-600 text-xs transition">Редакт.</a>
+                                            @endcan
+                                            @can('delete', $contact)
+                                                <form action="{{ route('contacts.destroy', $contact) }}" method="POST"
+                                                    onsubmit="return confirm('Удалить контактное лицо?')">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <input type="hidden" name="origin" value="company">
+                                                    <input type="hidden" name="tab" value="contacts">
+                                                    <button type="submit" class="text-xs text-red-500 transition hover:text-red-700">
+                                                        Удалить
+                                                    </button>
+                                                </form>
+                                            @endcan
+                                        </div>
                                     </td>
                                 </tr>
                             @empty
@@ -442,6 +477,7 @@
             </div>
 
             {{-- Таб: Договоры --}}
+            @can(\App\Support\Access\PermissionName::ContractsView->value)
             <div x-show="tab === 'contracts'" x-cloak class="p-5">
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm text-left">
@@ -480,6 +516,7 @@
                     </table>
                 </div>
             </div>
+            @endcan
 
             {{-- Таб: Инвойсы --}}
             @can('viewFinancials', $company)

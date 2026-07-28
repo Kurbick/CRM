@@ -90,13 +90,15 @@
                         Дашборд
                     </a>
 
-                    <a href="{{ route('companies.index') }}"
-                        class="px-3 py-2 rounded-lg text-sm font-medium transition
-                {{ request()->routeIs('companies.*')
-                    ? 'bg-blue-50 text-blue-600'
-                    : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900' }}">
-                        Компании
-                    </a>
+                    @can('viewAny', \App\Models\Company::class)
+                        <a href="{{ route('companies.index') }}"
+                            class="px-3 py-2 rounded-lg text-sm font-medium transition
+                    {{ request()->routeIs('companies.*')
+                        ? 'bg-blue-50 text-blue-600'
+                        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900' }}">
+                            Компании
+                        </a>
+                    @endcan
 
                     <a href="{{ route('contracts.index') }}"
                         class="px-3 py-2 rounded-lg text-sm font-medium transition

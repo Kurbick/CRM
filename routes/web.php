@@ -13,6 +13,7 @@ use App\Http\Controllers\Web\InvoiceController;
 use App\Http\Controllers\Web\OrderController;
 use App\Http\Controllers\Web\PaymentController;
 use App\Http\Controllers\Web\SubscriptionController;
+use App\Models\Company as CompanyModel;
 use App\Models\Invoice as InvoiceModel;
 use Illuminate\Support\Facades\Route;
 
@@ -71,7 +72,7 @@ Route::middleware(['auth', 'active', 'password.changed'])->group(function (): vo
     Route::get(
         'companies/autocomplete',
         [CompanyController::class, 'autocomplete']
-    )->name('companies.autocomplete');
+    )->middleware('can:viewAny,'.CompanyModel::class)->name('companies.autocomplete');
 
     Route::resource(
         'companies',

@@ -37,13 +37,15 @@
             <h1 class="text-2xl font-bold text-gray-900">Компании</h1>
             <p class="text-sm text-gray-500 mt-1">Управление клиентами и реквизитами</p>
         </div>
-        <a href="{{ route('companies.create') }}"
-            class="inline-flex items-center text-sm bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg transition shadow-sm font-medium">
-            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
-            </svg>
-            Добавить компанию
-        </a>
+        @can('create', \App\Models\Company::class)
+            <a href="{{ route('companies.create') }}"
+                class="inline-flex items-center text-sm bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg transition shadow-sm font-medium">
+                <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
+                </svg>
+                Добавить компанию
+            </a>
+        @endcan
     </div>
 
     <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm mb-6">
@@ -211,12 +213,14 @@
                         </th>
                         <th class="px-6 py-3.5 text-xs font-semibold uppercase tracking-wider">VÖEN</th>
                         <th class="px-6 py-3.5 text-xs font-semibold uppercase tracking-wider">Контакты</th>
-                        <th class="px-6 py-3.5 text-xs font-semibold uppercase tracking-wider">
-                            <a href="{{ $sortUrl('debt') }}" class="inline-flex items-center gap-1 hover:text-blue-600">
-                                Долг
-                                <span class="{{ $sort === 'debt' ? 'text-blue-600' : 'text-gray-300' }}">{{ $sort === 'debt' ? ($direction === 'asc' ? '↑' : '↓') : '↕' }}</span>
-                            </a>
-                        </th>
+                        @if ($canViewFinancials)
+                            <th data-testid="company-debt-column" class="px-6 py-3.5 text-xs font-semibold uppercase tracking-wider">
+                                <a href="{{ $sortUrl('debt') }}" class="inline-flex items-center gap-1 hover:text-blue-600">
+                                    Долг
+                                    <span class="{{ $sort === 'debt' ? 'text-blue-600' : 'text-gray-300' }}">{{ $sort === 'debt' ? ($direction === 'asc' ? '↑' : '↓') : '↕' }}</span>
+                                </a>
+                            </th>
+                        @endif
                         <th class="px-6 py-3.5 text-xs font-semibold uppercase tracking-wider">Статус</th>
                         <th class="px-6 py-3.5 text-xs font-semibold uppercase tracking-wider"></th>
                     </tr>
@@ -241,11 +245,13 @@
                                 <div class="text-gray-900 text-xs">{{ $company->email ?? '—' }}</div>
                                 <div class="text-gray-400 text-xs mt-0.5">{{ $company->phone ?? '—' }}</div>
                             </td>
-                            <td class="px-6 py-4">
-                                <span class="{{ $company->total_debt > 0 ? 'text-red-600 font-semibold' : 'text-gray-400 font-medium' }}">
-                                    {{ number_format($company->total_debt, 2) }} ₼
-                                </span>
-                            </td>
+                            @if ($canViewFinancials)
+                                <td data-testid="company-debt-value" class="px-6 py-4">
+                                    <span class="{{ $company->total_debt > 0 ? 'text-red-600 font-semibold' : 'text-gray-400 font-medium' }}">
+                                        {{ number_format($company->total_debt, 2) }} ₼
+                                    </span>
+                                </td>
+                            @endif
                             <td class="px-6 py-4">
                                 <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ $statusBadges[$company->status]['class'] }}">
                                     {{ $statusBadges[$company->status]['label'] }}
@@ -253,25 +259,29 @@
                             </td>
                             <td class="px-6 py-4 text-right">
                                 <div class="flex items-center justify-end gap-3">
-                                    <a href="{{ route('companies.show', ['company' => $company, 'return_url' => request()->fullUrl()]) }}"
+                                    <a href="{{ route('companies.show', ['company' => $company, 'return_url' => $companyIndexReturnUrl]) }}"
                                         class="text-blue-600 hover:text-blue-800 text-sm font-semibold transition">Открыть →</a>
-                                    <a href="{{ route('companies.edit', ['company' => $company, ...$editContext]) }}"
-                                        class="text-gray-400 hover:text-gray-600 transition" title="Редактировать">
-                                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                        </svg>
-                                    </a>
+                                    @can('update', $company)
+                                        <a href="{{ route('companies.edit', ['company' => $company, ...$editContext]) }}"
+                                            class="text-gray-400 hover:text-gray-600 transition" title="Редактировать">
+                                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                            </svg>
+                                        </a>
+                                    @endcan
                                 </div>
                             </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="px-6 py-12 text-center text-gray-400">
+                            <td colspan="{{ $canViewFinancials ? 6 : 5 }}" class="px-6 py-12 text-center text-gray-400">
                                 Компаний не найдено.
                                 @if ($search !== '' || $status !== '')
                                     <a href="{{ route('companies.index') }}" class="text-blue-600 hover:underline ml-1">Сбросить фильтры</a>
                                 @else
-                                    <a href="{{ route('companies.create') }}" class="text-blue-600 hover:underline ml-1">Добавить первую компанию</a>
+                                    @can('create', \App\Models\Company::class)
+                                        <a href="{{ route('companies.create') }}" class="text-blue-600 hover:underline ml-1">Добавить первую компанию</a>
+                                    @endcan
                                 @endif
                             </td>
                         </tr>

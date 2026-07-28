@@ -25,12 +25,15 @@
     {{-- Верхний заголовок и действия --}}
     <div class="invoice-page-header crm-print-hide mb-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4 print:hidden">
         <div>
-            <a href="{{ $companyContext['active'] ? $companyContext['company_url'] : route('invoices.index') }}"
+            @php
+                $canReturnToCompany = $companyContext['active'] && auth()->user()->can('view', $invoice->company);
+            @endphp
+            <a href="{{ $canReturnToCompany ? $companyContext['company_url'] : route('invoices.index') }}"
                 class="text-sm text-gray-500 hover:text-gray-900 transition flex items-center gap-1.5 mb-2">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
-                {{ $companyContext['active'] ? $companyContext['label'] : 'Назад к списку' }}
+                {{ $canReturnToCompany ? $companyContext['label'] : 'Назад к списку' }}
             </a>
             <div class="flex items-center gap-3">
                 <h1 class="text-2xl font-bold text-gray-900">Счёт {{ $invoice->invoice_number }}</h1>

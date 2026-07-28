@@ -5,12 +5,25 @@ namespace Tests\Feature;
 use App\Models\Company;
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Support\Access\PermissionName;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Tests\AuthenticatedTestCase as TestCase;
+use Tests\Feature\CompanyTestCase as TestCase;
 
 class CompanyIndexTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->grantCompanyPermissions([
+            PermissionName::CompaniesView->value,
+            PermissionName::CompaniesFinancialsView->value,
+            PermissionName::CompaniesCreate->value,
+            PermissionName::CompaniesUpdate->value,
+        ]);
+    }
 
     public function test_index_has_updated_heading_and_search_form(): void
     {
@@ -151,26 +164,98 @@ class CompanyIndexTest extends TestCase
         );
     }
 
-    public function test_sort_links_and_pagination_preserve_filters_without_page(): void
+    public function test_forbidden_debt_sort_is_normalized_across_pagination(): void
     {
-        foreach (['active', 'suspended', 'archived'] as $status) {
-            foreach (range(1, 12) as $number) {
-                $this->company(ucfirst($status).' Search Company '.str_pad((string) $number, 2, '0', STR_PAD_LEFT), status: $status);
-            }
-
-            $response = $this->get(route('companies.index', [
-                'search' => 'Search',
-                'status' => $status,
-                'sort' => 'debt',
-                'direction' => 'desc',
-            ]))->assertOk();
-
-            $response->assertSee('search=Search', false)
-                ->assertSee('status='.$status, false)
-                ->assertSee('sort=debt', false)
-                ->assertSee('direction=desc', false)
-                ->assertSee('page=2', false);
+        $this->authenticatedUser->revokePermissionTo(
+            PermissionName::CompaniesFinancialsView->value
+        );
+        foreach (range(1, 12) as $number) {
+            $this->company(
+                sprintf('Restricted Pagination %02d', $number),
+                status: 'suspended'
+            );
         }
+
+        $firstPage = $this->get(route('companies.index', [
+            'search' => 'Restricted Pagination',
+            'status' => 'suspended',
+            'sort' => 'debt',
+            'direction' => 'desc',
+            'unexpected' => 'SECRET-UNKNOWN-PARAMETER',
+        ]))->assertOk()
+            ->assertDontSee('company-debt-column')
+            ->assertDontSee('sort=debt', false)
+            ->assertDontSee('sort%3Ddebt', false)
+            ->assertDontSee('SECRET-UNKNOWN-PARAMETER', false);
+
+        $paginator = $firstPage->viewData('companies');
+        $nextPageUrl = $paginator->nextPageUrl();
+        $returnUrl = $firstPage->viewData('companyIndexReturnUrl');
+
+        $this->assertTrue($paginator->hasMorePages());
+        $this->assertNotNull($nextPageUrl);
+        $this->assertStringContainsString('search=Restricted%20Pagination', $nextPageUrl);
+        $this->assertStringContainsString('status=suspended', $nextPageUrl);
+        $this->assertStringContainsString('sort=name', $nextPageUrl);
+        $this->assertStringContainsString('direction=desc', $nextPageUrl);
+        $this->assertStringNotContainsString('sort=debt', $nextPageUrl);
+        $this->assertStringNotContainsString('unexpected', $nextPageUrl);
+        $this->assertStringNotContainsString('%2520', $returnUrl);
+
+        $secondPage = $this->get($nextPageUrl)->assertOk()
+            ->assertSee('Restricted Pagination 02')
+            ->assertSee('Restricted Pagination 01')
+            ->assertDontSee('Restricted Pagination 03')
+            ->assertDontSee('company-debt-column')
+            ->assertDontSee('sort=debt', false)
+            ->assertDontSee('sort%3Ddebt', false);
+
+        $this->assertSame('Restricted Pagination', $secondPage->viewData('search'));
+        $this->assertSame('suspended', $secondPage->viewData('status'));
+        $this->assertSame('name', $secondPage->viewData('sort'));
+        $this->assertSame('desc', $secondPage->viewData('direction'));
+        $this->assertStringNotContainsString(
+            '%2520',
+            $secondPage->viewData('companyIndexReturnUrl')
+        );
+    }
+
+    public function test_allowed_debt_sort_is_preserved_across_pagination(): void
+    {
+        foreach (range(1, 12) as $number) {
+            $this->company(
+                sprintf('Financial Pagination %02d', $number),
+                status: 'archived'
+            );
+        }
+
+        $firstPage = $this->get(route('companies.index', [
+            'search' => 'Financial Pagination',
+            'status' => 'archived',
+            'sort' => 'debt',
+            'direction' => 'desc',
+        ]))->assertOk()
+            ->assertSee('company-debt-column');
+
+        $paginator = $firstPage->viewData('companies');
+        $nextPageUrl = $paginator->nextPageUrl();
+
+        $this->assertTrue($paginator->hasMorePages());
+        $this->assertNotNull($nextPageUrl);
+        $this->assertStringContainsString('search=Financial%20Pagination', $nextPageUrl);
+        $this->assertStringContainsString('status=archived', $nextPageUrl);
+        $this->assertStringContainsString('sort=debt', $nextPageUrl);
+        $this->assertStringContainsString('direction=desc', $nextPageUrl);
+
+        $secondPage = $this->get($nextPageUrl)->assertOk()
+            ->assertSee('Financial Pagination 02')
+            ->assertSee('Financial Pagination 01')
+            ->assertDontSee('Financial Pagination 03')
+            ->assertSee('company-debt-column')
+            ->assertSee('sort=debt', false);
+
+        $this->assertSame('debt', $secondPage->viewData('sort'));
+        $this->assertSame('archived', $secondPage->viewData('status'));
     }
 
     public function test_edit_from_index_preserves_only_whitelisted_list_context(): void
@@ -284,7 +369,7 @@ class CompanyIndexTest extends TestCase
 
     private function payment(Invoice $invoice, string $status, float $amount): Payment
     {
-        return Payment::withoutEvents(fn() => Payment::create([
+        return Payment::withoutEvents(fn () => Payment::create([
             'invoice_id' => $invoice->id,
             'company_id' => $invoice->company_id,
             'payment_date' => '2026-07-21',

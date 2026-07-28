@@ -11,7 +11,10 @@ abstract class CompanyFinancialTestCase extends FinancialTestCase
         parent::setUp();
 
         $this->authenticatedUser->givePermissionTo(
-            PermissionName::CompaniesFinancialsView->value
+            [
+                PermissionName::CompaniesView->value,
+                PermissionName::CompaniesFinancialsView->value,
+            ]
         );
     }
 }

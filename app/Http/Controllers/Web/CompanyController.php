@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Web;
 
+use App\Actions\Companies\DeleteCompany;
+use App\Exceptions\CompanyDeletionException;
 use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\Invoice;
@@ -9,6 +11,7 @@ use App\Models\InvoiceLine;
 use App\Models\Payment;
 use App\Services\OneTimeServiceDebtCalculator;
 use App\Services\SubscriptionPeriodDebtCalculator;
+use App\Support\Access\PermissionName;
 use App\Support\CompanyPageContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
@@ -38,8 +41,11 @@ class CompanyController extends Controller
      */
     public function index(Request $request)
     {
+        Gate::authorize('viewAny', Company::class);
+
+        $canViewFinancials = Gate::allows(PermissionName::CompaniesFinancialsView->value);
         $allowedStatuses = ['active', 'suspended', 'archived'];
-        $allowedSorts = ['name', 'debt'];
+        $allowedSorts = $canViewFinancials ? ['name', 'debt'] : ['name'];
         $allowedDirections = ['asc', 'desc'];
         $status = in_array($request->input('status'), $allowedStatuses, true)
             ? $request->input('status')
@@ -52,11 +58,22 @@ class CompanyController extends Controller
             : 'asc';
         $search = trim((string) $request->input('search', ''));
 
-        $query = Company::query()
-            ->select('companies.*')
-            ->addSelect([
+        $query = Company::query()->select([
+            'id',
+            'type',
+            'name',
+            'short_name',
+            'voen',
+            'email',
+            'phone',
+            'status',
+        ]);
+
+        if ($canViewFinancials) {
+            $query->addSelect([
                 'calculated_debt' => $this->companyDebtSubquery(),
             ]);
+        }
 
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
@@ -75,24 +92,39 @@ class CompanyController extends Controller
             $direction
         )->orderBy('id', $direction);
 
-        $companies = $query->paginate(10)->withQueryString();
+        $paginationParameters = array_filter([
+            'search' => $search,
+            'status' => $status,
+            'sort' => $sort,
+            'direction' => $direction,
+        ], fn (string $value): bool => $value !== '');
 
-        $summaries = $this->financialSummaries($companies->getCollection());
+        $companies = $query->paginate(10)->appends($paginationParameters);
+        $companyIndexReturnUrl = route('companies.index', array_filter([
+            ...$paginationParameters,
+            'page' => $companies->currentPage() > 1 ? $companies->currentPage() : null,
+        ], fn (string|int|null $value): bool => $value !== null && $value !== ''));
 
-        $companies->getCollection()->transform(function (Company $company) use ($summaries) {
-            foreach ($summaries->get($company->id) as $key => $value) {
-                $company->setAttribute($key, $value);
-            }
+        if ($canViewFinancials) {
+            $summaries = $this->financialSummaries($companies->getCollection());
 
-            return $company;
-        });
+            $companies->getCollection()->transform(function (Company $company) use ($summaries) {
+                foreach ($summaries->get($company->id) as $key => $value) {
+                    $company->setAttribute($key, $value);
+                }
+
+                return $company;
+            });
+        }
 
         return view('companies.index', compact(
             'companies',
             'search',
             'status',
             'sort',
-            'direction'
+            'direction',
+            'canViewFinancials',
+            'companyIndexReturnUrl'
         ));
     }
 
@@ -131,6 +163,8 @@ class CompanyController extends Controller
      */
     public function create()
     {
+        Gate::authorize('create', Company::class);
+
         return view('companies.create');
     }
 
@@ -139,6 +173,8 @@ class CompanyController extends Controller
      */
     public function store(Request $request)
     {
+        Gate::authorize('create', Company::class);
+
         $validated = $request->validate([
             'type' => 'required|in:company,individual',
             'name' => 'required|string|max:255',
@@ -172,20 +208,29 @@ class CompanyController extends Controller
         Request $request,
         Company $company,
         SubscriptionPeriodDebtCalculator $periodDebtCalculator,
-        OneTimeServiceDebtCalculator $oneTimeDebtCalculator
+        OneTimeServiceDebtCalculator $oneTimeDebtCalculator,
+        DeleteCompany $deleteCompany
     ) {
+        Gate::authorize('view', $company);
+
         $canViewFinancials = Gate::allows('viewFinancials', $company);
         $canViewInvoices = $canViewFinancials
             && Gate::allows('viewAny', Invoice::class);
         $canViewPayments = $canViewFinancials
             && Gate::allows('viewAny', Payment::class);
+        $canViewContracts = Gate::allows(PermissionName::ContractsView->value);
+        $companyCanBeDeleted = Gate::allows('delete', $company)
+            && $deleteCompany->canDelete($company);
 
         $relations = [
             'contacts' => fn ($q) => $q->orderBy('first_name'),
-            'contracts' => fn ($q) => $q
-                ->withCount(['orders', 'subscriptions'])
-                ->orderBy('start_date', 'desc'),
         ];
+
+        if ($canViewContracts) {
+            $relations['contracts'] = fn ($q) => $q
+                ->withCount(['orders', 'subscriptions'])
+                ->orderBy('start_date', 'desc');
+        }
 
         if ($canViewInvoices) {
             $relations['invoices'] = fn ($q) => $q
@@ -208,6 +253,7 @@ class CompanyController extends Controller
         if (
             ($activeTab === 'invoices' && ! $canViewInvoices)
             || ($activeTab === 'payments' && ! $canViewPayments)
+            || ($activeTab === 'contracts' && ! $canViewContracts)
         ) {
             $activeTab = 'contacts';
         }
@@ -217,7 +263,8 @@ class CompanyController extends Controller
         $viewData = compact(
             'company',
             'activeTab',
-            'returnContext'
+            'returnContext',
+            'companyCanBeDeleted'
         );
 
         if ($canViewFinancials) {
@@ -394,6 +441,8 @@ class CompanyController extends Controller
      */
     public function edit(Request $request, Company $company)
     {
+        Gate::authorize('update', $company);
+
         $returnContext = $this->companyEditReturnContext($request, $company);
 
         return view('companies.edit', compact('company', 'returnContext'));
@@ -404,6 +453,8 @@ class CompanyController extends Controller
      */
     public function update(Request $request, Company $company)
     {
+        Gate::authorize('update', $company);
+
         $validated = $request->validate([
             'type' => 'required|in:company,individual',
             'name' => 'required|string|max:255',
@@ -480,14 +531,24 @@ class CompanyController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Company $company)
+    public function destroy(Company $company, DeleteCompany $deleteCompany)
     {
-        if ($company->contracts()->exists() || $company->invoices()->exists()) {
-            return redirect()->route('companies.show', $company)
-                ->with('error', 'Невозможно удалить компанию, так как с ней связаны договоры или инвойсы.');
+        Gate::authorize('delete', $company);
+
+        try {
+            $deleteCompany->handle($company);
+        } catch (CompanyDeletionException $exception) {
+            $redirect = Gate::allows('view', $company)
+                ? redirect()->route('companies.show', $company)
+                : redirect()->route('dashboard');
+
+            return $redirect->with('error', $exception->getMessage());
         }
 
-        $company->delete();
+        if (! Gate::allows('viewAny', Company::class)) {
+            return redirect()->route('dashboard')
+                ->with('success', 'Компания успешно удалена.');
+        }
 
         return redirect()->route('companies.index')
             ->with('success', 'Компания успешно удалена.');

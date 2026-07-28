@@ -3,7 +3,11 @@
 @section('content')
 
 <div class="mb-6">
-    <a href="{{ $companyContext['active'] ? $companyContext['company_url'] : route('companies.show', $company) }}" class="text-sm text-gray-500 hover:text-gray-700">← Назад к компании</a>
+    @can('view', $company)
+        <a href="{{ $companyContext['active'] ? $companyContext['company_url'] : route('companies.show', $company) }}" class="text-sm text-gray-500 hover:text-gray-700">← Назад к компании</a>
+    @else
+        <a href="{{ route('dashboard') }}" class="text-sm text-gray-500 hover:text-gray-700">← На Dashboard</a>
+    @endcan
     <h1 class="text-2xl font-bold text-gray-900 mt-2">Редактировать контакт</h1>
     <p class="text-sm text-gray-500">{{ $company->name }}</p>
 </div>
@@ -80,12 +84,34 @@
                     class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-6 py-2.5 rounded-lg transition">
                 Сохранить
             </button>
-            <a href="{{ $companyContext['active'] ? $companyContext['company_url'] : route('companies.show', $company) }}"
-               class="px-6 py-2.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition">
-                Отмена
-            </a>
+            @can('view', $company)
+                <a href="{{ $companyContext['active'] ? $companyContext['company_url'] : route('companies.show', $company) }}"
+                   class="px-6 py-2.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition">
+                    Отмена
+                </a>
+            @else
+                <a href="{{ route('dashboard') }}"
+                   class="px-6 py-2.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition">
+                    Отмена
+                </a>
+            @endcan
         </div>
     </form>
+
+    @can('delete', $contact)
+        <form action="{{ route('contacts.destroy', $contact) }}" method="POST" class="mt-4 border-t border-gray-100 pt-4"
+            onsubmit="return confirm('Удалить контактное лицо?')">
+            @csrf
+            @method('DELETE')
+            @if ($companyContext['active'])
+                <input type="hidden" name="origin" value="company">
+                <input type="hidden" name="tab" value="contacts">
+            @endif
+            <button type="submit" class="text-sm font-medium text-red-600 transition hover:text-red-800">
+                Удалить контакт
+            </button>
+        </form>
+    @endcan
 </div>
 
 @endsection

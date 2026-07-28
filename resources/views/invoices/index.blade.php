@@ -329,10 +329,14 @@
                             {{-- Связанная компания с fallback на snapshot --}}
                             <td class="px-6 py-4">
                                 @if ($invoice->company)
-                                    <a href="{{ route('companies.show', ['company' => $invoice->company, 'return_url' => request()->fullUrl()]) }}"
-                                        class="font-medium text-gray-900 transition hover:text-blue-600 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
-                                        {{ $invoice->company->name }}
-                                    </a>
+                                    @can('view', $invoice->company)
+                                        <a href="{{ route('companies.show', ['company' => $invoice->company, 'return_url' => request()->fullUrl()]) }}"
+                                            class="font-medium text-gray-900 transition hover:text-blue-600 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                                            {{ $invoice->company->name }}
+                                        </a>
+                                    @else
+                                        <span class="font-medium text-gray-900">{{ $invoice->company->name }}</span>
+                                    @endcan
                                 @else
                                     <span class="font-medium text-gray-900">{{ $invoice->payer_name }}</span>
                                 @endif

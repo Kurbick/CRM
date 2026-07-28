@@ -3,6 +3,7 @@
 namespace Tests\Feature\Authorization;
 
 use App\Models\Company;
+use App\Models\CompanyContact;
 use App\Models\Contract;
 use App\Models\Invoice;
 use App\Models\Payment;
@@ -72,6 +73,59 @@ abstract class AuthorizationTestCase extends TestCase
             'start_date' => '2026-01-01',
             'status' => 'active',
         ]);
+    }
+
+    protected function contact(
+        Company $company,
+        string $firstName = 'Authorization Contact'
+    ): CompanyContact {
+        return $company->contacts()->create([
+            'first_name' => $firstName,
+            'last_name' => 'Original',
+            'position' => 'Manager',
+            'phone' => '+994500000001',
+            'email' => 'contact@example.test',
+            'role' => 'manager',
+            'comment' => 'Original contact comment',
+        ]);
+    }
+
+    /** @return array<string, string> */
+    protected function companyPayload(string $name = 'Authorization New Company'): array
+    {
+        return [
+            'type' => 'company',
+            'name' => $name,
+            'short_name' => 'Auth Co',
+            'voen' => 'AUTH-'.uniqid(),
+            'bank_name' => 'Authorization Bank',
+            'iban' => 'AZ00AUTHORIZATION000000000000',
+            'bank_code' => 'AUTH01',
+            'bank_voen' => 'BANK-AUTH',
+            'swift' => 'AUTHAZ22',
+            'legal_address' => 'Authorization legal address',
+            'actual_address' => 'Authorization actual address',
+            'email' => 'company@example.test',
+            'phone' => '+994500000002',
+            'website' => 'https://example.test',
+            'status' => 'active',
+            'invoice_mode' => 'separate',
+            'comment' => 'Authorization company comment',
+        ];
+    }
+
+    /** @return array<string, string> */
+    protected function contactPayload(string $firstName = 'Updated Contact'): array
+    {
+        return [
+            'first_name' => $firstName,
+            'last_name' => 'Updated',
+            'position' => 'Director',
+            'phone' => '+994500000003',
+            'email' => 'updated@example.test',
+            'role' => 'director',
+            'comment' => 'Updated contact comment',
+        ];
     }
 
     protected function invoice(string $status = 'draft', string $number = 'AUTH-INVOICE'): Invoice

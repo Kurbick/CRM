@@ -6,12 +6,24 @@ use App\Models\Company;
 use App\Models\CompanyContact;
 use App\Models\Contract;
 use App\Models\Invoice;
+use App\Support\Access\PermissionName;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\FinancialTestCase as TestCase;
 
 class CompanyContextNavigationTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->authenticatedUser->givePermissionTo([
+            PermissionName::CompaniesView->value,
+            PermissionName::CompanyContactsCreate->value,
+            PermissionName::CompanyContactsUpdate->value,
+        ]);
+    }
 
     public function test_invoice_company_context_returns_to_invoices_tab_and_fallback_stays_index(): void
     {

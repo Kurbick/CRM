@@ -7,66 +7,104 @@ use App\Models\Company;
 use App\Models\CompanyContact;
 use App\Support\CompanyPageContext;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 
 class CompanyContactController extends Controller
 {
     public function create(Request $request, Company $company)
     {
+        Gate::authorize('create', [CompanyContact::class, $company]);
+
         $companyContext = CompanyPageContext::resolve($request, $company, 'contacts');
+
         return view('contacts.create', compact('company', 'companyContext'));
     }
 
     public function store(Request $request, Company $company)
     {
-        $request->validate([
+        Gate::authorize('create', [CompanyContact::class, $company]);
+
+        $validated = $request->validate([
             'first_name' => 'required|string|max:100',
-            'last_name'  => 'nullable|string|max:100',
-            'position'   => 'nullable|string|max:150',
-            'phone'      => 'nullable|string|max:30',
-            'email'      => 'nullable|email|max:255',
-            'role'       => 'nullable|in:director,accountant,manager,technical,other',
-            'comment'    => 'nullable|string',
+            'last_name' => 'nullable|string|max:100',
+            'position' => 'nullable|string|max:150',
+            'phone' => 'nullable|string|max:30',
+            'email' => 'nullable|email|max:255',
+            'role' => 'nullable|in:director,accountant,manager,technical,other',
+            'comment' => 'nullable|string',
         ]);
 
-        $company->contacts()->create($request->all());
-        $companyContext = CompanyPageContext::resolve($request, $company, 'contacts');
+        $company->contacts()->create($validated);
 
-        return redirect()->to($companyContext['active'] ? $companyContext['company_url'] : route('companies.show', $company))
-            ->with('success', 'Контакт успешно добавлен.');
+        return $this->redirectAfterMutation(
+            $request,
+            $company,
+            'Контакт успешно добавлен.'
+        );
     }
 
     public function edit(Request $request, CompanyContact $contact)
     {
+        Gate::authorize('update', $contact);
+
         $company = $contact->company;
         $companyContext = CompanyPageContext::resolve($request, $company, 'contacts');
+
         return view('contacts.edit', compact('contact', 'company', 'companyContext'));
     }
 
     public function update(Request $request, CompanyContact $contact)
     {
-        $request->validate([
+        Gate::authorize('update', $contact);
+
+        $validated = $request->validate([
             'first_name' => 'required|string|max:100',
-            'last_name'  => 'nullable|string|max:100',
-            'position'   => 'nullable|string|max:150',
-            'phone'      => 'nullable|string|max:30',
-            'email'      => 'nullable|email|max:255',
-            'role'       => 'nullable|in:director,accountant,manager,technical,other',
-            'comment'    => 'nullable|string',
+            'last_name' => 'nullable|string|max:100',
+            'position' => 'nullable|string|max:150',
+            'phone' => 'nullable|string|max:30',
+            'email' => 'nullable|email|max:255',
+            'role' => 'nullable|in:director,accountant,manager,technical,other',
+            'comment' => 'nullable|string',
         ]);
 
-        $contact->update($request->all());
-        $companyContext = CompanyPageContext::resolve($request, $contact->company, 'contacts');
+        $contact->update($validated);
 
-        return redirect()->to($companyContext['active'] ? $companyContext['company_url'] : route('companies.show', $contact->company))
-            ->with('success', 'Контакт обновлён.');
+        return $this->redirectAfterMutation(
+            $request,
+            $contact->company,
+            'Контакт обновлён.'
+        );
     }
 
-    public function destroy(CompanyContact $contact)
+    public function destroy(Request $request, CompanyContact $contact)
     {
+        Gate::authorize('delete', $contact);
+
         $company = $contact->company;
         $contact->delete();
 
-        return redirect()->route('companies.show', $company)
-            ->with('success', 'Контакт удалён.');
+        return $this->redirectAfterMutation(
+            $request,
+            $company,
+            'Контакт удалён.'
+        );
+    }
+
+    private function redirectAfterMutation(
+        Request $request,
+        Company $company,
+        string $message
+    ) {
+        if (! Gate::allows('view', $company)) {
+            return redirect()->route('dashboard')->with('success', $message);
+        }
+
+        $companyContext = CompanyPageContext::resolve($request, $company, 'contacts');
+
+        return redirect()
+            ->to($companyContext['active']
+                ? $companyContext['company_url']
+                : route('companies.show', $company))
+            ->with('success', $message);
     }
 }

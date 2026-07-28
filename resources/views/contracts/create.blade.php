@@ -5,10 +5,22 @@
 @section('content')
 
     <div class="mb-6">
-        <a href="{{ ($companyContext['active'] ?? false) ? $companyContext['company_url'] : ($company ? route('companies.show', $company) : route('contracts.index')) }}"
-            class="text-sm text-gray-500 hover:text-gray-700">
-            ← {{ $company ? 'Назад к компании' : 'Назад к договорам' }}
-        </a>
+        @if ($company)
+            @can('view', $company)
+                <a href="{{ ($companyContext['active'] ?? false) ? $companyContext['company_url'] : route('companies.show', $company) }}"
+                    class="text-sm text-gray-500 hover:text-gray-700">
+                    ← Назад к компании
+                </a>
+            @else
+                <a href="{{ route('contracts.index') }}" class="text-sm text-gray-500 hover:text-gray-700">
+                    ← Назад к договорам
+                </a>
+            @endcan
+        @else
+            <a href="{{ route('contracts.index') }}" class="text-sm text-gray-500 hover:text-gray-700">
+                ← Назад к договорам
+            </a>
+        @endif
 
         <h1 class="text-2xl font-bold text-gray-900 mt-2">
             Добавить договор
@@ -135,10 +147,24 @@
                     Сохранить договор
                 </button>
 
-                <a href="{{ ($companyContext['active'] ?? false) ? $companyContext['company_url'] : ($company ? route('companies.show', $company) : route('contracts.index')) }}"
-                    class="px-6 py-2.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition">
-                    Отмена
-                </a>
+                @if ($company)
+                    @can('view', $company)
+                        <a href="{{ ($companyContext['active'] ?? false) ? $companyContext['company_url'] : route('companies.show', $company) }}"
+                            class="px-6 py-2.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition">
+                            Отмена
+                        </a>
+                    @else
+                        <a href="{{ route('contracts.index') }}"
+                            class="px-6 py-2.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition">
+                            Отмена
+                        </a>
+                    @endcan
+                @else
+                    <a href="{{ route('contracts.index') }}"
+                        class="px-6 py-2.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition">
+                        Отмена
+                    </a>
+                @endif
             </div>
         </form>
     </div>
