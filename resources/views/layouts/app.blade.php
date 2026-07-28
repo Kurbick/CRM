@@ -106,13 +106,15 @@
                         Договоры
                     </a>
 
-                    <a href="{{ route('invoices.index') }}"
-                        class="px-3 py-2 rounded-lg text-sm font-medium transition
-                {{ request()->routeIs('invoices.*')
-                    ? 'bg-blue-50 text-blue-600'
-                    : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900' }}">
-                        Инвойсы
-                    </a>
+                    @can('viewAny', \App\Models\Invoice::class)
+                        <a href="{{ route('invoices.index') }}"
+                            class="px-3 py-2 rounded-lg text-sm font-medium transition
+                    {{ request()->routeIs('invoices.*')
+                        ? 'bg-blue-50 text-blue-600'
+                        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900' }}">
+                            Инвойсы
+                        </a>
+                    @endcan
 
                     <div class="relative ml-3 flex items-center gap-1.5" x-data="{ open: false }"
                         x-on:click.outside="open = false" x-on:keydown.escape.window="open = false">

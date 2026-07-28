@@ -8,7 +8,7 @@ use App\Models\PaymentAllocation;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
-use Tests\AuthenticatedTestCase as TestCase;
+use Tests\Feature\FinancialTestCase as TestCase;
 
 class InvoicePaymentBreakdownTest extends TestCase
 {
@@ -195,9 +195,9 @@ class InvoicePaymentBreakdownTest extends TestCase
         $this->assertSame(1, $breakdown['confirmed_payments_count']);
         $this->assertSame(5, $breakdown['cancelled_payments_count']);
         $this->assertSame($confirmed->id, $breakdown['latest_payment']['id']);
-        $this->assertFalse($rows->contains(fn(array $row): bool => array_key_exists('hidden_by_default', $row)));
+        $this->assertFalse($rows->contains(fn (array $row): bool => array_key_exists('hidden_by_default', $row)));
         $this->assertSame(
-            $rows->sortByDesc(fn(array $row): string => $row['payment_date'].':'.str_pad((string) $row['id'], 10, '0', STR_PAD_LEFT))
+            $rows->sortByDesc(fn (array $row): string => $row['payment_date'].':'.str_pad((string) $row['id'], 10, '0', STR_PAD_LEFT))
                 ->pluck('id')->values()->all(),
             $rows->pluck('id')->all()
         );
@@ -263,7 +263,7 @@ class InvoicePaymentBreakdownTest extends TestCase
         string $amount,
         ?string $comment = null
     ): Payment {
-        return Payment::withoutEvents(fn() => Payment::create([
+        return Payment::withoutEvents(fn () => Payment::create([
             'invoice_id' => $invoice->id,
             'company_id' => $invoice->company_id,
             'payment_date' => '2026-07-20',

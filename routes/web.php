@@ -13,6 +13,7 @@ use App\Http\Controllers\Web\InvoiceController;
 use App\Http\Controllers\Web\OrderController;
 use App\Http\Controllers\Web\PaymentController;
 use App\Http\Controllers\Web\SubscriptionController;
+use App\Models\Invoice as InvoiceModel;
 use Illuminate\Support\Facades\Route;
 
 Route::get('login', fn () => view('auth.login'))
@@ -303,10 +304,10 @@ Route::middleware(['auth', 'active', 'password.changed'])->group(function (): vo
     Route::get(
         'ajax/companies/{company}/contracts',
         [InvoiceController::class, 'getContracts']
-    )->name('ajax.contracts');
+    )->middleware('can:create,'.InvoiceModel::class)->name('ajax.contracts');
 
     Route::get(
         'ajax/contracts/{contract}/items',
         [InvoiceController::class, 'getContractItems']
-    )->name('ajax.items');
+    )->middleware('can:create,'.InvoiceModel::class)->name('ajax.items');
 });

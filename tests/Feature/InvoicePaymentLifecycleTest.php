@@ -7,7 +7,7 @@ use App\Models\Invoice;
 use App\Models\Payment;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
-use Tests\AuthenticatedTestCase as TestCase;
+use Tests\Feature\FinancialTestCase as TestCase;
 
 class InvoicePaymentLifecycleTest extends TestCase
 {
@@ -282,7 +282,7 @@ class InvoicePaymentLifecycleTest extends TestCase
         float $amount,
         array $overrides = []
     ): Payment {
-        return Payment::withoutEvents(fn() => Payment::create(array_merge(
+        return Payment::withoutEvents(fn () => Payment::create(array_merge(
             $this->paymentAttributes($invoice, $status, $amount),
             $overrides
         )));

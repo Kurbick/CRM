@@ -59,6 +59,7 @@
     </div>
 
     {{-- Финансы и детализация задолженности --}}
+    @can('viewFinancials', $company)
     <section class="bg-white rounded-xl border border-gray-200 shadow-sm mb-8 overflow-hidden">
         <div class="px-5 py-5">
             <h2 class="font-bold text-gray-900">Финансы</h2>
@@ -92,6 +93,7 @@
         </div>
 
         {{-- Задолженности по строкам выставленных инвойсов --}}
+        @can('viewAny', \App\Models\Invoice::class)
         <div class="border-t border-gray-100">
             <div class="px-5 py-4 border-b border-gray-100">
                 <h2 class="font-bold text-gray-900">Задолженности</h2>
@@ -222,7 +224,9 @@
             </div>
         @endif
         </div>
+        @endcan
     </section>
+    @endcan
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
@@ -350,18 +354,24 @@
                         class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition">
                         Договоры ({{ $company->contracts->count() }})
                     </button>
-                    <button @click="selectTab('invoices')"
-                        :class="tab === 'invoices' ? 'border-blue-600 text-blue-600' :
-                            'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
-                        class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition">
-                        Инвойсы ({{ $company->invoices->count() }})
-                    </button>
-                    <button @click="selectTab('payments')"
-                        :class="tab === 'payments' ? 'border-blue-600 text-blue-600' :
-                            'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
-                        class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition">
-                        Платежи ({{ $company->payments->count() }})
-                    </button>
+                    @can('viewFinancials', $company)
+                        @can('viewAny', \App\Models\Invoice::class)
+                            <button @click="selectTab('invoices')"
+                                :class="tab === 'invoices' ? 'border-blue-600 text-blue-600' :
+                                    'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                                class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition">
+                                Инвойсы ({{ $company->invoices->count() }})
+                            </button>
+                        @endcan
+                        @can('viewAny', \App\Models\Payment::class)
+                            <button @click="selectTab('payments')"
+                                :class="tab === 'payments' ? 'border-blue-600 text-blue-600' :
+                                    'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                                class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition">
+                                Платежи ({{ $company->payments->count() }})
+                            </button>
+                        @endcan
+                    @endcan
                 </nav>
                 <div class="pb-3 sm:pb-0 sm:pl-4 shrink-0">
                     <a x-show="tab === 'contacts'" href="{{ route('companies.contacts.create', ['company' => $company, 'origin' => 'company', 'tab' => 'contacts']) }}"
@@ -472,6 +482,8 @@
             </div>
 
             {{-- Таб: Инвойсы --}}
+            @can('viewFinancials', $company)
+            @can('viewAny', \App\Models\Invoice::class)
             <div x-show="tab === 'invoices'" x-cloak class="p-5">
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm text-left">
@@ -535,8 +547,12 @@
                     </table>
                 </div>
             </div>
+            @endcan
+            @endcan
 
             {{-- Таб: Платежи --}}
+            @can('viewFinancials', $company)
+            @can('viewAny', \App\Models\Payment::class)
             <div x-show="tab === 'payments'" x-cloak class="p-5">
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm text-left">
@@ -556,14 +572,18 @@
                                         {{ $payment->payment_date ? \Illuminate\Support\Carbon::parse($payment->payment_date)->format('d/m/Y') : '—' }}
                                     </td>
                                     <td class="py-3 font-mono text-xs">
-                                        @if ($payment->invoice)
-                                            <a href="{{ route('invoices.show', ['invoice' => $payment->invoice, 'origin' => 'company', 'tab' => 'payments']) }}"
-                                                class="text-blue-600 hover:underline">
-                                                {{ $payment->invoice->invoice_number }}
-                                            </a>
+                                        @can('viewAny', \App\Models\Invoice::class)
+                                            @if ($payment->invoice)
+                                                <a href="{{ route('invoices.show', ['invoice' => $payment->invoice, 'origin' => 'company', 'tab' => 'payments']) }}"
+                                                    class="text-blue-600 hover:underline">
+                                                    {{ $payment->invoice->invoice_number }}
+                                                </a>
+                                            @else
+                                                —
+                                            @endif
                                         @else
                                             —
-                                        @endif
+                                        @endcan
                                     </td>
                                     <td class="py-3 font-semibold text-green-600">
                                         + {{ number_format($payment->amount, 2) }} ₼
@@ -587,6 +607,8 @@
                     </table>
                 </div>
             </div>
+            @endcan
+            @endcan
 
         </div>
 

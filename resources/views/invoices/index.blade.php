@@ -47,8 +47,9 @@
             </p>
         </div>
 
-        <div>
-            <a href="{{ route('invoices.create') }}"
+        @can('create', \App\Models\Invoice::class)
+            <div>
+                <a href="{{ route('invoices.create') }}"
                 class="inline-flex items-center text-sm bg-blue-600 hover:bg-blue-700
                        text-white px-4 py-2.5 rounded-lg transition shadow-sm font-medium">
 
@@ -57,9 +58,10 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
                 </svg>
 
-                Выставить счет
-            </a>
-        </div>
+                    Выставить счет
+                </a>
+            </div>
+        @endcan
     </div>
 
     {{-- Фильтры и поиск --}}
@@ -430,10 +432,12 @@
                                         Сбросить фильтры
                                     </a>
                                 @else
-                                    <a href="{{ route('invoices.create') }}" class="text-blue-600 hover:underline ml-1">
+                                    @can('create', \App\Models\Invoice::class)
+                                        <a href="{{ route('invoices.create') }}" class="text-blue-600 hover:underline ml-1">
 
-                                        Выставить первый счет
-                                    </a>
+                                            Выставить первый счет
+                                        </a>
+                                    @endcan
                                 @endif
                             </td>
                         </tr>

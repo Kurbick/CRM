@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\CreditBalance;
 use App\Models\Invoice;
+use App\Models\InvoiceLine;
 use App\Models\Payment;
 use App\Models\PaymentAllocation;
 use App\Services\InvoicePaymentAllocationWriter;
@@ -12,7 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
 use Mockery;
 use RuntimeException;
-use Tests\AuthenticatedTestCase as TestCase;
+use Tests\Feature\FinancialTestCase as TestCase;
 
 class PaymentAllocationLifecycleIntegrationTest extends TestCase
 {
@@ -229,7 +230,7 @@ class PaymentAllocationLifecycleIntegrationTest extends TestCase
     public function test_lifecycle_event_backfills_old_confirmed_payments_for_same_invoice(): void
     {
         [$invoice, [$oldLine, $newLine]] = $this->invoice([100, 100]);
-        $oldPayment = Payment::withoutEvents(fn() => Payment::create([
+        $oldPayment = Payment::withoutEvents(fn () => Payment::create([
             ...$this->paymentAttributes($invoice, 'confirmed', 100, '2026-07-01'),
         ]));
         $this->assertDatabaseCount('payment_allocations', 0);
@@ -323,7 +324,7 @@ class PaymentAllocationLifecycleIntegrationTest extends TestCase
         }
     }
 
-    /** @return array{Invoice, list<\App\Models\InvoiceLine>} */
+    /** @return array{Invoice, list<InvoiceLine>} */
     private function invoice(array $amounts, ?int $companyId = null): array
     {
         $companyId ??= DB::table('companies')->insertGetId(['name' => 'Lifecycle '.uniqid()]);
@@ -349,7 +350,7 @@ class PaymentAllocationLifecycleIntegrationTest extends TestCase
         return [$invoice, $lines];
     }
 
-    /** @return array{Invoice, list<\App\Models\InvoiceLine>} */
+    /** @return array{Invoice, list<InvoiceLine>} */
     private function draftInvoiceWithCredit(float $credit): array
     {
         $companyId = DB::table('companies')->insertGetId(['name' => 'Credit issue '.uniqid()]);
@@ -417,10 +418,9 @@ class PaymentAllocationLifecycleIntegrationTest extends TestCase
 
     private function assertAllocation(
         Payment $payment,
-        \App\Models\InvoiceLine $line,
+        InvoiceLine $line,
         string $amount
-    ): void
-    {
+    ): void {
         $this->assertDatabaseHas('payment_allocations', [
             'payment_id' => $payment->id,
             'invoice_line_id' => $line->id,

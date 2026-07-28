@@ -7,7 +7,7 @@ use App\Models\Payment;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
-use Tests\AuthenticatedTestCase as TestCase;
+use Tests\Feature\FinancialTestCase as TestCase;
 
 class InvoiceEditabilityTest extends TestCase
 {
@@ -237,7 +237,7 @@ class InvoiceEditabilityTest extends TestCase
 
     private function payment(Invoice $invoice, string $status, string $amount): Payment
     {
-        return Payment::withoutEvents(fn() => Payment::create([
+        return Payment::withoutEvents(fn () => Payment::create([
             'invoice_id' => $invoice->id,
             'company_id' => $invoice->company_id,
             'payment_date' => '2026-07-20',

@@ -7,7 +7,7 @@ use App\Models\Payment;
 use App\Models\PaymentAllocation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
-use Tests\AuthenticatedTestCase as TestCase;
+use Tests\Feature\FinancialTestCase as TestCase;
 
 class InvoicePaymentSourceDisplayTest extends TestCase
 {

@@ -6,12 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
+use App\Models\Payment;
 use App\Services\OneTimeServiceDebtCalculator;
 use App\Services\SubscriptionPeriodDebtCalculator;
 use App\Support\CompanyPageContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 
 class CompanyController extends Controller
@@ -55,7 +57,7 @@ class CompanyController extends Controller
             ->addSelect([
                 'calculated_debt' => $this->companyDebtSubquery(),
             ]);
-        
+
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
@@ -63,7 +65,7 @@ class CompanyController extends Controller
                     ->orWhere('voen', 'like', "%{$search}%");
             });
         }
-        
+
         if ($status !== '') {
             $query->where('status', $status);
         }
@@ -74,7 +76,7 @@ class CompanyController extends Controller
         )->orderBy('id', $direction);
 
         $companies = $query->paginate(10)->withQueryString();
-        
+
         $summaries = $this->financialSummaries($companies->getCollection());
 
         $companies->getCollection()->transform(function (Company $company) use ($summaries) {
@@ -84,7 +86,7 @@ class CompanyController extends Controller
 
             return $company;
         });
-        
+
         return view('companies.index', compact(
             'companies',
             'search',
@@ -112,7 +114,7 @@ class CompanyController extends Controller
             ->orderBy('id')
             ->limit(10)
             ->get(['id', 'name', 'type', 'voen'])
-            ->map(fn(Company $company): array => [
+            ->map(fn (Company $company): array => [
                 'id' => $company->id,
                 'name' => $company->name,
                 'type_label' => $company->type === 'company'
@@ -171,95 +173,125 @@ class CompanyController extends Controller
         Company $company,
         SubscriptionPeriodDebtCalculator $periodDebtCalculator,
         OneTimeServiceDebtCalculator $oneTimeDebtCalculator
-    )
-    {
-        $company->load([
-            'contacts'     => fn($q) => $q->orderBy('first_name'),
-            'contracts'    => fn($q) => $q
+    ) {
+        $canViewFinancials = Gate::allows('viewFinancials', $company);
+        $canViewInvoices = $canViewFinancials
+            && Gate::allows('viewAny', Invoice::class);
+        $canViewPayments = $canViewFinancials
+            && Gate::allows('viewAny', Payment::class);
+
+        $relations = [
+            'contacts' => fn ($q) => $q->orderBy('first_name'),
+            'contracts' => fn ($q) => $q
                 ->withCount(['orders', 'subscriptions'])
                 ->orderBy('start_date', 'desc'),
-            'invoices'     => fn($q) => $q
+        ];
+
+        if ($canViewInvoices) {
+            $relations['invoices'] = fn ($q) => $q
                 ->withSum([
-                    'payments as confirmed_paid_amount' => fn($paymentQuery) => $paymentQuery
+                    'payments as confirmed_paid_amount' => fn ($paymentQuery) => $paymentQuery
                         ->where('status', 'confirmed'),
                 ], 'amount')
-                ->orderBy('due_date', 'desc'),
-            'payments'     => fn($q) => $q->with('invoice')->orderBy('payment_date', 'desc'),
-            'creditBalance',
-        ]);
+                ->orderBy('due_date', 'desc');
+        }
 
-        $stats = $this->financialSummaries(
-            collect([$company]),
-            $company->invoices
-        )->get($company->id);
+        if ($canViewPayments) {
+            $relations['payments'] = fn ($q) => $q
+                ->when($canViewInvoices, fn ($paymentQuery) => $paymentQuery->with('invoice'))
+                ->orderBy('payment_date', 'desc');
+        }
 
-        $invoiceLines = InvoiceLine::query()
-            ->whereHas(
-                'invoice',
-                fn($query) => $query->where('company_id', $company->id)
-            )
-            ->with([
-                'invoice',
-                'subscription',
-                'order',
-                'allocations.payment',
-            ])
-            ->orderBy('id')
-            ->get();
+        $company->load($relations);
 
-        $asOf = CarbonImmutable::today();
-        $subscriptionPeriodDebts = $periodDebtCalculator->calculate($invoiceLines, $asOf);
-        $oneTimeServiceDebts = $oneTimeDebtCalculator->calculate($invoiceLines, $asOf);
-        $subscriptionPeriodDebtGroups = array_values(array_filter(array_map(
-            function (array $subscription): array {
-                $subscription['periods'] = array_values(array_map(
-                    fn(array $period): array => $this->presentDebtPeriod($period),
-                    array_filter(
-                        $subscription['periods'],
-                        fn(array $period): bool => $period['remaining'] !== '0.00'
-                    )
-                ));
-
-                return $subscription;
-            },
-            $subscriptionPeriodDebts['subscriptions']
-        ), fn(array $subscription): bool => $subscription['periods'] !== []));
-        $subscriptionPeriodDebtAnomalyCount = count(array_unique(array_column(
-            $subscriptionPeriodDebts['anomalies'],
-            'invoice_line_id'
-        )));
-        $oneTimeServiceDebtLines = array_values(array_map(
-            fn(array $line): array => [
-                ...$line,
-                'due_date_label' => $line['due_date'] === null
-                    ? 'Не указан'
-                    : CarbonImmutable::parse($line['due_date'])->format('d.m.Y'),
-            ],
-            array_filter(
-                $oneTimeServiceDebts['lines'],
-                fn(array $line): bool => $line['remaining'] !== '0.00'
-            )
-        ));
-        $overdueRemaining = $this->addMoneyStrings(
-            $subscriptionPeriodDebts['totals']['overdue_remaining'],
-            $oneTimeServiceDebts['totals']['overdue_remaining']
-        );
         $activeTab = CompanyPageContext::activeTab($request);
+        if (
+            ($activeTab === 'invoices' && ! $canViewInvoices)
+            || ($activeTab === 'payments' && ! $canViewPayments)
+        ) {
+            $activeTab = 'contacts';
+        }
 
         $returnContext = $this->companyReturnContext($request);
 
-        return view('companies.show', compact(
+        $viewData = compact(
             'company',
-            'stats',
-            'subscriptionPeriodDebts',
-            'subscriptionPeriodDebtGroups',
-            'subscriptionPeriodDebtAnomalyCount',
-            'oneTimeServiceDebts',
-            'oneTimeServiceDebtLines',
-            'overdueRemaining',
             'activeTab',
             'returnContext'
-        ));
+        );
+
+        if ($canViewFinancials) {
+            $stats = $this->financialSummaries(
+                collect([$company]),
+                $canViewInvoices ? $company->invoices : null
+            )->get($company->id);
+            $invoiceLines = InvoiceLine::query()
+                ->whereHas(
+                    'invoice',
+                    fn ($query) => $query->where('company_id', $company->id)
+                )
+                ->with([
+                    'invoice',
+                    'subscription',
+                    'order',
+                    'allocations.payment:id,invoice_id,status',
+                ])
+                ->orderBy('id')
+                ->get();
+
+            $asOf = CarbonImmutable::today();
+            $subscriptionPeriodDebts = $periodDebtCalculator->calculate($invoiceLines, $asOf);
+            $oneTimeServiceDebts = $oneTimeDebtCalculator->calculate($invoiceLines, $asOf);
+            $overdueRemaining = $this->addMoneyStrings(
+                $subscriptionPeriodDebts['totals']['overdue_remaining'],
+                $oneTimeServiceDebts['totals']['overdue_remaining']
+            );
+
+            $viewData += compact('stats', 'overdueRemaining');
+        }
+
+        if ($canViewInvoices) {
+            $subscriptionPeriodDebtGroups = array_values(array_filter(array_map(
+                function (array $subscription): array {
+                    $subscription['periods'] = array_values(array_map(
+                        fn (array $period): array => $this->presentDebtPeriod($period),
+                        array_filter(
+                            $subscription['periods'],
+                            fn (array $period): bool => $period['remaining'] !== '0.00'
+                        )
+                    ));
+
+                    return $subscription;
+                },
+                $subscriptionPeriodDebts['subscriptions']
+            ), fn (array $subscription): bool => $subscription['periods'] !== []));
+            $subscriptionPeriodDebtAnomalyCount = count(array_unique(array_column(
+                $subscriptionPeriodDebts['anomalies'],
+                'invoice_line_id'
+            )));
+            $oneTimeServiceDebtLines = array_values(array_map(
+                fn (array $line): array => [
+                    ...$line,
+                    'due_date_label' => $line['due_date'] === null
+                        ? 'Не указан'
+                        : CarbonImmutable::parse($line['due_date'])->format('d.m.Y'),
+                ],
+                array_filter(
+                    $oneTimeServiceDebts['lines'],
+                    fn (array $line): bool => $line['remaining'] !== '0.00'
+                )
+            ));
+
+            $viewData += compact(
+                'subscriptionPeriodDebts',
+                'subscriptionPeriodDebtGroups',
+                'subscriptionPeriodDebtAnomalyCount',
+                'oneTimeServiceDebts',
+                'oneTimeServiceDebtLines'
+            );
+        }
+
+        return view('companies.show', $viewData);
     }
 
     private function addMoneyStrings(string $left, string $right): string
@@ -309,13 +341,13 @@ class CompanyController extends Controller
             return collect();
         }
 
-        (new Company())->newCollection($companies->all())->loadMissing('creditBalance');
+        (new Company)->newCollection($companies->all())->loadMissing('creditBalance');
 
         $invoices = $loadedInvoices ?? Invoice::query()
             ->whereIn('company_id', $companyIds)
             ->whereIn('status', ['issued', 'partially_paid', 'paid'])
             ->withSum([
-                'payments as confirmed_paid_amount' => fn($query) => $query->where('status', 'confirmed'),
+                'payments as confirmed_paid_amount' => fn ($query) => $query->where('status', 'confirmed'),
             ], 'amount')
             ->get(['id', 'company_id', 'total_amount', 'status']);
 
@@ -328,10 +360,10 @@ class CompanyController extends Controller
                 $company->id => [
                     'total_invoiced' => round((float) $companyInvoices->sum('total_amount'), 2),
                     'total_paid' => round((float) $companyInvoices->sum(
-                        fn(Invoice $invoice) => $invoice->applied_amount
+                        fn (Invoice $invoice) => $invoice->applied_amount
                     ), 2),
                     'total_debt' => round((float) $companyInvoices->sum(
-                        fn(Invoice $invoice) => $invoice->remaining_amount
+                        fn (Invoice $invoice) => $invoice->remaining_amount
                     ), 2),
                     'credit_balance' => round((float) ($company->creditBalance?->amount ?? 0), 2),
                 ],
@@ -473,7 +505,7 @@ class CompanyController extends Controller
         ];
         $candidate = $request->input('return_url');
 
-        if (!is_string($candidate) || trim($candidate) === '' || str_starts_with($candidate, '//')) {
+        if (! is_string($candidate) || trim($candidate) === '' || str_starts_with($candidate, '//')) {
             return $fallback;
         }
 
@@ -497,18 +529,18 @@ class CompanyController extends Controller
             if ($candidatePort !== $request->getPort()) {
                 return $fallback;
             }
-        } elseif (!str_starts_with($candidate, '/')) {
+        } elseif (! str_starts_with($candidate, '/')) {
             return $fallback;
         }
 
-        $path = '/' . ltrim($parts['path'] ?? '/', '/');
+        $path = '/'.ltrim($parts['path'] ?? '/', '/');
         $allowedDestinations = [
             parse_url(route('invoices.index'), PHP_URL_PATH) => 'Назад к инвойсам',
             parse_url(route('contracts.index'), PHP_URL_PATH) => 'Назад к договорам',
             parse_url(route('companies.index'), PHP_URL_PATH) => 'Назад к компаниям',
         ];
 
-        if (!isset($allowedDestinations[$path])) {
+        if (! isset($allowedDestinations[$path])) {
             return $fallback;
         }
 

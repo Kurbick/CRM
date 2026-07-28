@@ -8,7 +8,7 @@ use App\Models\Subscription;
 use App\Services\InvoiceDueDateSynchronizer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
-use Tests\AuthenticatedTestCase as TestCase;
+use Tests\Feature\FinancialTestCase as TestCase;
 
 class InvoiceDueDateTest extends TestCase
 {

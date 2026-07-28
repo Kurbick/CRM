@@ -6,7 +6,7 @@ use App\Models\Company;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Tests\AuthenticatedTestCase as TestCase;
+use Tests\Feature\CompanyFinancialTestCase as TestCase;
 
 class CompanySubscriptionPeriodDebtTest extends TestCase
 {
@@ -238,6 +238,35 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
         $response->assertSee('Просрочено');
     }
 
+    public function test_overdue_summary_keeps_calculator_semantics_for_anomalous_periods(): void
+    {
+        $company = $this->company();
+        $period = $this->period($company, dueDate: '2020-01-01');
+
+        DB::table('invoices')->where('id', $period['invoice_id'])->update([
+            'total_amount' => '200.00',
+        ]);
+        DB::table('invoice_lines')->insert([
+            'invoice_id' => $period['invoice_id'],
+            'subscription_id' => $period['subscription_id'],
+            'description' => 'Период без даты окончания',
+            'amount' => '100.00',
+            'period_start' => '2026-06-01',
+            'period_end' => null,
+        ]);
+
+        $content = $this->get(route('companies.show', $company))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertSame(
+            1,
+            preg_match('/<div data-testid="overdue-summary".*?<\/div>/s', $content, $summary)
+        );
+        $this->assertStringContainsString('100.00 ₼', $summary[0]);
+        $this->assertStringNotContainsString('200.00 ₼', $summary[0]);
+    }
+
     public function test_pending_and_cancelled_payments_do_not_reduce_debt(): void
     {
         $company = $this->company();
@@ -408,15 +437,15 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
             'status' => 'active',
         ]);
         $subscriptionId ??= DB::table('subscriptions')->insertGetId([
-                'contract_id' => $contractId,
-                'service_type_id' => null,
-                'title' => $subscriptionTitle,
-                'start_date' => '2026-01-01',
-                'next_billing_date' => '2026-06-01',
-                'billing_period' => 'monthly',
-                'amount' => '100.00',
-                'status' => 'active',
-            ]);
+            'contract_id' => $contractId,
+            'service_type_id' => null,
+            'title' => $subscriptionTitle,
+            'start_date' => '2026-01-01',
+            'next_billing_date' => '2026-06-01',
+            'billing_period' => 'monthly',
+            'amount' => '100.00',
+            'status' => 'active',
+        ]);
         $invoiceId = DB::table('invoices')->insertGetId([
             'company_id' => $company->id,
             'contract_id' => $contractId,

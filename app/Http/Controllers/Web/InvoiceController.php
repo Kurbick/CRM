@@ -4,21 +4,24 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Models\Company;
-use App\Models\Invoice;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use App\Models\Contract;
-use Illuminate\Support\Carbon;
+use App\Models\Invoice;
 use App\Models\InvoiceLine;
 use App\Models\Order;
+use App\Models\Payment;
 use App\Models\Subscription;
 use App\Services\InvoiceDueDateCalculator;
 use App\Services\InvoiceEditabilityService;
-use App\Services\InvoicePaymentBreakdownPresenter;
-use App\Services\InvoicePaymentAvailabilityService;
-use App\Services\InvoicePaymentSourceResolver;
 use App\Services\InvoicePaymentAllocationWriter;
+use App\Services\InvoicePaymentAvailabilityService;
+use App\Services\InvoicePaymentBreakdownPresenter;
+use App\Services\InvoicePaymentSourceResolver;
+use App\Support\Access\PermissionName;
 use App\Support\CompanyPageContext;
+use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 
 class InvoiceController extends Controller
@@ -29,14 +32,15 @@ class InvoiceController extends Controller
         private readonly InvoicePaymentAvailabilityService $paymentAvailabilityService,
         private readonly InvoicePaymentBreakdownPresenter $paymentBreakdownPresenter,
         private readonly InvoicePaymentSourceResolver $paymentSourceResolver
-    ) {
-    }
+    ) {}
 
     /**
      * Display a listing of the resource.
      */
     public function index(Request $request)
     {
+        Gate::authorize('viewAny', Invoice::class);
+
         $query = Invoice::query()
             ->with('company')
             ->withSum([
@@ -102,16 +106,16 @@ class InvoiceController extends Controller
         $sort = $request->input('sort', 'issue_date');
         $direction = $request->input('direction', 'desc');
 
-        if (!in_array($sort, $allowedSortColumns, true)) {
+        if (! in_array($sort, $allowedSortColumns, true)) {
             $sort = 'issue_date';
         }
 
-        if (!in_array($direction, $allowedSortDirections, true)) {
+        if (! in_array($direction, $allowedSortDirections, true)) {
             $direction = 'desc';
         }
 
         $paginationParameters = $request->query();
-        if (!$hasAllowedStatusFilter) {
+        if (! $hasAllowedStatusFilter) {
             unset($paginationParameters['status']);
         }
 
@@ -129,7 +133,7 @@ class InvoiceController extends Controller
             ]);
 
         $invoicePaymentSources = $invoices->getCollection()
-            ->mapWithKeys(fn(Invoice $invoice): array => [
+            ->mapWithKeys(fn (Invoice $invoice): array => [
                 $invoice->id => $this->paymentSourceResolver->fromAggregates($invoice),
             ]);
 
@@ -146,7 +150,9 @@ class InvoiceController extends Controller
      */
     public function create()
     {
-        $companies = \App\Models\Company::where('status', 'active')
+        Gate::authorize('create', Invoice::class);
+
+        $companies = Company::where('status', 'active')
             ->orderBy('name')
             ->get();
 
@@ -158,6 +164,8 @@ class InvoiceController extends Controller
      */
     public function store(Request $request)
     {
+        Gate::authorize('create', Invoice::class);
+
         $validated = $request->validate([
             'company_id' => 'required|exists:companies,id',
             'contract_id' => 'required|exists:contracts,id',
@@ -218,7 +226,7 @@ class InvoiceController extends Controller
             ->where('company_id', $company->id)
             ->first();
 
-        if (!$contract) {
+        if (! $contract) {
             return back()
                 ->withErrors([
                     'contract_id' => 'Выбранный договор не принадлежит выбранной компании.',
@@ -255,7 +263,7 @@ class InvoiceController extends Controller
      * Разовые услуги и ручные строки
      * не должны иметь расчётного периода.
      */
-            if (!$subscriptionId && ($periodStartValue || $periodEndValue)) {
+            if (! $subscriptionId && ($periodStartValue || $periodEndValue)) {
                 $lineErrors["{$fieldPrefix}.period_start"] =
                     'Расчётный период разрешён только для подписок.';
             }
@@ -270,7 +278,7 @@ class InvoiceController extends Controller
                     ->where('status', '!=', 'cancelled')
                     ->exists();
 
-                if (!$orderExists) {
+                if (! $orderExists) {
                     $lineErrors["{$fieldPrefix}.order_id"] =
                         'Выбранная разовая услуга не принадлежит этому договору или отменена.';
                 }
@@ -288,7 +296,7 @@ class InvoiceController extends Controller
             /*
      * Ручная строка без order_id и subscription_id разрешена.
      */
-            if (!$subscriptionId) {
+            if (! $subscriptionId) {
                 continue;
             }
 
@@ -301,7 +309,7 @@ class InvoiceController extends Controller
                 ->where('contract_id', $contract->id)
                 ->first();
 
-            if (!$subscription) {
+            if (! $subscription) {
                 $lineErrors["{$fieldPrefix}.subscription_id"] =
                     'Выбранная подписка не принадлежит этому договору.';
 
@@ -325,7 +333,7 @@ class InvoiceController extends Controller
             /*
      * Для подписки обе даты обязательны.
      */
-            if (!$periodStartValue || !$periodEndValue) {
+            if (! $periodStartValue || ! $periodEndValue) {
                 $lineErrors["{$fieldPrefix}.period_start"] =
                     'Для подписки необходимо указать начало и окончание расчётного периода.';
 
@@ -403,12 +411,12 @@ class InvoiceController extends Controller
                     )
                     ->subDay();
 
-                if (!$periodStart->equalTo($expectedPeriodStart)) {
+                if (! $periodStart->equalTo($expectedPeriodStart)) {
                     $lineErrors["{$fieldPrefix}.period_start"] =
                         'Начало периода не соответствует следующей дате выставления подписки.';
                 }
 
-                if (!$periodEnd->equalTo($expectedPeriodEnd)) {
+                if (! $periodEnd->equalTo($expectedPeriodEnd)) {
                     $lineErrors["{$fieldPrefix}.period_end"] =
                         'Окончание периода не соответствует графику подписки.';
                 }
@@ -461,7 +469,7 @@ class InvoiceController extends Controller
             }
         }
 
-        if (!empty($lineErrors)) {
+        if (! empty($lineErrors)) {
             $firstError = array_values($lineErrors)[0];
 
             throw ValidationException::withMessages(
@@ -516,17 +524,13 @@ class InvoiceController extends Controller
                     'description' => $line['description'],
                     'amount' => $line['amount'],
 
-                    'subscription_id' =>
-                    $line['subscription_id'] ?? null,
+                    'subscription_id' => $line['subscription_id'] ?? null,
 
-                    'order_id' =>
-                    $line['order_id'] ?? null,
+                    'order_id' => $line['order_id'] ?? null,
 
-                    'period_start' =>
-                    $line['period_start'] ?? null,
+                    'period_start' => $line['period_start'] ?? null,
 
-                    'period_end' =>
-                    $line['period_end'] ?? null,
+                    'period_end' => $line['period_end'] ?? null,
                 ]);
             }
 
@@ -543,32 +547,120 @@ class InvoiceController extends Controller
      */
     public function show(Request $request, Invoice $invoice)
     {
+        Gate::authorize('view', $invoice);
+
         $invoice->load([
             'company',
             'contract',
             'lines',
-            'payments' => fn($query) => $query
-                ->with(['allocations', 'creditBalanceEntries'])
-                ->orderByDesc('payment_date')
-                ->orderByDesc('id'),
         ]);
+
+        $canViewPaymentHistory = Gate::allows('viewAny', Payment::class);
+
+        if ($canViewPaymentHistory) {
+            $invoice->load([
+                'payments' => fn ($query) => $query
+                    ->with(['allocations', 'creditBalanceEntries'])
+                    ->orderByDesc('payment_date')
+                    ->orderByDesc('id'),
+            ]);
+        } else {
+            $calculationPayments = $invoice->payments()
+                ->select(['id', 'invoice_id', 'status', 'amount'])
+                ->with('allocations:id,payment_id,invoice_line_id,amount')
+                ->orderByDesc('id')
+                ->get()
+                ->each(fn (Payment $payment) => $payment->setRelation(
+                    'creditBalanceEntries',
+                    $payment->newCollection()
+                ));
+
+            $invoice->setRelation('payments', $calculationPayments);
+        }
 
         $companyContext = $this->invoiceCompanyContext($request, $invoice);
         $paymentBreakdown = $this->paymentBreakdownPresenter->present($invoice);
-        $paymentsById = $invoice->payments->keyBy('id');
-        $paymentSource = $this->paymentSourceResolver->fromLoadedInvoice($invoice);
         $paymentAvailability = $this->paymentAvailabilityService->evaluate($invoice);
         $editability = $this->editabilityService->evaluate($invoice);
+        $hasPayments = $invoice->payments->isNotEmpty();
+        $actionablePayments = $this->actionablePayments($invoice);
 
-        return view('invoices.show', compact(
+        if ($canViewPaymentHistory) {
+            $paymentsById = $invoice->payments->keyBy('id');
+            $paymentSource = $this->paymentSourceResolver->fromLoadedInvoice($invoice);
+        } else {
+            $invoice->setAttribute(
+                'confirmed_paid_amount',
+                $invoice->payments->where('status', 'confirmed')->sum('amount')
+            );
+            $paymentBreakdown = [
+                'lineRows' => $paymentBreakdown['lineRows'],
+                'totals' => $paymentBreakdown['totals'],
+            ];
+
+            $invoice->unsetRelation('payments');
+        }
+
+        $viewData = compact(
             'invoice',
             'companyContext',
             'paymentBreakdown',
-            'paymentsById',
-            'paymentSource',
             'paymentAvailability',
-            'editability'
-        ));
+            'editability',
+            'hasPayments',
+            'actionablePayments'
+        );
+
+        if ($canViewPaymentHistory) {
+            $viewData += compact('paymentsById', 'paymentSource');
+        }
+
+        return view('invoices.show', $viewData);
+    }
+
+    /** @return list<array{id: int, status: string, can_confirm: bool, can_cancel: bool}> */
+    private function actionablePayments(Invoice $invoice): array
+    {
+        $canConfirm = Gate::allows(PermissionName::PaymentsConfirm->value);
+        $canCancel = Gate::allows(PermissionName::PaymentsCancel->value);
+
+        if (! $canConfirm && ! $canCancel) {
+            return [];
+        }
+
+        return Payment::query()
+            ->where('invoice_id', $invoice->id)
+            ->whereIn('status', $canCancel ? ['pending', 'confirmed'] : ['pending'])
+            ->select(['id', 'invoice_id', 'status'])
+            ->selectRaw(
+                'CASE WHEN comment LIKE ? THEN 1 ELSE 0 END as is_legacy_credit_balance_payment',
+                ['Автоматически применён Credit Balance%']
+            )
+            ->withExists([
+                'creditBalanceEntries as has_applied_credit_entry' => fn ($query) => $query
+                    ->where('type', 'applied'),
+            ])
+            ->orderBy('id')
+            ->get()
+            ->map(function (Payment $payment) use ($canConfirm, $canCancel): array {
+                $isCreditBalancePayment = $payment->has_applied_credit_entry
+                    || $payment->is_legacy_credit_balance_payment;
+
+                return [
+                    'id' => (int) $payment->id,
+                    'status' => (string) $payment->status,
+                    'can_confirm' => $canConfirm
+                        && $payment->status === 'pending'
+                        && Gate::allows('confirm', $payment),
+                    'can_cancel' => $canCancel
+                        && in_array($payment->status, ['pending', 'confirmed'], true)
+                        && ! $isCreditBalancePayment
+                        && Gate::allows('cancel', $payment),
+                ];
+            })
+            ->filter(fn (array $payment): bool => $payment['can_confirm'] || $payment['can_cancel'])
+            ->values()
+            ->all();
     }
 
     /**
@@ -576,11 +668,13 @@ class InvoiceController extends Controller
      */
     public function edit(Request $request, Invoice $invoice)
     {
+        Gate::authorize('update', $invoice);
+
         $companyContext = $this->invoiceCompanyContext($request, $invoice);
         $invoice->loadMissing('payments:id,invoice_id,status');
         $editability = $this->editabilityService->evaluate($invoice);
 
-        if (!$editability['editable']) {
+        if (! $editability['editable']) {
             return redirect()
                 ->route('invoices.show', ['invoice' => $invoice, ...$companyContext['query']])
                 ->with('error', $this->editabilityMessage($editability['reason']));
@@ -603,13 +697,15 @@ class InvoiceController extends Controller
         Request $request,
         Invoice $invoice
     ) {
+        Gate::authorize('update', $invoice);
+
         $companyContext = $this->invoiceCompanyContext($request, $invoice);
         $validated = $request->validate([
             'invoice_number' => [
                 'required',
                 'string',
                 'max:50',
-                'unique:invoices,invoice_number,' . $invoice->id,
+                'unique:invoices,invoice_number,'.$invoice->id,
             ],
             'issue_date' => ['required', 'date'],
             'due_date' => ['nullable', 'date'],
@@ -634,7 +730,7 @@ class InvoiceController extends Controller
                 ->firstOrFail();
 
             $editability = $this->editabilityService->evaluate($lockedInvoice);
-            if (!$editability['editable']) {
+            if (! $editability['editable']) {
                 return $this->editabilityMessage($editability['reason']);
             }
 
@@ -658,7 +754,7 @@ class InvoiceController extends Controller
             $submittedExistingIds = collect($validated['lines'])
                 ->pluck('id')
                 ->filter()
-                ->map(fn($lineId): int => (int) $lineId)
+                ->map(fn ($lineId): int => (int) $lineId)
                 ->values();
 
             $lineIdsToDelete = $originalLines
@@ -668,7 +764,7 @@ class InvoiceController extends Controller
             if (
                 $lockedInvoice->status === 'issued'
                 && $originalLines->only($lineIdsToDelete->all())->contains(
-                    fn(InvoiceLine $line): bool => $line->subscription_id !== null || $line->order_id !== null
+                    fn (InvoiceLine $line): bool => $line->subscription_id !== null || $line->order_id !== null
                 )
             ) {
                 throw ValidationException::withMessages([
@@ -679,7 +775,7 @@ class InvoiceController extends Controller
             $processedExistingIds = [];
 
             foreach ($validated['lines'] as $index => $line) {
-                $lineId = !empty($line['id'])
+                $lineId = ! empty($line['id'])
                     ? (int) $line['id']
                     : null;
 
@@ -693,10 +789,9 @@ class InvoiceController extends Controller
                 if ($lineId) {
                     $existingLine = $originalLines->get($lineId);
 
-                    if (!$existingLine) {
+                    if (! $existingLine) {
                         throw ValidationException::withMessages([
-                            "lines.{$index}.id" =>
-                            'Позиция не принадлежит этому инвойсу.',
+                            "lines.{$index}.id" => 'Позиция не принадлежит этому инвойсу.',
                         ]);
                     }
 
@@ -715,8 +810,7 @@ class InvoiceController extends Controller
 
                     if ($submittedMetadata != $storedMetadata) {
                         throw ValidationException::withMessages([
-                            "lines.{$index}.id" =>
-                            'Нельзя изменить служебную связь или расчётный период позиции.',
+                            "lines.{$index}.id" => 'Нельзя изменить служебную связь или расчётный период позиции.',
                         ]);
                     }
 
@@ -729,8 +823,7 @@ class InvoiceController extends Controller
                         && (int) $linkedContractId !== (int) $lockedInvoice->contract_id
                     ) {
                         throw ValidationException::withMessages([
-                            "lines.{$index}.id" =>
-                            'Связанная позиция не принадлежит договору инвойса.',
+                            "lines.{$index}.id" => 'Связанная позиция не принадлежит договору инвойса.',
                         ]);
                     }
 
@@ -745,14 +838,13 @@ class InvoiceController extends Controller
                 }
 
                 if (
-                    !empty($line['subscription_id'])
-                    || !empty($line['order_id'])
-                    || !empty($line['period_start'])
-                    || !empty($line['period_end'])
+                    ! empty($line['subscription_id'])
+                    || ! empty($line['order_id'])
+                    || ! empty($line['period_start'])
+                    || ! empty($line['period_end'])
                 ) {
                     throw ValidationException::withMessages([
-                        "lines.{$index}.id" =>
-                        'Новая позиция может быть только ручной.',
+                        "lines.{$index}.id" => 'Новая позиция может быть только ручной.',
                     ]);
                 }
 
@@ -834,8 +926,9 @@ class InvoiceController extends Controller
     public function issue(
         Invoice $invoice,
         InvoicePaymentAllocationWriter $allocationWriter
-    )
-    {
+    ) {
+        Gate::authorize('issue', $invoice);
+
         DB::transaction(function () use ($invoice, $allocationWriter) {
             /*
          * Блокируем инвойс, чтобы его нельзя было
@@ -854,21 +947,19 @@ class InvoiceController extends Controller
 
             if (
                 $invoice->payments()
-                ->where('status', 'confirmed')
-                ->exists()
+                    ->where('status', 'confirmed')
+                    ->exists()
             ) {
                 throw ValidationException::withMessages([
-                    'issue' =>
-                    'Нельзя выставить черновик с подтверждёнными платежами.',
+                    'issue' => 'Нельзя выставить черновик с подтверждёнными платежами.',
                 ]);
             }
 
             $contract = $invoice->contract;
 
-            if (!$contract) {
+            if (! $contract) {
                 throw ValidationException::withMessages([
-                    'issue' =>
-                    'Инвойс не связан с договором.',
+                    'issue' => 'Инвойс не связан с договором.',
                 ]);
             }
 
@@ -878,8 +969,7 @@ class InvoiceController extends Controller
 
             if ($lines->isEmpty()) {
                 throw ValidationException::withMessages([
-                    'issue' =>
-                    'В инвойсе должна быть хотя бы одна позиция.',
+                    'issue' => 'В инвойсе должна быть хотя бы одна позиция.',
                 ]);
             }
 
@@ -915,14 +1005,13 @@ class InvoiceController extends Controller
              * Разовые и ручные позиции
              * не изменяют next_billing_date.
              */
-                if (!$line->subscription_id) {
+                if (! $line->subscription_id) {
                     continue;
                 }
 
                 if (isset($seenSubscriptions[$line->subscription_id])) {
                     throw ValidationException::withMessages([
-                        'issue' =>
-                        'Одна подписка не может быть добавлена в инвойс несколько раз.',
+                        'issue' => 'Одна подписка не может быть добавлена в инвойс несколько раз.',
                     ]);
                 }
 
@@ -932,10 +1021,9 @@ class InvoiceController extends Controller
                     $line->subscription_id
                 );
 
-                if (!$subscription) {
+                if (! $subscription) {
                     throw ValidationException::withMessages([
-                        'issue' =>
-                        'Одна из подписок больше не существует.',
+                        'issue' => 'Одна из подписок больше не существует.',
                     ]);
                 }
 
@@ -944,22 +1032,19 @@ class InvoiceController extends Controller
                     !== (int) $invoice->contract_id
                 ) {
                     throw ValidationException::withMessages([
-                        'issue' =>
-                        'Одна из подписок не принадлежит договору инвойса.',
+                        'issue' => 'Одна из подписок не принадлежит договору инвойса.',
                     ]);
                 }
 
                 if ($subscription->status !== 'active') {
                     throw ValidationException::withMessages([
-                        'issue' =>
-                        "Подписка «{$line->description}» больше не активна.",
+                        'issue' => "Подписка «{$line->description}» больше не активна.",
                     ]);
                 }
 
-                if (!$line->period_start || !$line->period_end) {
+                if (! $line->period_start || ! $line->period_end) {
                     throw ValidationException::withMessages([
-                        'issue' =>
-                        "У позиции «{$line->description}» не указан расчётный период.",
+                        'issue' => "У позиции «{$line->description}» не указан расчётный период.",
                     ]);
                 }
 
@@ -973,8 +1058,7 @@ class InvoiceController extends Controller
 
                 if ($periodEnd->lt($periodStart)) {
                     throw ValidationException::withMessages([
-                        'issue' =>
-                        "У позиции «{$line->description}» неверный расчётный период.",
+                        'issue' => "У позиции «{$line->description}» неверный расчётный период.",
                     ]);
                 }
 
@@ -984,8 +1068,7 @@ class InvoiceController extends Controller
 
                 if ($periodStart->lt($subscriptionStart)) {
                     throw ValidationException::withMessages([
-                        'issue' =>
-                        "Период позиции «{$line->description}» начинается раньше подписки.",
+                        'issue' => "Период позиции «{$line->description}» начинается раньше подписки.",
                     ]);
                 }
 
@@ -995,8 +1078,7 @@ class InvoiceController extends Controller
 
                 if ($periodStart->lt($contractStart)) {
                     throw ValidationException::withMessages([
-                        'issue' =>
-                        "Период позиции «{$line->description}» начинается раньше договора.",
+                        'issue' => "Период позиции «{$line->description}» начинается раньше договора.",
                     ]);
                 }
 
@@ -1007,8 +1089,7 @@ class InvoiceController extends Controller
 
                     if ($periodEnd->gt($contractEnd)) {
                         throw ValidationException::withMessages([
-                            'issue' =>
-                            "Период позиции «{$line->description}» выходит за срок договора.",
+                            'issue' => "Период позиции «{$line->description}» выходит за срок договора.",
                         ]);
                     }
                 }
@@ -1041,8 +1122,7 @@ class InvoiceController extends Controller
 
                 if ($periodAlreadyInvoiced) {
                     throw ValidationException::withMessages([
-                        'issue' =>
-                        "По подписке «{$line->description}» уже есть инвойс за этот период.",
+                        'issue' => "По подписке «{$line->description}» уже есть инвойс за этот период.",
                     ]);
                 }
 
@@ -1056,17 +1136,15 @@ class InvoiceController extends Controller
 
                 $months = $monthsByBillingPeriod[$subscription->billing_period] ?? null;
 
-                if (!$months) {
+                if (! $months) {
                     throw ValidationException::withMessages([
-                        'issue' =>
-                        "У подписки «{$line->description}» неизвестная периодичность.",
+                        'issue' => "У подписки «{$line->description}» неизвестная периодичность.",
                     ]);
                 }
 
-                if (!$subscription->next_billing_date) {
+                if (! $subscription->next_billing_date) {
                     throw ValidationException::withMessages([
-                        'issue' =>
-                        "У подписки «{$line->description}» не указана следующая дата выставления.",
+                        'issue' => "У подписки «{$line->description}» не указана следующая дата выставления.",
                     ]);
                 }
 
@@ -1079,17 +1157,15 @@ class InvoiceController extends Controller
                     ->addMonthsNoOverflow($months)
                     ->subDay();
 
-                if (!$periodStart->equalTo($expectedPeriodStart)) {
+                if (! $periodStart->equalTo($expectedPeriodStart)) {
                     throw ValidationException::withMessages([
-                        'issue' =>
-                        "Начало периода позиции «{$line->description}» больше не соответствует графику подписки.",
+                        'issue' => "Начало периода позиции «{$line->description}» больше не соответствует графику подписки.",
                     ]);
                 }
 
-                if (!$periodEnd->equalTo($expectedPeriodEnd)) {
+                if (! $periodEnd->equalTo($expectedPeriodEnd)) {
                     throw ValidationException::withMessages([
-                        'issue' =>
-                        "Окончание периода позиции «{$line->description}» не соответствует графику подписки.",
+                        'issue' => "Окончание периода позиции «{$line->description}» не соответствует графику подписки.",
                     ]);
                 }
 
@@ -1152,8 +1228,7 @@ class InvoiceController extends Controller
                         'amount' => $applied,
                         'payment_method' => 'transfer',
                         'status' => 'confirmed',
-                        'comment' =>
-                            "Автоматически применён Credit Balance ({$applied} ₼)",
+                        'comment' => "Автоматически применён Credit Balance ({$applied} ₼)",
                     ]);
 
                     $creditBalance->entries()
@@ -1180,6 +1255,8 @@ class InvoiceController extends Controller
 
     public function cancel(Invoice $invoice)
     {
+        Gate::authorize('cancel', $invoice);
+
         DB::transaction(function () use ($invoice) {
             /*
          * Блокируем инвойс, чтобы два запроса
@@ -1240,7 +1317,7 @@ class InvoiceController extends Controller
                     $subscriptionId
                 );
 
-                if (!$subscription) {
+                if (! $subscription) {
                     throw ValidationException::withMessages([
                         'cancel' => 'Одна из подписок больше не существует.',
                     ]);
@@ -1256,15 +1333,14 @@ class InvoiceController extends Controller
 
                 if ($lines->count() > 1) {
                     throw ValidationException::withMessages([
-                        'cancel' =>
-                        'Нельзя автоматически восстановить график: '
-                            . 'инвойс содержит несколько периодов одной подписки.',
+                        'cancel' => 'Нельзя автоматически восстановить график: '
+                            .'инвойс содержит несколько периодов одной подписки.',
                     ]);
                 }
 
                 $line = $lines->first();
 
-                if (!$line->period_start || !$line->period_end) {
+                if (! $line->period_start || ! $line->period_end) {
                     throw ValidationException::withMessages([
                         'cancel' => "У позиции «{$line->description}» отсутствует расчётный период.",
                     ]);
@@ -1296,9 +1372,8 @@ class InvoiceController extends Controller
 
                 if ($hasLaterPeriod) {
                     throw ValidationException::withMessages([
-                        'cancel' =>
-                        "Нельзя отменить позицию «{$line->description}»: "
-                            . 'по подписке уже существует более поздний выставленный инвойс.',
+                        'cancel' => "Нельзя отменить позицию «{$line->description}»: "
+                            .'по подписке уже существует более поздний выставленный инвойс.',
                     ]);
                 }
 
@@ -1316,9 +1391,8 @@ class InvoiceController extends Controller
 
                 if ($currentDate !== $expectedCurrentDate) {
                     throw ValidationException::withMessages([
-                        'cancel' =>
-                        "Нельзя восстановить график подписки «{$line->description}»: "
-                            . 'следующая дата выставления уже была изменена.',
+                        'cancel' => "Нельзя восстановить график подписки «{$line->description}»: "
+                            .'следующая дата выставления уже была изменена.',
                     ]);
                 }
 
@@ -1344,7 +1418,7 @@ class InvoiceController extends Controller
                     $subscriptionId
                 );
 
-                if (!$subscription) {
+                if (! $subscription) {
                     continue;
                 }
 
@@ -1367,6 +1441,8 @@ class InvoiceController extends Controller
      */
     public function destroy(Invoice $invoice)
     {
+        Gate::authorize('delete', $invoice);
+
         DB::transaction(function () use ($invoice) {
             /*
              * Повторно читаем и блокируем строку: статус мог измениться
@@ -1466,8 +1542,7 @@ class InvoiceController extends Controller
                     'amount' => (float) $subscription->amount,
 
                     'billing_period' => $subscription->billing_period,
-                    'billing_period_custom' =>
-                    $subscription->billing_period_custom ?? null,
+                    'billing_period_custom' => $subscription->billing_period_custom ?? null,
 
                     'start_date' => $subscription->start_date
                         ? Carbon::parse($subscription->start_date)->format('Y-m-d')

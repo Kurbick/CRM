@@ -12,6 +12,7 @@ use App\Services\InvoicePaymentAvailabilityService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -20,8 +21,7 @@ class PaymentController extends Controller
     public function __construct(
         private readonly InvoicePaymentAllocationWriter $allocationWriter,
         private readonly InvoicePaymentAvailabilityService $paymentAvailabilityService
-    ) {
-    }
+    ) {}
 
     /**
      * Регистрация нового платежа.
@@ -30,6 +30,8 @@ class PaymentController extends Controller
         Request $request,
         Invoice $invoice
     ): RedirectResponse {
+        Gate::authorize('create', [Payment::class, $invoice]);
+
         $validated = $request->validate([
             'payment_date' => [
                 'required',
@@ -64,38 +66,27 @@ class PaymentController extends Controller
                 'max:2000',
             ],
         ], [
-            'payment_date.required' =>
-            'Укажите дату платежа.',
+            'payment_date.required' => 'Укажите дату платежа.',
 
-            'payment_date.date' =>
-            'Укажите корректную дату платежа.',
+            'payment_date.date' => 'Укажите корректную дату платежа.',
 
-            'amount.required' =>
-            'Укажите сумму платежа.',
+            'amount.required' => 'Укажите сумму платежа.',
 
-            'amount.numeric' =>
-            'Сумма платежа должна быть числом.',
+            'amount.numeric' => 'Сумма платежа должна быть числом.',
 
-            'amount.decimal' =>
-            'Сумма платежа должна содержать не более двух знаков после запятой.',
+            'amount.decimal' => 'Сумма платежа должна содержать не более двух знаков после запятой.',
 
-            'amount.min' =>
-            'Сумма платежа должна быть больше нуля.',
+            'amount.min' => 'Сумма платежа должна быть больше нуля.',
 
-            'payment_method.required' =>
-            'Выберите способ оплаты.',
+            'payment_method.required' => 'Выберите способ оплаты.',
 
-            'payment_method.in' =>
-            'Выбран некорректный способ оплаты.',
+            'payment_method.in' => 'Выбран некорректный способ оплаты.',
 
-            'status.required' =>
-            'Выберите статус платежа.',
+            'status.required' => 'Выберите статус платежа.',
 
-            'status.in' =>
-            'Выбран некорректный статус платежа.',
+            'status.in' => 'Выбран некорректный статус платежа.',
 
-            'comment.max' =>
-            'Комментарий не должен превышать 2000 символов.',
+            'comment.max' => 'Комментарий не должен превышать 2000 символов.',
         ]);
 
         DB::transaction(function () use (
@@ -117,15 +108,14 @@ class PaymentController extends Controller
              * или частично оплаченному инвойсу.
              */
             if (
-                !in_array(
+                ! in_array(
                     $lockedInvoice->status,
                     ['issued', 'partially_paid'],
                     true
                 )
             ) {
                 throw ValidationException::withMessages([
-                    'amount' =>
-                    'Платёж можно добавить только по выставленному или частично оплаченному инвойсу.',
+                    'amount' => 'Платёж можно добавить только по выставленному или частично оплаченному инвойсу.',
                 ]);
             }
 
@@ -149,8 +139,7 @@ class PaymentController extends Controller
                 'invoice_id' => $lockedInvoice->id,
                 'payment_date' => $validated['payment_date'],
                 'amount' => $this->paymentAvailabilityService->fromMinorUnits($paymentAmountMinor),
-                'payment_method' =>
-                $validated['payment_method'],
+                'payment_method' => $validated['payment_method'],
                 'status' => $validated['status'],
                 'comment' => $validated['comment'] ?? null,
             ]);
@@ -184,6 +173,8 @@ class PaymentController extends Controller
     public function confirm(
         Payment $payment
     ): RedirectResponse {
+        Gate::authorize('confirm', $payment);
+
         $invoiceId = $payment->invoice_id;
 
         DB::transaction(function () use (
@@ -215,28 +206,25 @@ class PaymentController extends Controller
 
             if ((int) $lockedPayment->invoice_id !== (int) $invoice->id) {
                 throw ValidationException::withMessages([
-                    'payment_confirm' =>
-                    'Платёж не принадлежит заблокированному инвойсу.',
+                    'payment_confirm' => 'Платёж не принадлежит заблокированному инвойсу.',
                 ]);
             }
 
             if ($lockedPayment->status !== 'pending') {
                 throw ValidationException::withMessages([
-                    'payment_confirm' =>
-                    'Подтвердить можно только платёж со статусом «Ожидает подтверждения».',
+                    'payment_confirm' => 'Подтвердить можно только платёж со статусом «Ожидает подтверждения».',
                 ]);
             }
 
             if (
-                !in_array(
+                ! in_array(
                     $invoice->status,
                     ['issued', 'partially_paid', 'paid'],
                     true
                 )
             ) {
                 throw ValidationException::withMessages([
-                    'payment_confirm' =>
-                    'Нельзя подтвердить платёж по черновику или отменённому инвойсу.',
+                    'payment_confirm' => 'Нельзя подтвердить платёж по черновику или отменённому инвойсу.',
                 ]);
             }
 
@@ -245,8 +233,7 @@ class PaymentController extends Controller
                 !== (int) $invoice->company_id
             ) {
                 throw ValidationException::withMessages([
-                    'payment_confirm' =>
-                    'Компания платежа не совпадает с компанией инвойса.',
+                    'payment_confirm' => 'Компания платежа не совпадает с компанией инвойса.',
                 ]);
             }
 
@@ -281,6 +268,8 @@ class PaymentController extends Controller
         Request $request,
         Payment $payment
     ): RedirectResponse {
+        Gate::authorize('cancel', $payment);
+
         $validated = $request->validate([
             'cancel_payment_id' => [
                 'required',
@@ -294,23 +283,17 @@ class PaymentController extends Controller
                 'max:1000',
             ],
         ], [
-            'cancel_payment_id.required' =>
-            'Не удалось определить отменяемый платёж.',
+            'cancel_payment_id.required' => 'Не удалось определить отменяемый платёж.',
 
-            'cancel_payment_id.integer' =>
-            'Указан некорректный платёж.',
+            'cancel_payment_id.integer' => 'Указан некорректный платёж.',
 
-            'cancel_payment_id.in' =>
-            'Платёж в форме не совпадает с отменяемым платежом.',
+            'cancel_payment_id.in' => 'Платёж в форме не совпадает с отменяемым платежом.',
 
-            'cancel_reason.required' =>
-            'Укажите причину отмены платежа.',
+            'cancel_reason.required' => 'Укажите причину отмены платежа.',
 
-            'cancel_reason.min' =>
-            'Причина отмены должна содержать минимум 3 символа.',
+            'cancel_reason.min' => 'Причина отмены должна содержать минимум 3 символа.',
 
-            'cancel_reason.max' =>
-            'Причина отмены не должна превышать 1000 символов.',
+            'cancel_reason.max' => 'Причина отмены не должна превышать 1000 символов.',
         ]);
 
         $invoiceId = null;
@@ -336,15 +319,13 @@ class PaymentController extends Controller
 
             if ((int) $lockedPayment->invoice_id !== (int) $invoice->id) {
                 throw ValidationException::withMessages([
-                    'cancel_reason' =>
-                    'Платёж не принадлежит заблокированному инвойсу.',
+                    'cancel_reason' => 'Платёж не принадлежит заблокированному инвойсу.',
                 ]);
             }
 
-            if (!in_array($lockedPayment->status, ['pending', 'confirmed'], true)) {
+            if (! in_array($lockedPayment->status, ['pending', 'confirmed'], true)) {
                 throw ValidationException::withMessages([
-                    'cancel_reason' =>
-                    'Отменить можно только ожидающий или подтверждённый платёж.',
+                    'cancel_reason' => 'Отменить можно только ожидающий или подтверждённый платёж.',
                 ]);
             }
 
@@ -354,8 +335,7 @@ class PaymentController extends Controller
              */
             if ($this->isCreditBalancePayment($lockedPayment)) {
                 throw ValidationException::withMessages([
-                    'cancel_reason' =>
-                    'Автоматическое применение Credit Balance нельзя отменить как обычный платёж.',
+                    'cancel_reason' => 'Автоматическое применение Credit Balance нельзя отменить как обычный платёж.',
                 ]);
             }
 
@@ -366,8 +346,7 @@ class PaymentController extends Controller
                 !== (int) $invoice->company_id
             ) {
                 throw ValidationException::withMessages([
-                    'cancel_reason' =>
-                    'Компания платежа не совпадает с компанией инвойса.',
+                    'cancel_reason' => 'Компания платежа не совпадает с компанией инвойса.',
                 ]);
             }
 
@@ -382,15 +361,14 @@ class PaymentController extends Controller
             }
 
             if (
-                !in_array(
+                ! in_array(
                     $invoice->status,
                     ['issued', 'partially_paid', 'paid'],
                     true
                 )
             ) {
                 throw ValidationException::withMessages([
-                    'cancel_reason' =>
-                    'Нельзя отменить платёж этого инвойса.',
+                    'cancel_reason' => 'Нельзя отменить платёж этого инвойса.',
                 ]);
             }
 
@@ -429,8 +407,7 @@ class PaymentController extends Controller
             $lockedPayment->forceFill([
                 'status' => 'cancelled',
                 'cancelled_at' => now(),
-                'cancel_reason' =>
-                $validated['cancel_reason'],
+                'cancel_reason' => $validated['cancel_reason'],
             ])->saveQuietly();
 
             /*
@@ -568,10 +545,9 @@ class PaymentController extends Controller
             ->lockForUpdate()
             ->first();
 
-        if (!$creditBalance) {
+        if (! $creditBalance) {
             throw ValidationException::withMessages([
-                'cancel_reason' =>
-                'Не найден Credit Balance компании.',
+                'cancel_reason' => 'Не найден Credit Balance компании.',
             ]);
         }
 
@@ -586,8 +562,7 @@ class PaymentController extends Controller
          */
         if ($availableCredit < $creditToReverse) {
             throw ValidationException::withMessages([
-                'cancel_reason' =>
-                'Нельзя отменить платёж: часть переплаты уже использована для оплаты другого инвойса.',
+                'cancel_reason' => 'Нельзя отменить платёж: часть переплаты уже использована для оплаты другого инвойса.',
             ]);
         }
 
@@ -600,8 +575,7 @@ class PaymentController extends Controller
             'amount' => $creditToReverse,
             'payment_id' => $cancelledPayment->id,
             'invoice_id' => $invoice->id,
-            'description' =>
-            "Отмена переплаты по платежу #{$cancelledPayment->id}",
+            'description' => "Отмена переплаты по платежу #{$cancelledPayment->id}",
         ]);
 
         $creditBalance->forceFill([

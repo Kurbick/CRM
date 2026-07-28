@@ -7,7 +7,7 @@ use App\Models\CompanyContact;
 use App\Models\Contract;
 use App\Models\Invoice;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Tests\AuthenticatedTestCase as TestCase;
+use Tests\Feature\FinancialTestCase as TestCase;
 
 class CompanyContextNavigationTest extends TestCase
 {
@@ -81,6 +81,7 @@ class CompanyContextNavigationTest extends TestCase
     {
         $company = Company::create(['name' => 'Context Company', 'status' => 'active', 'invoice_mode' => 'separate']);
         $contract = Contract::create(['company_id' => $company->id, 'contract_number' => 'CTX-1', 'start_date' => '2026-01-01', 'status' => 'active']);
+
         return [$company, $contract];
     }
 }

@@ -64,6 +64,7 @@
 
         <div class="flex flex-wrap items-center gap-5">
             {{-- Кнопка Печать --}}
+            @can('print', $invoice)
             <button type="button" onclick="window.print()"
                 class="inline-flex items-center text-sm border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg font-medium transition shadow-sm">
                 <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -72,8 +73,10 @@
                 </svg>
                 Печать
             </button>
+            @endcan
 
             <div class="flex items-center gap-2">
+                @can('update', $invoice)
                 @if ($editability['editable'])
                     <a href="{{ route('invoices.edit', $invoice) }}{{ $companyContext['active'] ? '?'.http_build_query($companyContext['query']) : '' }}"
                         class="px-4 py-2 border border-gray-200 text-gray-600
@@ -82,7 +85,9 @@
                         Редактировать
                     </a>
                 @endif
+                @endcan
 
+                @can('delete', $invoice)
                 @if ($invoice->status === 'draft')
                     <form action="{{ route('invoices.destroy', $invoice) }}" method="POST"
                         onsubmit="return confirm('Вы уверены, что хотите удалить этот счет? Действие необратимо.')">
@@ -98,7 +103,9 @@
                         </button>
                     </form>
                 @endif
-                @if ($invoice->status === 'issued' && $invoice->payments->isEmpty())
+                @endcan
+                @can('cancel', $invoice)
+                @if ($invoice->status === 'issued' && !$hasPayments)
                     <form action="{{ route('invoices.cancel', $invoice) }}" method="POST"
                         onsubmit="return confirm('Отменить выставленный инвойс? График подписок будет восстановлен.')">
 
@@ -115,6 +122,7 @@
                         </button>
                     </form>
                 @endif
+                @endcan
             </div>
         </div>
     </div>
@@ -293,11 +301,13 @@
                         </span>
                     </div>
 
-                    @if ($paymentSource['credit_balance_applied_minor'] > 0)
-                        <div class="w-64 text-right text-xs text-gray-400">
-                            Из баланса: {{ $formatMoney($paymentSource['credit_balance_applied_amount']) }}
-                        </div>
-                    @endif
+                    @can('viewAny', \App\Models\Payment::class)
+                        @if ($paymentSource['credit_balance_applied_minor'] > 0)
+                            <div class="w-64 text-right text-xs text-gray-400">
+                                Из баланса: {{ $formatMoney($paymentSource['credit_balance_applied_amount']) }}
+                            </div>
+                        @endif
+                    @endcan
 
                     @if ($invoice->overpayment_amount > 0)
                         <div class="flex justify-between w-64 text-blue-600">
@@ -323,6 +333,7 @@
                     </div>
                 </div>
 
+                @can('issue', $invoice)
                 @if ($invoice->status === 'draft')
                     <div class="crm-print-hide mt-4 flex justify-end print:hidden">
                         <form action="{{ route('invoices.issue', $invoice) }}" method="POST"
@@ -338,6 +349,7 @@
                         </form>
                     </div>
                 @endif
+                @endcan
 
                 {{-- Примечание продавца --}}
                 @if (filled($invoice->comment))
@@ -355,6 +367,7 @@
         <div class="invoice-sidebar crm-print-hide space-y-6 print:hidden">
 
             {{-- Форма добавления оплаты --}}
+            @can('create', [\App\Models\Payment::class, $invoice])
             @if (in_array($invoice->status, ['issued', 'partially_paid']) && $invoice->remaining_amount > 0)
                 <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
                     <h3
@@ -442,8 +455,73 @@
                     </form>
                 </div>
             @endif
+            @endcan
+
+            @cannot('viewAny', \App\Models\Payment::class)
+                @if ($actionablePayments !== [])
+                    <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                        <h3 class="font-bold text-sm uppercase tracking-wider text-gray-500">
+                            Доступные действия с платежами
+                        </h3>
+
+                        <div class="mt-4 space-y-3">
+                            @foreach ($actionablePayments as $actionablePayment)
+                                <div class="rounded-lg border border-gray-100 bg-gray-50 p-3 text-sm">
+                                    <div class="flex items-center justify-between gap-3">
+                                        <span class="font-medium text-gray-700">
+                                            Платёж #{{ $actionablePayment['id'] }}
+                                        </span>
+                                        <span class="text-xs text-gray-500">
+                                            {{ $actionablePayment['status'] === 'pending' ? 'Ожидает подтверждения' : 'Подтверждён' }}
+                                        </span>
+                                    </div>
+
+                                    @if ($actionablePayment['can_confirm'])
+                                        <form class="mt-3"
+                                            action="{{ route('payments.confirm', $actionablePayment['id']) }}"
+                                            method="POST">
+                                            @csrf
+                                            @method('PATCH')
+
+                                            <button type="submit"
+                                                class="inline-flex items-center rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs font-medium text-green-700 transition hover:bg-green-100">
+                                                Подтвердить платёж
+                                            </button>
+                                        </form>
+                                    @endif
+
+                                    @if ($actionablePayment['can_cancel'])
+                                        <form class="mt-3 space-y-2"
+                                            action="{{ route('payments.cancel', $actionablePayment['id']) }}"
+                                            method="POST">
+                                            @csrf
+                                            @method('PATCH')
+                                            <input type="hidden" name="cancel_payment_id"
+                                                value="{{ $actionablePayment['id'] }}">
+
+                                            <label class="block text-xs font-medium text-gray-600"
+                                                for="action_cancel_reason_{{ $actionablePayment['id'] }}">
+                                                Причина отмены
+                                            </label>
+                                            <textarea id="action_cancel_reason_{{ $actionablePayment['id'] }}"
+                                                name="cancel_reason" rows="2" required minlength="3" maxlength="1000"
+                                                class="w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 outline-none transition focus:border-red-300 focus:ring-1 focus:ring-red-200"></textarea>
+
+                                            <button type="submit"
+                                                class="text-xs font-medium text-red-600 transition hover:text-red-800">
+                                                Отменить платёж
+                                            </button>
+                                        </form>
+                                    @endif
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
+            @endcannot
 
             {{-- История платежей --}}
+            @can('viewAny', \App\Models\Payment::class)
             @php
                 $paymentHistoryShouldOpen = $errors->has('cancel_reason') && old('cancel_payment_id');
                 $latestPayment = $paymentBreakdown['latest_payment'];
@@ -706,6 +784,7 @@
                             @endif
 
                             {{-- Подтверждение ожидающего платежа --}}
+                            @can('confirm', $payment)
                             @if ($payment->status === 'pending')
                                 <div class="mt-3">
                                     <form action="{{ route('payments.confirm', $payment) }}" method="POST"
@@ -732,8 +811,10 @@
                                     </form>
                                 </div>
                             @endif
+                            @endcan
 
                             {{-- Отмена обычного ожидающего или подтверждённого платежа --}}
+                            @can('cancel', $payment)
                             @if (in_array($payment->status, ['pending', 'confirmed'], true) && !$isCreditBalancePayment)
                                 <div class="mt-3">
                                     <button type="button" x-show="!cancelOpen"
@@ -816,6 +897,7 @@
                                     </form>
                                 </div>
                             @endif
+                            @endcan
                         </div>
                     @empty
                         <p class="text-sm text-gray-400 py-1">
@@ -828,6 +910,7 @@
                     </div>
                 @endif
             </div>
+            @endcan
 
         </div>
 

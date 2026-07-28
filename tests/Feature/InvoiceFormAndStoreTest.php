@@ -5,7 +5,7 @@ namespace Tests\Feature;
 use App\Models\Invoice;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
-use Tests\AuthenticatedTestCase as TestCase;
+use Tests\Feature\FinancialTestCase as TestCase;
 
 class InvoiceFormAndStoreTest extends TestCase
 {
@@ -36,7 +36,7 @@ class InvoiceFormAndStoreTest extends TestCase
             ->assertSee('Оплатить до')
             ->assertSee('Добавить ручную позицию')
             ->assertSee('name="company_id"', false)
-            ->assertSee("selectedCompanyId: '" . $companyId . "'", false)
+            ->assertSee("selectedCompanyId: '".$companyId."'", false)
             ->assertSee("invoiceNumber: 'INV-OLD'", false)
             ->assertSee("dueDate: '2026-08-05'", false)
             ->assertSee("comment: 'Old comment'", false)
@@ -219,7 +219,7 @@ class InvoiceFormAndStoreTest extends TestCase
         return [
             'company_id' => $companyId,
             'contract_id' => $contractId,
-            'invoice_number' => 'INV-' . $companyId . '-' . $contractId,
+            'invoice_number' => 'INV-'.$companyId.'-'.$contractId,
             'issue_date' => '2026-07-20',
             'due_date' => '2026-08-19',
             'lines' => [[

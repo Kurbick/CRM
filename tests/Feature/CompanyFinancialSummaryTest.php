@@ -6,7 +6,7 @@ use App\Models\Company;
 use App\Models\Invoice;
 use App\Models\Payment;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Tests\AuthenticatedTestCase as TestCase;
+use Tests\Feature\CompanyFinancialTestCase as TestCase;
 
 class CompanyFinancialSummaryTest extends TestCase
 {
@@ -145,7 +145,7 @@ class CompanyFinancialSummaryTest extends TestCase
         float $amount,
         ?string $comment = null
     ): Payment {
-        return Payment::withoutEvents(fn() => Payment::create([
+        return Payment::withoutEvents(fn () => Payment::create([
             'invoice_id' => $invoice->id,
             'company_id' => $invoice->company_id,
             'payment_date' => '2026-07-21',
