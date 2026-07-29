@@ -187,7 +187,8 @@
                 </p>
             </div>
 
-            <button type="button" @click="uploadOpen = !uploadOpen"
+            @can('create', [\App\Models\ContractDocument::class, $contract])
+                <button type="button" @click="uploadOpen = !uploadOpen"
                 class="inline-flex items-center justify-center text-sm font-medium
                        border border-gray-200 hover:bg-gray-50 text-gray-700
                        px-4 py-2.5 rounded-lg transition">
@@ -198,11 +199,13 @@
                 <span x-text="uploadOpen ? 'Скрыть форму' : 'Загрузить документ'">
                     Загрузить документ
                 </span>
-            </button>
+                </button>
+            @endcan
         </div>
 
         {{-- Форма загрузки --}}
-        <div x-show="uploadOpen" x-cloak class="px-6 py-5 bg-gray-50/50 border-b border-gray-100">
+        @can('create', [\App\Models\ContractDocument::class, $contract])
+            <div x-show="uploadOpen" x-cloak class="px-6 py-5 bg-gray-50/50 border-b border-gray-100">
             <form action="{{ route('contracts.documents.store', $contract) }}" method="POST"
                 enctype="multipart/form-data">
                 @csrf
@@ -300,7 +303,8 @@
                     </button>
                 </div>
             </form>
-        </div>
+            </div>
+        @endcan
 
         {{-- Список документов --}}
         @if ($contract->documents->isNotEmpty())
@@ -363,7 +367,8 @@
 
                         {{-- Действия --}}
                         <div class="flex items-center gap-3 flex-shrink-0 sm:ml-4">
-                            <a href="{{ route('contract-documents.download', $document) }}"
+                            @can('download', $document)
+                                <a href="{{ route('contract-documents.download', $document) }}"
                                 class="inline-flex items-center text-sm font-medium
                                        text-blue-600 hover:text-blue-800 transition">
                                 <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -373,9 +378,11 @@
                                 </svg>
 
                                 Скачать
-                            </a>
+                                </a>
+                            @endcan
 
-                            <form action="{{ route('contract-documents.destroy', $document) }}" method="POST"
+                            @can('delete', $document)
+                                <form action="{{ route('contract-documents.destroy', $document) }}" method="POST"
                                 onsubmit="return confirm('Удалить этот документ?')">
                                 @csrf
                                 @method('DELETE')
@@ -385,7 +392,8 @@
                                            hover:text-red-700 transition">
                                     Удалить
                                 </button>
-                            </form>
+                                </form>
+                            @endcan
                         </div>
                     </div>
                 @endforeach

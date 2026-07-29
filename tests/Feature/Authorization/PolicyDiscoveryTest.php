@@ -5,6 +5,7 @@ namespace Tests\Feature\Authorization;
 use App\Models\Company;
 use App\Models\CompanyContact;
 use App\Models\Contract;
+use App\Models\ContractDocument;
 use App\Models\Invoice;
 use App\Models\Order;
 use App\Models\Payment;
@@ -13,6 +14,7 @@ use App\Models\Subscription;
 use App\Models\User;
 use App\Policies\CompanyContactPolicy;
 use App\Policies\CompanyPolicy;
+use App\Policies\ContractDocumentPolicy;
 use App\Policies\ContractPolicy;
 use App\Policies\InvoicePolicy;
 use App\Policies\OrderPolicy;
@@ -30,6 +32,7 @@ class PolicyDiscoveryTest extends AuthorizationTestCase
         $this->assertInstanceOf(CompanyPolicy::class, Gate::getPolicyFor(Company::class));
         $this->assertInstanceOf(CompanyContactPolicy::class, Gate::getPolicyFor(CompanyContact::class));
         $this->assertInstanceOf(ContractPolicy::class, Gate::getPolicyFor(Contract::class));
+        $this->assertInstanceOf(ContractDocumentPolicy::class, Gate::getPolicyFor(ContractDocument::class));
         $this->assertInstanceOf(OrderPolicy::class, Gate::getPolicyFor(Order::class));
         $this->assertInstanceOf(SubscriptionPolicy::class, Gate::getPolicyFor(Subscription::class));
     }
@@ -53,6 +56,53 @@ class PolicyDiscoveryTest extends AuthorizationTestCase
             $this->assertTrue(Gate::forUser($user)->allows($ability, $target));
             $this->assertFalse($user->hasRole('administrator'));
         }
+    }
+
+    public function test_contract_document_policy_uses_one_exact_permission_per_ability(): void
+    {
+        $contract = $this->contract($this->company('Document policy company'));
+        $document = $contract->documents()->create([
+            'document_type' => 'other',
+            'original_name' => 'policy.pdf',
+            'file_path' => "contract-documents/{$contract->id}/policy.pdf",
+        ]);
+        $abilities = [
+            ['view', $document, PermissionName::ContractsView],
+            ['create', [ContractDocument::class, $contract], PermissionName::ContractDocumentsUpload],
+            ['download', $document, PermissionName::ContractDocumentsDownload],
+            ['delete', $document, PermissionName::ContractDocumentsDelete],
+        ];
+
+        foreach ($abilities as [$ability, $target, $permission]) {
+            $withoutPermission = User::factory()->create();
+            $exactUser = $this->actingAsCustomRole([$permission->value]);
+
+            $this->assertFalse(Gate::forUser($withoutPermission)->allows($ability, $target));
+            $this->assertTrue(Gate::forUser($exactUser)->allows($ability, $target));
+            $this->assertFalse($exactUser->hasRole('administrator'));
+        }
+    }
+
+    public function test_fresh_system_roles_follow_registered_contract_document_defaults(): void
+    {
+        $administrator = Role::findByName('administrator');
+        $accountant = Role::findByName('accountant');
+        $viewer = Role::findByName('viewer');
+
+        foreach ([
+            PermissionName::ContractDocumentsUpload,
+            PermissionName::ContractDocumentsDownload,
+            PermissionName::ContractDocumentsDelete,
+        ] as $permission) {
+            $this->assertTrue($administrator->hasPermissionTo($permission->value));
+        }
+
+        $this->assertTrue($accountant->hasPermissionTo(PermissionName::ContractDocumentsDownload->value));
+        $this->assertFalse($accountant->hasPermissionTo(PermissionName::ContractDocumentsUpload->value));
+        $this->assertFalse($accountant->hasPermissionTo(PermissionName::ContractDocumentsDelete->value));
+        $this->assertTrue($viewer->hasPermissionTo(PermissionName::ContractDocumentsDownload->value));
+        $this->assertFalse($viewer->hasPermissionTo(PermissionName::ContractDocumentsUpload->value));
+        $this->assertFalse($viewer->hasPermissionTo(PermissionName::ContractDocumentsDelete->value));
     }
 
     public function test_fresh_system_roles_follow_registry_subject_defaults(): void

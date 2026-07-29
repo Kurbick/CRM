@@ -255,7 +255,17 @@ class ContractController extends Controller
                 ->with('serviceType')
                 ->withExists('invoiceLines'),
             'documents' => function ($query) {
-                $query->latest();
+                $query
+                    ->select([
+                        'id',
+                        'contract_id',
+                        'document_type',
+                        'original_name',
+                        'file_size',
+                        'comment',
+                        'created_at',
+                    ])
+                    ->latest();
             },
         ]);
 
