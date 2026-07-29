@@ -32,7 +32,7 @@ class AccessPermissionAdministrationAccessTest extends AccessPermissionAdministr
     public function test_administrator_accesses_index_via_registry_gate_before(): void
     {
         $this->actingAs($this->administrator())->get(route('admin.access-permissions.index'))->assertOk();
-        $this->get(route('dashboard'))->assertSeeInOrder(['Пользователи', 'Группы', 'Права доступа']);
+        $this->get(route('home'))->assertSeeInOrder(['Пользователи', 'Группы', 'Права доступа']);
     }
 
     public function test_invalid_and_non_web_role_selection_returns_not_found(): void
@@ -46,12 +46,12 @@ class AccessPermissionAdministrationAccessTest extends AccessPermissionAdministr
     public function test_settings_links_and_divider_are_permission_specific(): void
     {
         $accessViewer = $this->actorWithPermissions(['access_permissions.view']);
-        $this->actingAs($accessViewer)->get(route('dashboard'))->assertSee(route('admin.access-permissions.index'))->assertDontSee(route('admin.users.index'))->assertDontSee(route('admin.roles.index'));
+        $this->actingAs($accessViewer)->get(route('home'))->assertSee(route('admin.access-permissions.index'))->assertDontSee(route('admin.users.index'))->assertDontSee(route('admin.roles.index'));
 
         $rolesViewer = $this->actorWithPermissions(['roles.view']);
-        $this->actingAs($rolesViewer)->get(route('dashboard'))->assertSee(route('admin.roles.index'))->assertDontSee(route('admin.access-permissions.index'));
+        $this->actingAs($rolesViewer)->get(route('home'))->assertSee(route('admin.roles.index'))->assertDontSee(route('admin.access-permissions.index'));
 
-        $response = $this->actingAs(User::factory()->create())->get(route('dashboard'));
+        $response = $this->actingAs(User::factory()->create())->get(route('home'));
         $response->assertDontSee(route('admin.access-permissions.index'))->assertSeeInOrder(['Сменить пароль', 'Выйти']);
     }
 

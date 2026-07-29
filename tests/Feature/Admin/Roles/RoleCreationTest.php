@@ -57,7 +57,7 @@ class RoleCreationTest extends RoleAdministrationTestCase
         $this->actingAs($actor)->post(route('admin.roles.store'), ['display_name' => 'Новая группа', 'description' => null])
             ->assertRedirect(route('admin.roles.index'));
         $this->get(route('admin.roles.index'))->assertSeeText('Группа создана. Права доступа можно будет настроить отдельно.');
-        $this->get(route('dashboard'))->assertDontSeeText('Группа создана. Права доступа можно будет настроить отдельно.');
+        $this->get(route('home'))->assertDontSeeText('Группа создана. Права доступа можно будет настроить отдельно.');
     }
 
     public function test_new_role_appears_in_user_administration_forms(): void

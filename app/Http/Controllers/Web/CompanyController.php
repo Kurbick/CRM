@@ -14,6 +14,7 @@ use App\Services\OneTimeServiceDebtCalculator;
 use App\Services\SubscriptionPeriodDebtCalculator;
 use App\Support\Access\PermissionName;
 use App\Support\CompanyPageContext;
+use App\Support\Navigation\AuthorizedLandingPage;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -166,7 +167,11 @@ class CompanyController extends Controller
     {
         Gate::authorize('create', Company::class);
 
-        return view('companies.create');
+        $backUrl = Gate::allows('viewAny', Company::class)
+            ? route('companies.index')
+            : $this->landingUrl();
+
+        return view('companies.create', compact('backUrl'));
     }
 
     /**
@@ -198,7 +203,11 @@ class CompanyController extends Controller
 
         $company = Company::create($validated);
 
-        return redirect()->route('companies.show', $company)
+        $redirect = Gate::allows('view', $company)
+            ? redirect()->route('companies.show', $company)
+            : redirect()->to($this->landingUrl());
+
+        return $redirect
             ->with('success', 'Компания успешно создана.');
     }
 
@@ -478,17 +487,30 @@ class CompanyController extends Controller
 
         $company->update($validated);
 
+        if (! Gate::allows('view', $company)) {
+            return redirect()->to($this->landingUrl())
+                ->with('success', 'Данные компании успешно обновлены.');
+        }
+
         $returnContext = $this->companyEditReturnContext($request, $company);
 
-        return redirect()->route(
-            $returnContext['route'],
-            $returnContext['route_parameters']
-        )
+        return redirect()->route($returnContext['route'], $returnContext['route_parameters'])
             ->with('success', 'Данные компании успешно обновлены.');
     }
 
     private function companyEditReturnContext(Request $request, Company $company): array
     {
+        if (! Gate::allows('view', $company)) {
+            return [
+                'origin' => 'landing',
+                'url' => $this->landingUrl(),
+                'label' => 'Назад',
+                'route' => null,
+                'route_parameters' => [],
+                'hidden' => [],
+            ];
+        }
+
         if ($request->input('origin') !== 'index') {
             return [
                 'origin' => 'show',
@@ -541,18 +563,23 @@ class CompanyController extends Controller
         } catch (CompanyDeletionException $exception) {
             $redirect = Gate::allows('view', $company)
                 ? redirect()->route('companies.show', $company)
-                : redirect()->route('dashboard');
+                : redirect()->to($this->landingUrl());
 
             return $redirect->with('error', $exception->getMessage());
         }
 
         if (! Gate::allows('viewAny', Company::class)) {
-            return redirect()->route('dashboard')
+            return redirect()->to($this->landingUrl())
                 ->with('success', 'Компания успешно удалена.');
         }
 
         return redirect()->route('companies.index')
             ->with('success', 'Компания успешно удалена.');
+    }
+
+    private function landingUrl(): string
+    {
+        return app(AuthorizedLandingPage::class)->url(auth()->user());
     }
 
     /**

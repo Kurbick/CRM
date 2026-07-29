@@ -12,6 +12,7 @@ use App\Models\ContractDocument;
 use App\Support\ContractDocuments\ContractDocumentFileType;
 use App\Support\ContractDocuments\ContractDocumentPath;
 use App\Support\ContractDocuments\SafeDocumentName;
+use App\Support\Navigation\AuthorizedLandingPage;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -137,6 +138,6 @@ class ContractDocumentController extends Controller
             return redirect()->route('companies.show', $contract->company);
         }
 
-        return redirect()->route('dashboard');
+        return redirect()->to(app(AuthorizedLandingPage::class)->url(auth()->user()));
     }
 }

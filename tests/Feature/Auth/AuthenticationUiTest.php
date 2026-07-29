@@ -55,7 +55,7 @@ class AuthenticationUiTest extends TestCase
     public function test_authenticated_layout_contains_settings_menu_and_post_logout_only(): void
     {
         $user = User::factory()->create(['name' => 'UI User']);
-        $response = $this->actingAs($user)->get(route('dashboard'))->assertOk();
+        $response = $this->actingAs($user)->get(route('home'))->assertOk();
         $html = $response->getContent();
 
         $response->assertSee('UI User')

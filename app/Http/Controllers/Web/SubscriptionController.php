@@ -9,6 +9,7 @@ use App\Models\Contract;
 use App\Models\ServiceType;
 use App\Models\Subscription;
 use App\Services\InvoiceDueDateSynchronizer;
+use App\Support\Navigation\AuthorizedLandingPage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -145,7 +146,7 @@ class SubscriptionController extends Controller
             return route('companies.show', $contract->company);
         }
 
-        return route('dashboard');
+        return $this->landingUrl();
     }
 
     private function mutationRedirect(Contract $contract)
@@ -160,6 +161,11 @@ class SubscriptionController extends Controller
             return redirect()->route('companies.show', $contract->company);
         }
 
-        return redirect()->route('dashboard');
+        return redirect()->to($this->landingUrl());
+    }
+
+    private function landingUrl(): string
+    {
+        return app(AuthorizedLandingPage::class)->url(auth()->user());
     }
 }

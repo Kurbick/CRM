@@ -18,6 +18,8 @@ use App\Services\InvoicePaymentBreakdownPresenter;
 use App\Services\InvoicePaymentSourceResolver;
 use App\Support\Access\PermissionName;
 use App\Support\CompanyPageContext;
+use App\Support\Navigation\AuthorizedLandingPage;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -155,8 +157,11 @@ class InvoiceController extends Controller
         $companies = Company::where('status', 'active')
             ->orderBy('name')
             ->get();
+        $backUrl = Gate::allows('viewAny', Invoice::class)
+            ? route('invoices.index')
+            : $this->landingUrl();
 
-        return view('invoices.create', compact('companies'));
+        return view('invoices.create', compact('companies', 'backUrl'));
     }
 
     /**
@@ -537,8 +542,7 @@ class InvoiceController extends Controller
             return $invoice;
         });
 
-        return redirect()
-            ->route('invoices.show', $invoice)
+        return $this->mutationRedirect($invoice)
             ->with('success', 'Черновик инвойса успешно сохранён.');
     }
 
@@ -675,8 +679,7 @@ class InvoiceController extends Controller
         $editability = $this->editabilityService->evaluate($invoice);
 
         if (! $editability['editable']) {
-            return redirect()
-                ->route('invoices.show', ['invoice' => $invoice, ...$companyContext['query']])
+            return $this->mutationRedirect($invoice, $companyContext['query'])
                 ->with('error', $this->editabilityMessage($editability['reason']));
         }
 
@@ -910,13 +913,11 @@ class InvoiceController extends Controller
         });
 
         if ($blockingMessage !== null) {
-            return redirect()
-                ->route('invoices.show', ['invoice' => $invoice, ...$companyContext['query']])
+            return $this->mutationRedirect($invoice, $companyContext['query'])
                 ->with('error', $blockingMessage);
         }
 
-        return redirect()
-            ->route('invoices.show', ['invoice' => $invoice, ...$companyContext['query']])
+        return $this->mutationRedirect($invoice, $companyContext['query'])
             ->with(
                 'success',
                 'Инвойс успешно обновлён.'
@@ -1248,8 +1249,7 @@ class InvoiceController extends Controller
             ? 'Инвойс выставлен и полностью оплачен кредитным балансом.'
             : 'Инвойс успешно выставлен.';
 
-        return redirect()
-            ->route('invoices.show', $invoice)
+        return $this->mutationRedirect($invoice)
             ->with('success', $message);
     }
 
@@ -1428,8 +1428,7 @@ class InvoiceController extends Controller
             }
         });
 
-        return redirect()
-            ->route('invoices.show', $invoice)
+        return $this->mutationRedirect($invoice)
             ->with(
                 'success',
                 'Инвойс успешно отменён.'
@@ -1480,12 +1479,41 @@ class InvoiceController extends Controller
             $invoice->delete();
         });
 
-        return redirect()
-            ->route('invoices.index')
+        $redirect = Gate::allows('viewAny', Invoice::class)
+            ? redirect()->route('invoices.index')
+            : redirect()->to($this->landingUrl());
+
+        return $redirect
             ->with(
                 'success',
                 'Черновик инвойса успешно удалён.'
             );
+    }
+
+    /** @param array<string, string> $invoiceShowQuery */
+    private function mutationRedirect(
+        Invoice $invoice,
+        array $invoiceShowQuery = []
+    ): RedirectResponse {
+        if (Gate::allows('view', $invoice)) {
+            return redirect()->route('invoices.show', [
+                'invoice' => $invoice,
+                ...$invoiceShowQuery,
+            ]);
+        }
+
+        $invoice->loadMissing('company:id,name');
+
+        if (Gate::allows('view', $invoice->company)) {
+            return redirect()->route('companies.show', $invoice->company);
+        }
+
+        return redirect()->to($this->landingUrl());
+    }
+
+    private function landingUrl(): string
+    {
+        return app(AuthorizedLandingPage::class)->url(auth()->user());
     }
 
     /**

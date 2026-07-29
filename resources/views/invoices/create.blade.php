@@ -15,7 +15,7 @@
 @endphp
 
 <div class="mb-6">
-    <a href="{{ route('invoices.index') }}" class="text-sm text-gray-500 hover:text-gray-700">← Назад к инвойсам</a>
+    <a href="{{ $backUrl }}" class="text-sm text-gray-500 hover:text-gray-700">← Назад</a>
     <h1 class="mt-2 text-2xl font-bold text-gray-900">Новый счёт</h1>
 </div>
 

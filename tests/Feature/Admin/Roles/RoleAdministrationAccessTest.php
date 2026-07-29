@@ -31,12 +31,12 @@ class RoleAdministrationAccessTest extends RoleAdministrationTestCase
     public function test_settings_links_and_dividers_are_independent(): void
     {
         $rolesViewer = $this->actorWithPermissions(['roles.view']);
-        $this->actingAs($rolesViewer)->get(route('dashboard'))->assertSee(route('admin.roles.index'))->assertDontSee(route('admin.users.index'));
+        $this->actingAs($rolesViewer)->get(route('home'))->assertSee(route('admin.roles.index'))->assertDontSee(route('admin.users.index'));
 
         $usersViewer = $this->actorWithPermissions(['users.view']);
-        $this->actingAs($usersViewer)->get(route('dashboard'))->assertSee(route('admin.users.index'))->assertDontSee(route('admin.roles.index'));
+        $this->actingAs($usersViewer)->get(route('home'))->assertSee(route('admin.users.index'))->assertDontSee(route('admin.roles.index'));
 
-        $response = $this->actingAs(User::factory()->create())->get(route('dashboard'));
+        $response = $this->actingAs(User::factory()->create())->get(route('home'));
         $response->assertDontSee(route('admin.roles.index'))->assertDontSee(route('admin.users.index'))->assertSeeInOrder(['Сменить пароль', 'Выйти']);
     }
 

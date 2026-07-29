@@ -5,7 +5,7 @@
 @section('content')
 
     <div class="mb-6">
-        <a href="{{ route('companies.index') }}" class="text-sm text-gray-500 hover:text-gray-900 transition flex items-center gap-1.5 mb-2">
+        <a href="{{ $backUrl }}" class="text-sm text-gray-500 hover:text-gray-900 transition flex items-center gap-1.5 mb-2">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
             </svg>
@@ -246,7 +246,7 @@
                             class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm transition shadow-sm">
                         Создать компанию
                     </button>
-                    <a href="{{ route('companies.index') }}"
+                    <a href="{{ $backUrl }}"
                        class="w-full py-2.5 border border-gray-200 hover:bg-gray-50 text-gray-700 font-medium rounded-lg text-sm transition text-center">
                         Отмена
                     </a>

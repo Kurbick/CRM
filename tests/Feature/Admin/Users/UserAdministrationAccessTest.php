@@ -32,9 +32,9 @@ class UserAdministrationAccessTest extends UserAdministrationTestCase
     public function test_settings_link_and_dividers_follow_users_view(): void
     {
         $withAccess = $this->actorWithPermissions(['users.view']);
-        $this->actingAs($withAccess)->get(route('dashboard'))->assertSee('Пользователи')->assertSee(route('admin.users.index'));
+        $this->actingAs($withAccess)->get(route('home'))->assertSee('Пользователи')->assertSee(route('admin.users.index'));
         $withoutAccess = User::factory()->create();
-        $response = $this->actingAs($withoutAccess)->get(route('dashboard'));
+        $response = $this->actingAs($withoutAccess)->get(route('home'));
         $response->assertDontSee(route('admin.users.index'));
         $response->assertSeeInOrder(['Сменить пароль', 'Выйти']);
     }

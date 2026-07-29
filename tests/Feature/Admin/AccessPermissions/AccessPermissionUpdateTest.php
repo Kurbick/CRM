@@ -72,6 +72,6 @@ class AccessPermissionUpdateTest extends AccessPermissionAdministrationTestCase
             ->assertRedirect(route('admin.access-permissions.index', ['role' => $role->id]));
         $this->assertTrue($user->fresh()->can('contracts.update'));
         $this->get(route('admin.access-permissions.index', ['role' => $role->id]))->assertSeeText('Права доступа группы обновлены.');
-        $this->get(route('dashboard'))->assertDontSeeText('Права доступа группы обновлены.');
+        $this->get(route('home'))->assertDontSeeText('Права доступа группы обновлены.');
     }
 }

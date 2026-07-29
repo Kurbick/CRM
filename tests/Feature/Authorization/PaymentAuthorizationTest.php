@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Authorization;
 
+use App\Models\Invoice;
 use App\Models\Role;
 use App\Models\User;
 use App\Support\Access\PermissionName;
@@ -17,10 +18,14 @@ class PaymentAuthorizationTest extends AuthorizationTestCase
         $existing = $this->payment($pendingInvoice);
         $this->actingAsPermissions([PermissionName::PaymentsCreate->value]);
 
-        $this->post(route('payments.store', $pendingInvoice), $this->validPaymentPayload('pending'))
-            ->assertRedirect(route('invoices.show', $pendingInvoice));
-        $this->post(route('payments.store', $confirmedInvoice), $this->validPaymentPayload('confirmed'))
-            ->assertRedirect(route('invoices.show', $confirmedInvoice));
+        $pendingResponse = $this->post(route('payments.store', $pendingInvoice), $this->validPaymentPayload('pending'))
+            ->assertRedirect(route('home'))->assertSessionHas('success');
+        $confirmedResponse = $this->post(route('payments.store', $confirmedInvoice), $this->validPaymentPayload('confirmed'))
+            ->assertRedirect(route('home'))->assertSessionHas('success');
+        $this->assertDatabaseHas('payments', ['invoice_id' => $pendingInvoice->id, 'status' => 'pending']);
+        $this->assertDatabaseHas('payments', ['invoice_id' => $confirmedInvoice->id, 'status' => 'confirmed']);
+        $this->assertSafeLandingResponse($pendingResponse, $pendingInvoice);
+        $this->assertSafeLandingResponse($confirmedResponse, $confirmedInvoice);
         $this->patch(route('payments.confirm', $existing))->assertForbidden();
         $this->patch(route('payments.cancel', $existing), [
             'cancel_payment_id' => $existing->id,
@@ -34,8 +39,10 @@ class PaymentAuthorizationTest extends AuthorizationTestCase
         $confirmPayment = $this->payment($confirmInvoice);
         $this->actingAsPermissions([PermissionName::PaymentsConfirm->value]);
 
-        $this->patch(route('payments.confirm', $confirmPayment))
-            ->assertRedirect(route('invoices.show', $confirmInvoice));
+        $confirmResponse = $this->patch(route('payments.confirm', $confirmPayment))
+            ->assertRedirect(route('home'))->assertSessionHas('success');
+        $this->assertSame('confirmed', $confirmPayment->fresh()->status);
+        $this->assertSafeLandingResponse($confirmResponse, $confirmInvoice);
         $this->post(route('payments.store', $confirmInvoice), $this->validPaymentPayload('pending'))
             ->assertForbidden();
         $this->patch(route('payments.cancel', $confirmPayment), [
@@ -48,10 +55,12 @@ class PaymentAuthorizationTest extends AuthorizationTestCase
         $otherPending = $this->payment($cancelInvoice, 'pending', 'Other pending');
         $this->actingAsPermissions([PermissionName::PaymentsCancel->value]);
 
-        $this->patch(route('payments.cancel', $cancelPayment), [
+        $cancelResponse = $this->patch(route('payments.cancel', $cancelPayment), [
             'cancel_payment_id' => $cancelPayment->id,
             'cancel_reason' => 'Allowed cancellation',
-        ])->assertRedirect(route('invoices.show', $cancelInvoice));
+        ])->assertRedirect(route('home'))->assertSessionHas('success');
+        $this->assertSame('cancelled', $cancelPayment->fresh()->status);
+        $this->assertSafeLandingResponse($cancelResponse, $cancelInvoice);
         $this->post(route('payments.store', $cancelInvoice), $this->validPaymentPayload('pending'))
             ->assertForbidden();
         $this->patch(route('payments.confirm', $otherPending))->assertForbidden();
@@ -64,8 +73,24 @@ class PaymentAuthorizationTest extends AuthorizationTestCase
         $this->actingAsCustomRole([PermissionName::PaymentsConfirm->value]);
 
         $this->patch(route('payments.confirm', $payment))
-            ->assertRedirect(route('invoices.show', $invoice));
+            ->assertRedirect(route('home'));
         $this->assertSame('confirmed', $payment->fresh()->status);
+    }
+
+    public function test_mutation_only_business_denial_keeps_payment_and_allocations_unchanged(): void
+    {
+        $invoice = $this->invoice('issued', 'MUTATION-DENIAL');
+        $payment = $this->payment($invoice, 'confirmed');
+        $allocationIds = $payment->allocations()->pluck('id')->all();
+        $this->actingAsPermissions([PermissionName::PaymentsConfirm->value]);
+
+        $this->from(route('home'))->patch(route('payments.confirm', $payment))
+            ->assertRedirect(route('home'))
+            ->assertSessionHasErrors('payment_confirm');
+
+        $this->assertSame('confirmed', $payment->fresh()->status);
+        $this->assertSame($allocationIds, $payment->allocations()->pluck('id')->all());
+        $this->get(route('home'))->assertOk();
     }
 
     public function test_administrator_passes_policy_but_cannot_confirm_twice(): void
@@ -199,6 +224,16 @@ class PaymentAuthorizationTest extends AuthorizationTestCase
             ->assertDontSee('76,43')
             ->assertDontSee('19/06/2026')
             ->assertDontSee('Наличные');
+    }
+
+    private function assertSafeLandingResponse($response, Invoice $invoice): void
+    {
+        $location = (string) $response->headers->get('Location');
+        $this->assertSame(route('home'), $location);
+        $this->assertStringNotContainsString('/invoices/'.$invoice->id, $location);
+        $this->assertStringNotContainsString('/companies/'.$invoice->company_id, $location);
+        $this->assertNotSame(route('dashboard'), $location);
+        $this->get($location)->assertOk();
     }
 
     public function test_applied_reversal_does_not_restore_cancel_action_without_payment_history(): void

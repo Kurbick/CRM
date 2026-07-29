@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Authorization;
 
+use App\Models\Invoice;
 use App\Models\Role;
 use App\Models\User;
 use App\Support\Access\PermissionName;
@@ -9,6 +10,69 @@ use Illuminate\Support\Facades\Gate;
 
 class InvoiceAuthorizationTest extends AuthorizationTestCase
 {
+    public function test_mutation_only_invoice_permissions_redirect_to_neutral_landing(): void
+    {
+        $company = $this->company('Invoice create landing');
+        $contract = $this->contract($company);
+        $this->actingAsPermissions([PermissionName::InvoicesCreate->value]);
+        $storeResponse = $this->post(route('invoices.store'), $this->invoiceStorePayload($company, $contract))
+            ->assertRedirect(route('home'))
+            ->assertSessionHas('success');
+        $created = Invoice::query()->where('contract_id', $contract->id)->sole();
+        $this->assertSafeLandingResponse($storeResponse, $created);
+
+        $draft = $this->invoice('draft', 'LANDING-UPDATE');
+        $this->actingAsPermissions([PermissionName::InvoicesUpdate->value]);
+        $updatePayload = $this->invoiceUpdatePayload($draft);
+        $updatePayload['comment'] = 'MUTATION-ONLY-UPDATED';
+        $updateResponse = $this->put(route('invoices.update', $draft), $updatePayload)
+            ->assertRedirect(route('home'))
+            ->assertSessionHas('success');
+        $this->assertSame('MUTATION-ONLY-UPDATED', $draft->fresh()->comment);
+        $this->assertSafeLandingResponse($updateResponse, $draft);
+
+        $draftToIssue = $this->invoice('draft', 'LANDING-ISSUE');
+        $this->actingAsPermissions([PermissionName::InvoicesIssue->value]);
+        $issueResponse = $this->post(route('invoices.issue', $draftToIssue))
+            ->assertRedirect(route('home'))
+            ->assertSessionHas('success');
+        $this->assertNotSame('draft', $draftToIssue->fresh()->status);
+        $this->assertSafeLandingResponse($issueResponse, $draftToIssue);
+
+        $issued = $this->invoice('issued', 'LANDING-CANCEL');
+        $this->actingAsPermissions([PermissionName::InvoicesCancel->value]);
+        $cancelResponse = $this->patch(route('invoices.cancel', $issued))
+            ->assertRedirect(route('home'))
+            ->assertSessionHas('success');
+        $this->assertSame('cancelled', $issued->fresh()->status);
+        $this->assertSafeLandingResponse($cancelResponse, $issued);
+
+        $draftToDelete = $this->invoice('draft', 'LANDING-DELETE');
+        $this->actingAsPermissions([PermissionName::InvoicesDelete->value]);
+        $deleteResponse = $this->delete(route('invoices.destroy', $draftToDelete))
+            ->assertRedirect(route('home'))
+            ->assertSessionHas('success');
+        $this->assertDatabaseMissing('invoices', ['id' => $draftToDelete->id]);
+        $this->assertSafeLandingResponse($deleteResponse, $draftToDelete);
+    }
+
+    public function test_mutation_only_update_business_denial_uses_safe_landing_without_context_disclosure(): void
+    {
+        $invoice = $this->invoice('paid', 'LANDING-DENIAL');
+        $original = $invoice->only(['status', 'total_amount', 'comment']);
+        $this->actingAsPermissions([PermissionName::InvoicesUpdate->value]);
+
+        $response = $this->put(route('invoices.update', $invoice), [
+            ...$this->invoiceUpdatePayload($invoice),
+            'origin' => 'company',
+            'tab' => 'invoices',
+            'return_url' => 'https://evil.example/redirect',
+        ])->assertRedirect(route('home'))->assertSessionHas('error');
+
+        $this->assertSame($original, $invoice->fresh()->only(['status', 'total_amount', 'comment']));
+        $this->assertSafeLandingResponse($response, $invoice);
+    }
+
     public function test_invoice_pages_and_ajax_endpoints_reject_a_user_without_permission(): void
     {
         $invoice = $this->invoice();
@@ -144,13 +208,23 @@ class InvoiceAuthorizationTest extends AuthorizationTestCase
     public function test_invoice_navigation_requires_view_permission(): void
     {
         $this->actingAsPermissions();
-        $this->get(route('dashboard'))
+        $this->get(route('home'))
             ->assertOk()
             ->assertDontSee(route('invoices.index'), false);
 
         $this->actingAsPermissions([PermissionName::InvoicesView->value]);
-        $this->get(route('dashboard'))
+        $this->get(route('home'))
             ->assertOk()
             ->assertSee(route('invoices.index'), false);
+    }
+
+    private function assertSafeLandingResponse($response, Invoice $invoice): void
+    {
+        $location = (string) $response->headers->get('Location');
+        $this->assertSame(route('home'), $location);
+        $this->assertStringNotContainsString('/invoices/'.$invoice->id, $location);
+        $this->assertStringNotContainsString('/companies/'.$invoice->company_id, $location);
+        $this->assertNotSame(route('dashboard'), $location);
+        $this->get($location)->assertOk();
     }
 }

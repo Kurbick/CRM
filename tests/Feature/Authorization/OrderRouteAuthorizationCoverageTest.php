@@ -128,7 +128,7 @@ class OrderRouteAuthorizationCoverageTest extends AuthorizationTestCase
         $contract = $this->contract($this->company('Order allowed '.uniqid()));
         if ($definition['scenario'] === 'store') {
             $marker = 'ALLOWED-MATRIX-'.uniqid();
-            $this->post(route($definition['route'], $contract), $this->orderPayload($marker))->assertRedirect(route('dashboard'));
+            $this->post(route($definition['route'], $contract), $this->orderPayload($marker))->assertRedirect(route('home'));
             $this->assertDatabaseHas('orders', ['contract_id' => $contract->id]);
             $this->assertDatabaseHas('service_types', ['name' => $marker, 'type' => 'one_time']);
 
@@ -136,12 +136,12 @@ class OrderRouteAuthorizationCoverageTest extends AuthorizationTestCase
         }
         $order = $this->subjectOrder($contract);
         if ($definition['scenario'] === 'update') {
-            $this->put(route($definition['route'], $order), $this->updatePayload())->assertRedirect(route('dashboard'));
+            $this->put(route($definition['route'], $order), $this->updatePayload())->assertRedirect(route('home'));
             $this->assertDatabaseHas('orders', ['id' => $order->id, 'title' => 'Matrix updated order', 'payment_terms' => 7]);
 
             return;
         }
-        $this->delete(route($definition['route'], $order))->assertRedirect(route('dashboard'));
+        $this->delete(route($definition['route'], $order))->assertRedirect(route('home'));
         $this->assertDatabaseMissing('orders', ['id' => $order->id]);
     }
 

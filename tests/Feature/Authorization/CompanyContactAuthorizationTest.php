@@ -70,12 +70,12 @@ class CompanyContactAuthorizationTest extends AuthorizationTestCase
 
         $createPage = $this->get(route('companies.contacts.create', $companyA))
             ->assertOk()
-            ->assertSee(route('dashboard'), false);
+            ->assertSee(route('home'), false);
         $this->assertMinimalCompanyDisclosure($createPage, $companyA, $secrets);
         $this->post(route('companies.contacts.store', $companyA), [
             ...$this->contactPayload('Created Contact'),
             'company_id' => $companyB->id,
-        ])->assertRedirect(route('dashboard'));
+        ])->assertRedirect(route('home'));
 
         $this->assertDatabaseHas('company_contacts', [
             'company_id' => $companyA->id,
@@ -115,12 +115,12 @@ class CompanyContactAuthorizationTest extends AuthorizationTestCase
 
         $editPage = $this->get(route('contacts.edit', $contact))
             ->assertOk()
-            ->assertSee(route('dashboard'), false);
+            ->assertSee(route('home'), false);
         $this->assertMinimalCompanyDisclosure($editPage, $companyA, $secrets);
         $this->put(route('contacts.update', $contact), [
             ...$this->contactPayload('Allowed Updated Contact'),
             'company_id' => $companyB->id,
-        ])->assertRedirect(route('dashboard'));
+        ])->assertRedirect(route('home'));
 
         $fresh = $contact->fresh();
         $this->assertSame('Allowed Updated Contact', $fresh->first_name);
@@ -136,7 +136,7 @@ class CompanyContactAuthorizationTest extends AuthorizationTestCase
         $this->actingAsPermissions([PermissionName::CompanyContactsDelete->value]);
 
         $this->delete(route('contacts.destroy', $contact))
-            ->assertRedirect(route('dashboard'));
+            ->assertRedirect(route('home'));
 
         $this->assertDatabaseMissing('company_contacts', ['id' => $contact->id]);
     }
@@ -277,7 +277,7 @@ class CompanyContactAuthorizationTest extends AuthorizationTestCase
         array $secrets
     ): void {
         $response->assertSee($company->name)
-            ->assertSee('href="'.route('dashboard').'"', false)
+            ->assertSee('href="'.route('home').'"', false)
             ->assertDontSee('href="'.route('companies.show', $company).'"', false)
             ->assertDontSee('name="company_id"', false);
 

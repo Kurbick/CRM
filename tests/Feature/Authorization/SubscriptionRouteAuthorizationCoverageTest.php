@@ -125,7 +125,7 @@ class SubscriptionRouteAuthorizationCoverageTest extends AuthorizationTestCase
         $contract = $this->contract($this->company('Subscription allowed '.uniqid()));
         if ($definition['scenario'] === 'store') {
             $marker = 'ALLOWED-SUB-MATRIX-'.uniqid();
-            $this->post(route($definition['route'], $contract), $this->subscriptionPayload($marker))->assertRedirect(route('dashboard'));
+            $this->post(route($definition['route'], $contract), $this->subscriptionPayload($marker))->assertRedirect(route('home'));
             $this->assertDatabaseHas('subscriptions', ['contract_id' => $contract->id]);
             $this->assertDatabaseHas('service_types', ['name' => $marker, 'type' => 'subscription']);
 
@@ -133,12 +133,12 @@ class SubscriptionRouteAuthorizationCoverageTest extends AuthorizationTestCase
         }
         $subscription = $this->subjectSubscription($contract);
         if ($definition['scenario'] === 'update') {
-            $this->put(route($definition['route'], $subscription), $this->updatePayload())->assertRedirect(route('dashboard'));
+            $this->put(route($definition['route'], $subscription), $this->updatePayload())->assertRedirect(route('home'));
             $this->assertDatabaseHas('subscriptions', ['id' => $subscription->id, 'title' => 'Matrix updated subscription', 'payment_terms' => 7]);
 
             return;
         }
-        $this->delete(route($definition['route'], $subscription))->assertRedirect(route('dashboard'));
+        $this->delete(route($definition['route'], $subscription))->assertRedirect(route('home'));
         $this->assertDatabaseMissing('subscriptions', ['id' => $subscription->id]);
     }
 

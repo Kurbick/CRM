@@ -9,6 +9,7 @@ use App\Http\Controllers\Web\ContractController;
 use App\Http\Controllers\Web\ContractDocumentController;
 use App\Http\Controllers\Web\ContractSubjectController;
 use App\Http\Controllers\Web\DashboardController;
+use App\Http\Controllers\Web\HomeController;
 use App\Http\Controllers\Web\InvoiceController;
 use App\Http\Controllers\Web\OrderController;
 use App\Http\Controllers\Web\PaymentController;
@@ -27,6 +28,8 @@ Route::middleware(['auth', 'active'])->group(function (): void {
 });
 
 Route::middleware(['auth', 'active', 'password.changed'])->group(function (): void {
+
+    Route::get('home', [HomeController::class, 'index'])->name('home');
 
     Route::prefix('admin/access-permissions')->name('admin.access-permissions.')->controller(AdminAccessPermissionController::class)->group(function (): void {
         Route::get('/', 'index')->middleware('can:access_permissions.view')->name('index');

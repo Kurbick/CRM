@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\Contract;
 use App\Support\CompanyPageContext;
+use App\Support\Navigation\AuthorizedLandingPage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
@@ -327,8 +328,8 @@ class ContractController extends Controller
         }
 
         return [
-            'url' => route('dashboard'),
-            'route' => 'dashboard',
+            'url' => $this->landingUrl(),
+            'route' => null,
             'route_parameters' => [],
             'hidden' => [],
         ];
@@ -433,7 +434,7 @@ class ContractController extends Controller
             return route('contracts.index');
         }
 
-        return route('dashboard');
+        return $this->landingUrl();
     }
 
     private function mutationRedirect(Request $request, Contract $contract)
@@ -453,7 +454,7 @@ class ContractController extends Controller
             return redirect()->route('companies.show', $contract->company);
         }
 
-        return redirect()->route('dashboard');
+        return redirect()->to($this->landingUrl());
     }
 
     private function failedDeletionRedirect(Contract $contract, Company $company)
@@ -466,7 +467,7 @@ class ContractController extends Controller
             return redirect()->route('companies.show', $company);
         }
 
-        return redirect()->route('dashboard');
+        return redirect()->to($this->landingUrl());
     }
 
     private function deletedRedirect(Company $company)
@@ -479,6 +480,11 @@ class ContractController extends Controller
             return redirect()->route('companies.show', $company);
         }
 
-        return redirect()->route('dashboard');
+        return redirect()->to($this->landingUrl());
+    }
+
+    private function landingUrl(): string
+    {
+        return app(AuthorizedLandingPage::class)->url(auth()->user());
     }
 }

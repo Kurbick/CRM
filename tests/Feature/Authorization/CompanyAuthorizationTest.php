@@ -76,7 +76,7 @@ class CompanyAuthorizationTest extends AuthorizationTestCase
     {
         $this->actingAsPermissions();
 
-        $this->get(route('dashboard'))
+        $this->get(route('home'))
             ->assertOk()
             ->assertDontSee('href="'.route('companies.index').'"', false);
     }
@@ -315,7 +315,7 @@ class CompanyAuthorizationTest extends AuthorizationTestCase
         $this->actingAsCustomRole([PermissionName::CompaniesDelete->value]);
 
         $this->delete(route('companies.destroy', $company))
-            ->assertRedirect(route('dashboard'))
+            ->assertRedirect(route('home'))
             ->assertSessionHas('success');
 
         $this->assertDatabaseMissing('companies', ['id' => $company->id]);

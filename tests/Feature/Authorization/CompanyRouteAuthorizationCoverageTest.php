@@ -311,7 +311,7 @@ class CompanyRouteAuthorizationCoverageTest extends AuthorizationTestCase
     {
         $payload = $this->companyPayload('ALLOWED-COMPANY-STORE');
 
-        $this->post(route($routeName), $payload)->assertRedirect();
+        $this->post(route($routeName), $payload)->assertRedirect(route('home'));
 
         $this->assertDatabaseHas('companies', [
             'name' => 'ALLOWED-COMPANY-STORE',
@@ -332,7 +332,7 @@ class CompanyRouteAuthorizationCoverageTest extends AuthorizationTestCase
         $payload['iban'] = 'AZ00ALLOWEDMUTATED';
         $payload['comment'] = 'ALLOWED-MUTATED-COMMENT';
 
-        $this->put(route($routeName, $company), $payload)->assertRedirect();
+        $this->put(route($routeName, $company), $payload)->assertRedirect(route('home'));
 
         $this->assertDatabaseHas('companies', [
             'id' => $company->id,
@@ -347,7 +347,7 @@ class CompanyRouteAuthorizationCoverageTest extends AuthorizationTestCase
     {
         $company = $this->company('ALLOWED-EMPTY-DESTROY');
 
-        $this->delete(route($routeName, $company))->assertRedirect(route('dashboard'));
+        $this->delete(route($routeName, $company))->assertRedirect(route('home'));
 
         $this->assertDatabaseMissing('companies', ['id' => $company->id]);
     }
@@ -357,7 +357,7 @@ class CompanyRouteAuthorizationCoverageTest extends AuthorizationTestCase
         $company = $this->company('Allowed contact store parent');
 
         $this->post(route($routeName, $company), $this->contactPayload('ALLOWED-CONTACT-STORE'))
-            ->assertRedirect(route('dashboard'));
+            ->assertRedirect(route('home'));
 
         $this->assertDatabaseHas('company_contacts', [
             'company_id' => $company->id,
@@ -371,7 +371,7 @@ class CompanyRouteAuthorizationCoverageTest extends AuthorizationTestCase
         $contact = $this->contact($company, 'ALLOWED-ORIGINAL-CONTACT');
 
         $this->put(route($routeName, $contact), $this->contactPayload('ALLOWED-MUTATED-CONTACT'))
-            ->assertRedirect(route('dashboard'));
+            ->assertRedirect(route('home'));
 
         $this->assertDatabaseHas('company_contacts', [
             'id' => $contact->id,
@@ -387,7 +387,7 @@ class CompanyRouteAuthorizationCoverageTest extends AuthorizationTestCase
         $company = $this->company('Allowed contact destroy parent');
         $contact = $this->contact($company, 'ALLOWED-CONTACT-DESTROY');
 
-        $this->delete(route($routeName, $contact))->assertRedirect(route('dashboard'));
+        $this->delete(route($routeName, $contact))->assertRedirect(route('home'));
 
         $this->assertDatabaseMissing('company_contacts', ['id' => $contact->id]);
     }

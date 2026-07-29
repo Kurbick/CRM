@@ -69,6 +69,6 @@ class RoleUpdateTest extends RoleAdministrationTestCase
         $this->actingAs($actor)->put(route('admin.roles.update', $role), ['display_name' => 'Обновлённая группа', 'description' => null])
             ->assertRedirect(route('admin.roles.index'));
         $this->get(route('admin.roles.index'))->assertSeeText('Данные группы обновлены.');
-        $this->get(route('dashboard'))->assertDontSeeText('Данные группы обновлены.');
+        $this->get(route('home'))->assertDontSeeText('Данные группы обновлены.');
     }
 }

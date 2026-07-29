@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\CompanyContact;
 use App\Support\CompanyPageContext;
+use App\Support\Navigation\AuthorizedLandingPage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
@@ -16,8 +17,9 @@ class CompanyContactController extends Controller
         Gate::authorize('create', [CompanyContact::class, $company]);
 
         $companyContext = CompanyPageContext::resolve($request, $company, 'contacts');
+        $backUrl = $this->backUrl($company, $companyContext);
 
-        return view('contacts.create', compact('company', 'companyContext'));
+        return view('contacts.create', compact('company', 'companyContext', 'backUrl'));
     }
 
     public function store(Request $request, Company $company)
@@ -49,8 +51,9 @@ class CompanyContactController extends Controller
 
         $company = $contact->company;
         $companyContext = CompanyPageContext::resolve($request, $company, 'contacts');
+        $backUrl = $this->backUrl($company, $companyContext);
 
-        return view('contacts.edit', compact('contact', 'company', 'companyContext'));
+        return view('contacts.edit', compact('contact', 'company', 'companyContext', 'backUrl'));
     }
 
     public function update(Request $request, CompanyContact $contact)
@@ -96,7 +99,7 @@ class CompanyContactController extends Controller
         string $message
     ) {
         if (! Gate::allows('view', $company)) {
-            return redirect()->route('dashboard')->with('success', $message);
+            return redirect()->to($this->landingUrl())->with('success', $message);
         }
 
         $companyContext = CompanyPageContext::resolve($request, $company, 'contacts');
@@ -106,5 +109,21 @@ class CompanyContactController extends Controller
                 ? $companyContext['company_url']
                 : route('companies.show', $company))
             ->with('success', $message);
+    }
+
+    private function backUrl(Company $company, array $companyContext): string
+    {
+        if (Gate::allows('view', $company)) {
+            return $companyContext['active']
+                ? $companyContext['company_url']
+                : route('companies.show', $company);
+        }
+
+        return $this->landingUrl();
+    }
+
+    private function landingUrl(): string
+    {
+        return app(AuthorizedLandingPage::class)->url(auth()->user());
     }
 }

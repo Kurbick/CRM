@@ -3,9 +3,11 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
+use App\Services\AccessControlSynchronizer;
+use App\Support\Access\PermissionName;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
@@ -135,13 +137,14 @@ class PasswordChangeTest extends TestCase
     {
         $user = User::factory()->requiringPasswordChange()->create();
         $this->actingAs($user);
+        session()->put('url.intended', route('companies.index'));
         $before = session()->getId();
 
         $this->put(route('user-password.update'), [
             'current_password' => 'password',
             'password' => 'Strong!Password12',
             'password_confirmation' => 'Strong!Password12',
-        ])->assertRedirect(route('dashboard'))->assertSessionHas('success');
+        ])->assertRedirect(route('home'))->assertSessionHas('success');
 
         $user->refresh();
         $this->assertTrue(Hash::check('Strong!Password12', $user->password));
@@ -149,7 +152,34 @@ class PasswordChangeTest extends TestCase
         $this->assertNotNull($user->password_changed_at);
         $this->assertAuthenticatedAs($user);
         $this->assertNotSame($before, session()->getId());
-        $this->get(route('dashboard'))->assertOk();
+        $this->assertNull(session()->get('url.intended'));
+        $this->get(route('home'))->assertOk();
+    }
+
+    #[DataProvider('intendedUrlProvider')]
+    public function test_password_update_always_discards_intended_url(
+        string $intended,
+        array $permissions,
+        string $expectedRoute
+    ): void {
+        app(AccessControlSynchronizer::class)->sync();
+        $user = User::factory()->requiringPasswordChange()->create();
+        if ($permissions !== []) {
+            $user->givePermissionTo($permissions);
+        }
+        $this->actingAs($user);
+        session()->put('url.intended', $intended);
+
+        $response = $this->put(route('user-password.update'), [
+            'current_password' => 'password',
+            'password' => 'Strong!Password12',
+            'password_confirmation' => 'Strong!Password12',
+        ])->assertRedirect(route($expectedRoute))->assertSessionHas('success');
+
+        $this->assertNull(session()->get('url.intended'));
+        $this->assertFalse($user->fresh()->mustChangePassword());
+        $this->assertStringStartsWith(config('app.url'), (string) $response->headers->get('Location'));
+        $this->get((string) $response->headers->get('Location'))->assertOk();
     }
 
     public function test_password_change_deletes_only_other_database_sessions(): void
@@ -173,10 +203,28 @@ class PasswordChangeTest extends TestCase
             'current_password' => 'password',
             'password' => 'Strong!Password12',
             'password_confirmation' => 'Strong!Password12',
-        ])->assertRedirect(route('dashboard'));
+        ])->assertRedirect(route('home'));
 
         $this->assertDatabaseMissing('sessions', ['id' => 'old-own-session']);
         $this->assertDatabaseHas('sessions', ['id' => 'other-user-session']);
         $this->assertAuthenticatedAs($user);
+    }
+
+    public static function intendedUrlProvider(): array
+    {
+        return [
+            'forbidden internal' => ['/companies', [], 'home'],
+            'authorized internal still follows priority' => [
+                '/invoices', [PermissionName::CompaniesView->value, PermissionName::InvoicesView->value], 'companies.index',
+            ],
+            'external https' => ['https://evil.example/redirect', [PermissionName::DashboardView->value], 'dashboard'],
+            'protocol relative' => ['//evil.example/redirect', [PermissionName::CompaniesView->value], 'companies.index'],
+            'encoded protocol relative' => ['/%2F%2Fevil.example/redirect', [], 'home'],
+            'javascript scheme' => ['javascript:alert(1)', [], 'home'],
+            'malformed' => ['::not a valid URL::', [], 'home'],
+            'internal query string' => [
+                '/companies?tab=payments&secret=marker', [PermissionName::ContractsView->value], 'contracts.index',
+            ],
+        ];
     }
 }

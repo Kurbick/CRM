@@ -69,7 +69,7 @@ class ContractDocumentAuthorizationTest extends AuthorizationTestCase
             'unknown_marker' => 'MALICIOUS-DOCUMENT-FIELD',
         ]);
 
-        $response->assertRedirect(route('dashboard'))->assertSessionHas('success');
+        $response->assertRedirect(route('home'))->assertSessionHas('success');
         $document = ContractDocument::query()->sole();
         $this->assertSame($contract->id, $document->contract_id);
         $this->assertSame('agreement.pdf', $document->original_name);
@@ -169,7 +169,7 @@ class ContractDocumentAuthorizationTest extends AuthorizationTestCase
         $this->actingAsPermissions([PermissionName::ContractDocumentsDelete->value]);
         $this->get(route('contract-documents.download', $downloadDocument))->assertForbidden();
         $this->delete(route('contract-documents.destroy', $deleteDocument))
-            ->assertRedirect(route('dashboard'));
+            ->assertRedirect(route('home'));
         $this->assertDatabaseMissing('contract_documents', ['id' => $deleteDocument->id]);
         Storage::disk('local')->assertMissing($deleteDocument->file_path);
     }
@@ -201,7 +201,7 @@ class ContractDocumentAuthorizationTest extends AuthorizationTestCase
             $expected = match ($destination) {
                 'contract' => route('contracts.show', $contract),
                 'company' => route('companies.show', $contract->company),
-                default => route('dashboard'),
+                default => route('home'),
             };
             $permissions = [PermissionName::ContractDocumentsUpload->value];
             if ($viewPermission !== null) {
@@ -371,7 +371,7 @@ class ContractDocumentAuthorizationTest extends AuthorizationTestCase
 
         foreach ($documents as $index => $document) {
             $response = $this->delete(route('contract-documents.destroy', $document))
-                ->assertRedirect(route('dashboard'))
+                ->assertRedirect(route('home'))
                 ->assertSessionHas('error', 'Не удалось удалить документ.');
             if ($paths[$index] !== '') {
                 $response->assertDontSee($paths[$index]);
@@ -423,7 +423,7 @@ class ContractDocumentAuthorizationTest extends AuthorizationTestCase
         $this->actingAsPermissions([PermissionName::ContractDocumentsDelete->value]);
 
         $this->delete(route('contract-documents.destroy', $document))
-            ->assertRedirect(route('dashboard'))
+            ->assertRedirect(route('home'))
             ->assertSessionHas('success', 'Документ удалён.');
 
         $this->assertDatabaseMissing('contract_documents', ['id' => $document->id]);
@@ -441,7 +441,7 @@ class ContractDocumentAuthorizationTest extends AuthorizationTestCase
             'document' => $this->pdf('minimal.pdf'),
         ]);
 
-        $response->assertRedirect(route('dashboard'));
+        $response->assertRedirect(route('home'));
         $this->assertStringNotContainsString(route('contracts.show', $contract), (string) $response->headers->get('Location'));
         $this->assertStringNotContainsString(route('companies.show', $contract->company), (string) $response->headers->get('Location'));
     }

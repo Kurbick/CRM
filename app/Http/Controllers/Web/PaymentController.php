@@ -9,6 +9,7 @@ use App\Models\Invoice;
 use App\Models\Payment;
 use App\Services\InvoicePaymentAllocationWriter;
 use App\Services\InvoicePaymentAvailabilityService;
+use App\Support\Navigation\AuthorizedLandingPage;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -154,8 +155,7 @@ class PaymentController extends Controller
              */
         });
 
-        return redirect()
-            ->route('invoices.show', $invoice)
+        return $this->mutationRedirect($invoice)
             ->with(
                 'success',
                 'Платёж успешно зарегистрирован.'
@@ -250,8 +250,7 @@ class PaymentController extends Controller
             $this->allocationWriter->synchronize($invoice);
         });
 
-        return redirect()
-            ->route('invoices.show', $invoiceId)
+        return $this->mutationRedirect($invoiceId)
             ->with(
                 'success',
                 'Платёж подтверждён. Сумма оплаты и статус инвойса пересчитаны.'
@@ -423,12 +422,30 @@ class PaymentController extends Controller
             $this->allocationWriter->synchronize($invoice);
         });
 
-        return redirect()
-            ->route('invoices.show', $invoiceId)
+        return $this->mutationRedirect($invoiceId)
             ->with(
                 'success',
                 'Платёж отменён. Статус инвойса и Credit Balance пересчитаны.'
             );
+    }
+
+    private function mutationRedirect(Invoice|int $invoice)
+    {
+        $invoice = $invoice instanceof Invoice
+            ? $invoice
+            : Invoice::query()->select(['id', 'company_id'])->findOrFail($invoice);
+
+        if (Gate::allows('view', $invoice)) {
+            return redirect()->route('invoices.show', $invoice);
+        }
+
+        $invoice->loadMissing('company:id,name');
+
+        if (Gate::allows('view', $invoice->company)) {
+            return redirect()->route('companies.show', $invoice->company);
+        }
+
+        return redirect()->to(app(AuthorizedLandingPage::class)->url(auth()->user()));
     }
 
     /**

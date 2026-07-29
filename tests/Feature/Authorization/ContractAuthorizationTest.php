@@ -55,7 +55,7 @@ class ContractAuthorizationTest extends AuthorizationTestCase
             ->assertSee($company->name)
             ->assertSee('value="'.$company->id.'"', false)
             ->assertDontSee(route('companies.show', $company), false)
-            ->assertSee(route('dashboard'), false);
+            ->assertSee(route('home'), false);
         $this->assertCompanySecretsAbsent($generalCreate, $secrets);
 
         $nestedCreate = $this->get(route('companies.contracts.create', $company))
@@ -63,12 +63,12 @@ class ContractAuthorizationTest extends AuthorizationTestCase
             ->assertSee($company->name)
             ->assertSee('name="company_id" value="'.$company->id.'"', false)
             ->assertDontSee(route('companies.show', $company), false)
-            ->assertSee(route('dashboard'), false);
+            ->assertSee(route('home'), false);
         $this->assertCompanySecretsAbsent($nestedCreate, $secrets);
 
         $payload = $this->contractPayload($company, 'CREATE-ONLY');
         $this->post(route('contracts.store'), $payload)
-            ->assertRedirect(route('dashboard'));
+            ->assertRedirect(route('home'));
         $this->assertDatabaseHas('contracts', [
             'company_id' => $company->id,
             'contract_number' => $payload['contract_number'],
@@ -87,7 +87,7 @@ class ContractAuthorizationTest extends AuthorizationTestCase
             ->assertSee($company->name)
             ->assertDontSee(route('companies.show', $company), false)
             ->assertDontSee('name="company_id"', false)
-            ->assertSee(route('dashboard'), false);
+            ->assertSee(route('home'), false);
         $this->assertCompanySecretsAbsent($edit, $secrets);
         $this->put(route('contracts.update', $contract), [
             'company_id' => $other->id,
@@ -96,7 +96,7 @@ class ContractAuthorizationTest extends AuthorizationTestCase
             'end_date' => '2027-09-01',
             'status' => 'terminated',
             'comment' => 'Updated safely',
-        ])->assertRedirect(route('dashboard'));
+        ])->assertRedirect(route('home'));
 
         $this->assertDatabaseHas('contracts', [
             'id' => $contract->id,
@@ -113,7 +113,7 @@ class ContractAuthorizationTest extends AuthorizationTestCase
         $this->actingAsPermissions([PermissionName::ContractsDelete->value]);
 
         $this->delete(route('contracts.destroy', $contract))
-            ->assertRedirect(route('dashboard'))
+            ->assertRedirect(route('home'))
             ->assertSessionHas('success');
         $this->assertDatabaseMissing('contracts', ['id' => $contract->id]);
     }
@@ -322,7 +322,7 @@ class ContractAuthorizationTest extends AuthorizationTestCase
         $contract = $this->contract($this->company('Custom contract role'));
         $user = $this->actingAsCustomRole([PermissionName::ContractsView->value]);
 
-        $this->get(route('dashboard'))
+        $this->get(route('home'))
             ->assertOk()
             ->assertSee(route('contracts.index'), false);
         $this->get(route('contracts.show', $contract))->assertOk();
@@ -330,7 +330,7 @@ class ContractAuthorizationTest extends AuthorizationTestCase
         $this->assertFalse($user->hasRole('administrator'));
 
         $this->actingAsPermissions();
-        $this->get(route('dashboard'))->assertDontSee(route('contracts.index'), false);
+        $this->get(route('home'))->assertDontSee(route('contracts.index'), false);
     }
 
     public static function dependencyProvider(): array

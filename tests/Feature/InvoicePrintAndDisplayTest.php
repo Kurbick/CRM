@@ -37,7 +37,7 @@ class InvoicePrintAndDisplayTest extends TestCase
             ->assertSee('0,00 ₼');
 
         $content = $response->getContent();
-        $this->assertStringContainsString('Дашборд', $content);
+        $this->assertStringNotContainsString('Дашборд', $content);
         $this->assertStringContainsString('@media print', $content);
         $this->assertStringContainsString('.crm-print-hide', $content);
         $this->assertStringContainsString('invoice-print-only hidden', $content);

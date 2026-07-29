@@ -40,7 +40,7 @@ class OrderAuthorizationTest extends AuthorizationTestCase
             ->assertSee($contract->company->name)
             ->assertDontSee('href="'.route('contracts.show', $contract).'"', false)
             ->assertDontSee('href="'.route('companies.show', $contract->company).'"', false)
-            ->assertSee(route('dashboard'), false);
+            ->assertSee(route('home'), false);
 
         $payload = [
             ...$this->orderPayload('PARENT-SAFE-ORDER'),
@@ -52,7 +52,7 @@ class OrderAuthorizationTest extends AuthorizationTestCase
         ];
 
         $this->post(route('contracts.orders.store', $contract), $payload)
-            ->assertRedirect(route('dashboard'));
+            ->assertRedirect(route('home'));
 
         $order = Order::query()->whereHas('serviceType', fn ($query) => $query->where('name', 'PARENT-SAFE-ORDER'))->firstOrFail();
         $this->assertSame($contract->id, $order->contract_id);
@@ -97,7 +97,7 @@ class OrderAuthorizationTest extends AuthorizationTestCase
             'updated_at' => '1999-01-02 00:00:00',
             'unknown_order_marker' => 'MALICIOUS-ORDER-UPDATE',
         ])
-            ->assertRedirect(route('dashboard'));
+            ->assertRedirect(route('home'));
 
         $order->refresh();
         $this->assertSame($contract->id, $order->contract_id);
@@ -134,9 +134,9 @@ class OrderAuthorizationTest extends AuthorizationTestCase
             ->assertDontSee('action="'.route('orders.destroy', $used).'"', false);
 
         $this->actingAsPermissions([PermissionName::ContractSubjectsDelete->value]);
-        $this->delete(route('orders.destroy', $unused))->assertRedirect(route('dashboard'));
+        $this->delete(route('orders.destroy', $unused))->assertRedirect(route('home'));
         $this->delete(route('orders.destroy', $used))
-            ->assertRedirect(route('dashboard'))
+            ->assertRedirect(route('home'))
             ->assertSessionHas('error', 'Невозможно удалить разовую услугу, поскольку она уже используется в инвойсе.');
         $this->assertDatabaseMissing('orders', ['id' => $unused->id]);
         $this->assertSubjectFinancialChainExists($used, $chain);

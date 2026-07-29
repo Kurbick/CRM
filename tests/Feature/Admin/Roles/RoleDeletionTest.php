@@ -28,7 +28,7 @@ class RoleDeletionTest extends RoleAdministrationTestCase
 
         $this->actingAs($actor)->delete(route('admin.roles.destroy', $role))->assertRedirect(route('admin.roles.index'));
         $this->get(route('admin.roles.index'))->assertSeeText('Группа удалена.');
-        $this->get(route('dashboard'))->assertDontSeeText('Группа удалена.');
+        $this->get(route('home'))->assertDontSeeText('Группа удалена.');
     }
 
     public function test_all_system_roles_are_protected(): void

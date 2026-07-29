@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\EnsurePasswordWasChanged;
 use App\Http\Middleware\EnsureUserIsActive;
+use App\Support\Navigation\AuthorizedLandingPage;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -28,7 +29,8 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
         $middleware->appendToGroup('web', [EnsureUserIsActive::class]);
         $middleware->redirectGuestsTo(fn () => route('login'));
-        $middleware->redirectUsersTo(fn () => route('dashboard'));
+        $middleware->redirectUsersTo(fn (Request $request) => app(AuthorizedLandingPage::class)
+            ->url($request->user()));
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

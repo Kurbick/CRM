@@ -41,7 +41,7 @@ class SubscriptionAuthorizationTest extends AuthorizationTestCase
             'service_type_id' => $wrongType->id,
             'next_billing_date' => '2035-01-01',
             'unknown' => 'ignored',
-        ])->assertRedirect(route('dashboard'));
+        ])->assertRedirect(route('home'));
 
         $subscription = Subscription::query()->whereHas('serviceType', fn ($query) => $query->where('name', 'PARENT-SAFE-SUBSCRIPTION'))->firstOrFail();
         $this->assertSame($contract->id, $subscription->contract_id);
@@ -84,7 +84,7 @@ class SubscriptionAuthorizationTest extends AuthorizationTestCase
             'created_at' => '1999-01-01 00:00:00',
             'updated_at' => '1999-01-02 00:00:00',
             'unknown_subscription_marker' => 'MALICIOUS-SUBSCRIPTION-UPDATE',
-        ])->assertRedirect(route('dashboard'));
+        ])->assertRedirect(route('home'));
 
         $subscription->refresh();
         $this->assertSame($contract->id, $subscription->contract_id);
@@ -121,7 +121,7 @@ class SubscriptionAuthorizationTest extends AuthorizationTestCase
             ->assertDontSee('action="'.route('subscriptions.destroy', $used).'"', false);
 
         $this->actingAsPermissions([PermissionName::ContractSubjectsDelete->value]);
-        $this->delete(route('subscriptions.destroy', $unused))->assertRedirect(route('dashboard'));
+        $this->delete(route('subscriptions.destroy', $unused))->assertRedirect(route('home'));
         $this->delete(route('subscriptions.destroy', $used))
             ->assertSessionHas('error', 'Невозможно удалить подписку, поскольку она уже используется в инвойсе.');
         $this->assertDatabaseMissing('subscriptions', ['id' => $unused->id]);

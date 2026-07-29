@@ -91,7 +91,7 @@ class ContractDocumentMimeValidationTest extends AuthorizationTestCase
         $this->post(route('contracts.documents.store', $contract), [
             'document_type' => 'signed',
             'document' => $file,
-        ])->assertRedirect(route('dashboard'));
+        ])->assertRedirect(route('home'));
 
         return ContractDocument::query()->sole();
     }

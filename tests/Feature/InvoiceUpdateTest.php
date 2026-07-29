@@ -194,6 +194,73 @@ class InvoiceUpdateTest extends TestCase
         }
     }
 
+    public function test_edit_and_update_business_denials_preserve_normalized_company_context(): void
+    {
+        [$invoice] = $this->invoice('CONTEXT-DENIAL', 'paid');
+        $line = $invoice->lines()->create(['description' => 'Locked', 'amount' => 20]);
+        $context = ['origin' => 'company', 'tab' => 'payments'];
+        $expected = route('invoices.show', ['invoice' => $invoice, ...$context]);
+
+        $this->get(route('invoices.edit', ['invoice' => $invoice, ...$context]))
+            ->assertRedirect($expected)
+            ->assertSessionHas('error');
+
+        $this->put(route('invoices.update', $invoice), [
+            ...$this->payload($invoice, [[
+                'id' => $line->id,
+                'description' => 'Must stay locked',
+                'amount' => 25,
+                'subscription_id' => null,
+                'order_id' => null,
+                'period_start' => null,
+                'period_end' => null,
+            ]]),
+            ...$context,
+        ])->assertRedirect($expected)->assertSessionHas('error');
+
+        $this->assertSame('Locked', $line->fresh()->description);
+        $this->assertSame('20.00', $line->fresh()->getRawOriginal('amount'));
+    }
+
+    public function test_successful_update_preserves_only_supported_company_context(): void
+    {
+        [$invoice] = $this->invoice('CONTEXT-SUCCESS');
+        $line = $invoice->lines()->create(['description' => 'Before context update', 'amount' => 30]);
+        $context = ['origin' => 'company', 'tab' => 'invoices'];
+
+        $this->put(route('invoices.update', $invoice), [
+            ...$this->payload($invoice, [[
+                'id' => $line->id,
+                'description' => 'After context update',
+                'amount' => 35,
+                'subscription_id' => null,
+                'order_id' => null,
+                'period_start' => null,
+                'period_end' => null,
+            ]]),
+            ...$context,
+            'return_url' => 'https://evil.example/redirect',
+            'unknown_context' => 'SECRET-CONTEXT',
+        ])->assertRedirect(route('invoices.show', ['invoice' => $invoice, ...$context]))
+            ->assertSessionHas('success');
+        $this->assertSame('After context update', $line->fresh()->description);
+
+        $this->put(route('invoices.update', $invoice), [
+            ...$this->payload($invoice, [[
+                'id' => $line->id,
+                'description' => 'Unsupported context ignored',
+                'amount' => 40,
+                'subscription_id' => null,
+                'order_id' => null,
+                'period_start' => null,
+                'period_end' => null,
+            ]]),
+            'origin' => 'https://evil.example',
+            'tab' => 'unsupported',
+            'return_url' => '//evil.example',
+        ])->assertRedirect(route('invoices.show', $invoice));
+    }
+
     public function test_issued_linked_line_cannot_be_removed_and_transaction_rolls_back(): void
     {
         [$invoice, $contractId] = $this->invoice('ISSUED-LINK', 'issued');

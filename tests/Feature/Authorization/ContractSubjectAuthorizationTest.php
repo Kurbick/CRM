@@ -36,7 +36,7 @@ class ContractSubjectAuthorizationTest extends AuthorizationTestCase
             ->assertSee(route('contracts.subscriptions.create', $contract), false)
             ->assertSee($contract->contract_number)
             ->assertSee($company->name)
-            ->assertSee(route('dashboard'), false)
+            ->assertSee(route('home'), false)
             ->assertDontSee('href="'.route('contracts.show', $contract).'"', false)
             ->assertDontSee('href="'.route('companies.show', $company).'"', false)
             ->assertDontSee('SELECTOR-SECRET-VOEN')

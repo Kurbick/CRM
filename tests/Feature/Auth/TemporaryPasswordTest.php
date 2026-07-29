@@ -15,8 +15,10 @@ class TemporaryPasswordTest extends TestCase
     {
         $user = User::factory()->requiringPasswordChange()->create();
 
-        $this->post(route('login.store'), ['email' => $user->email, 'password' => 'password'])
+        $this->withSession(['url.intended' => route('companies.index')])
+            ->post(route('login.store'), ['email' => $user->email, 'password' => 'password'])
             ->assertRedirect(route('password.change'));
+        $this->assertNull(session()->get('url.intended'));
         $this->get(route('dashboard'))->assertRedirect(route('password.change'));
         $this->get(route('companies.index'))->assertRedirect(route('password.change'));
         $this->get(route('password.change'))->assertOk()->assertSee('Для продолжения работы');

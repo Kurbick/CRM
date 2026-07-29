@@ -188,7 +188,7 @@ class ContractDocumentRouteAuthorizationCoverageTest extends AuthorizationTestCa
             $this->post(route($definition['route'], $contract), [
                 'document_type' => 'signed',
                 'document' => UploadedFile::fake()->create('allowed.pdf', 4, 'application/pdf'),
-            ])->assertRedirect(route('dashboard'));
+            ])->assertRedirect(route('home'));
             $document = ContractDocument::query()->where('contract_id', $contract->id)->sole();
             Storage::disk('local')->assertExists($document->file_path);
 
@@ -211,7 +211,7 @@ class ContractDocumentRouteAuthorizationCoverageTest extends AuthorizationTestCa
         }
 
         $document = $this->document($contract);
-        $this->delete(route($definition['route'], $document))->assertRedirect(route('dashboard'));
+        $this->delete(route($definition['route'], $document))->assertRedirect(route('home'));
         $this->assertDatabaseMissing('contract_documents', ['id' => $document->id]);
         Storage::disk('local')->assertMissing($document->file_path);
     }

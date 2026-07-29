@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Contract;
 use App\Models\Order;
 use App\Models\Subscription;
+use App\Support\Navigation\AuthorizedLandingPage;
 use Illuminate\Support\Facades\Gate;
 
 class ContractSubjectController extends Controller
@@ -38,6 +39,6 @@ class ContractSubjectController extends Controller
             return route('companies.show', $contract->company);
         }
 
-        return route('dashboard');
+        return app(AuthorizedLandingPage::class)->url(auth()->user());
     }
 }

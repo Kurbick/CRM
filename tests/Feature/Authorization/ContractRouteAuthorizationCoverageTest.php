@@ -193,7 +193,7 @@ class ContractRouteAuthorizationCoverageTest extends AuthorizationTestCase
         $company = $this->company('Allowed store');
         $payload = $this->contractPayload($company, 'ALLOWED-STORE');
 
-        $this->post(route($routeName), $payload)->assertRedirect(route('dashboard'));
+        $this->post(route($routeName), $payload)->assertRedirect(route('home'));
 
         $this->assertDatabaseHas('contracts', [
             'company_id' => $company->id,
@@ -208,7 +208,7 @@ class ContractRouteAuthorizationCoverageTest extends AuthorizationTestCase
         $contract = $this->contract($company);
         $payload = $this->updatePayload($contract, $otherCompany->id);
 
-        $this->put(route($routeName, $contract), $payload)->assertRedirect(route('dashboard'));
+        $this->put(route($routeName, $contract), $payload)->assertRedirect(route('home'));
 
         $this->assertDatabaseHas('contracts', [
             'id' => $contract->id,
@@ -231,7 +231,7 @@ class ContractRouteAuthorizationCoverageTest extends AuthorizationTestCase
     {
         $contract = $this->contract($this->company('Allowed destroy'));
 
-        $this->delete(route($routeName, $contract))->assertRedirect(route('dashboard'));
+        $this->delete(route($routeName, $contract))->assertRedirect(route('home'));
 
         $this->assertDatabaseMissing('contracts', ['id' => $contract->id]);
     }
