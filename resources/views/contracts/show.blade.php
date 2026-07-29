@@ -32,6 +32,8 @@
                 'amount' => $order->price,
                 'status' => $order->status,
                 'edit_route' => route('orders.edit', $order),
+                'subject' => $order,
+                'can_delete' => ! $order->invoice_lines_exists,
             ]);
         }
 
@@ -49,6 +51,8 @@
                 'amount' => $subscription->amount,
                 'status' => $subscription->status,
                 'edit_route' => route('subscriptions.edit', $subscription),
+                'subject' => $subscription,
+                'can_delete' => ! $subscription->invoice_lines_exists,
             ]);
         }
 
@@ -410,12 +414,14 @@
                 </p>
             </div>
 
-            <a href="{{ route('contracts.subjects.create', $contract) }}"
-                class="inline-flex items-center justify-center text-sm font-medium
-                      bg-blue-600 hover:bg-blue-700 text-white
-                      px-4 py-2.5 rounded-lg transition">
-                + Добавить
-            </a>
+            @if (\Illuminate\Support\Facades\Gate::allows('create', [\App\Models\Order::class, $contract]) || \Illuminate\Support\Facades\Gate::allows('create', [\App\Models\Subscription::class, $contract]))
+                <a href="{{ route('contracts.subjects.create', $contract) }}"
+                    class="inline-flex items-center justify-center text-sm font-medium
+                          bg-blue-600 hover:bg-blue-700 text-white
+                          px-4 py-2.5 rounded-lg transition">
+                    + Добавить
+                </a>
+            @endif
         </div>
 
         @if ($services->isNotEmpty())
@@ -502,11 +508,28 @@
                                 </td>
 
                                 <td class="px-6 py-4 text-right">
-                                    <a href="{{ $service['edit_route'] }}"
-                                        class="text-gray-400 hover:text-blue-600
-                                              text-xs transition">
-                                        Редактировать
-                                    </a>
+                                    <div class="inline-flex items-center gap-3">
+                                        @can('update', $service['subject'])
+                                            <a href="{{ $service['edit_route'] }}"
+                                                class="text-gray-400 hover:text-blue-600 text-xs transition">
+                                                Редактировать
+                                            </a>
+                                        @endcan
+
+                                        @can('delete', $service['subject'])
+                                            @if ($service['can_delete'])
+                                                <form action="{{ $service['type'] === 'order' ? route('orders.destroy', $service['subject']) : route('subscriptions.destroy', $service['subject']) }}"
+                                                    method="POST" onsubmit="return confirm('Удалить предмет договора?')">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button type="submit"
+                                                        class="text-red-400 hover:text-red-600 text-xs transition">
+                                                        Удалить
+                                                    </button>
+                                                </form>
+                                            @endif
+                                        @endcan
+                                    </div>
                                 </td>
                             </tr>
                         @endforeach

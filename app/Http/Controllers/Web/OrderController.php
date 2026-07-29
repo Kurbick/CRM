@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Web;
 
+use App\Actions\Orders\DeleteOrder;
+use App\Exceptions\OrderDeletionException;
 use App\Http\Controllers\Controller;
 use App\Models\Contract;
 use App\Models\Order;
@@ -9,23 +11,31 @@ use App\Models\ServiceType;
 use App\Services\InvoiceDueDateSynchronizer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 
 class OrderController extends Controller
 {
     public function create(Contract $contract)
     {
-        return view('orders.create', compact('contract'));
+        Gate::authorize('create', [Order::class, $contract]);
+
+        $contract->loadMissing('company:id,name');
+        $backUrl = $this->backUrl($contract);
+
+        return view('orders.create', compact('contract', 'backUrl'));
     }
 
     public function store(Request $request, Contract $contract)
     {
+        Gate::authorize('create', [Order::class, $contract]);
+
         $validated = $request->validate([
-            'service_name'  => 'required|string|max:255',
-            'order_date'    => 'required|date',
-            'price'         => 'required|numeric|min:0',
+            'service_name' => 'required|string|max:255',
+            'order_date' => 'required|date',
+            'price' => 'required|numeric|min:0',
             'payment_terms' => 'required|integer|min:0|max:3650',
-            'status'        => 'required|in:in_progress,completed,cancelled',
-            'comment'       => 'nullable|string',
+            'status' => 'required|in:in_progress,completed,cancelled',
+            'comment' => 'nullable|string',
         ], [
             'payment_terms.required' => 'Укажите срок оплаты в днях.',
             'payment_terms.integer' => 'Срок оплаты должен быть целым числом дней.',
@@ -47,31 +57,38 @@ class OrderController extends Controller
 
         $contract->orders()->create($validated);
 
-        return redirect()
-            ->route('contracts.show', $contract)
+        return $this->mutationRedirect($contract)
             ->with('success', 'Разовая услуга успешно добавлена.');
     }
 
     public function edit(Order $order)
     {
-        $contract = $order->contract;
+        Gate::authorize('update', $order);
 
-        return view('orders.edit', compact('order', 'contract'));
+        $contract = $order->contract()
+            ->select(['id', 'company_id', 'contract_number'])
+            ->firstOrFail();
+        $contract->loadMissing('company:id,name');
+        $order->loadMissing('serviceType:id,name');
+        $backUrl = $this->backUrl($contract);
+
+        return view('orders.edit', compact('order', 'contract', 'backUrl'));
     }
 
     public function update(
         Request $request,
         Order $order,
         InvoiceDueDateSynchronizer $dueDateSynchronizer
-    )
-    {
+    ) {
+        Gate::authorize('update', $order);
+
         $validated = $request->validate([
-            'title'         => 'required|string|max:255',
-            'order_date'    => 'required|date',
-            'price'         => 'required|numeric|min:0',
+            'title' => 'required|string|max:255',
+            'order_date' => 'required|date',
+            'price' => 'required|numeric|min:0',
             'payment_terms' => 'required|integer|min:0|max:3650',
-            'status'        => 'required|in:in_progress,completed,cancelled',
-            'comment'       => 'nullable|string',
+            'status' => 'required|in:in_progress,completed,cancelled',
+            'comment' => 'nullable|string',
         ], [
             'payment_terms.required' => 'Укажите срок оплаты в днях.',
             'payment_terms.integer' => 'Срок оплаты должен быть целым числом дней.',
@@ -85,25 +102,60 @@ class OrderController extends Controller
             $dueDateSynchronizer->synchronizeForOrder($order);
         });
 
-        return redirect()
-            ->route('contracts.show', $order->contract)
+        $contract = $order->contract()
+            ->select(['id', 'company_id', 'contract_number'])
+            ->firstOrFail();
+
+        return $this->mutationRedirect($contract)
             ->with('success', 'Разовая услуга обновлена.');
     }
 
-    public function destroy(Order $order)
+    public function destroy(Order $order, DeleteOrder $deleteOrder)
     {
-        $contract = $order->contract;
+        Gate::authorize('delete', $order);
+
+        $contract = $order->contract()
+            ->select(['id', 'company_id', 'contract_number'])
+            ->firstOrFail();
 
         try {
-            $order->delete();
-
-            return redirect()
-                ->route('contracts.show', $contract)
-                ->with('success', 'Разовая услуга удалена.');
-        } catch (\Exception $e) {
-            return redirect()
-                ->route('contracts.show', $contract)
-                ->with('error', 'Невозможно удалить — услуга включена в инвойс.');
+            $deleteOrder->handle($order);
+        } catch (OrderDeletionException $exception) {
+            return $this->mutationRedirect($contract)
+                ->with('error', $exception->getMessage());
         }
+
+        return $this->mutationRedirect($contract)
+            ->with('success', 'Разовая услуга удалена.');
+    }
+
+    private function backUrl(Contract $contract): string
+    {
+        if (Gate::allows('view', $contract)) {
+            return route('contracts.show', $contract);
+        }
+
+        $contract->loadMissing('company:id,name');
+
+        if (Gate::allows('view', $contract->company)) {
+            return route('companies.show', $contract->company);
+        }
+
+        return route('dashboard');
+    }
+
+    private function mutationRedirect(Contract $contract)
+    {
+        if (Gate::allows('view', $contract)) {
+            return redirect()->route('contracts.show', $contract);
+        }
+
+        $contract->loadMissing('company:id,name');
+
+        if (Gate::allows('view', $contract->company)) {
+            return redirect()->route('companies.show', $contract->company);
+        }
+
+        return redirect()->route('dashboard');
     }
 }

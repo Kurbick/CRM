@@ -6,6 +6,7 @@ use App\Models\Invoice;
 use App\Models\Order;
 use App\Models\Subscription;
 use App\Services\InvoiceDueDateSynchronizer;
+use App\Support\Access\PermissionName;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\Feature\FinancialTestCase as TestCase;
@@ -183,6 +184,7 @@ class InvoiceDueDateTest extends TestCase
 
     public function test_changing_order_terms_recalculates_issued_invoice_in_both_directions(): void
     {
+        $this->grantSubjectUpdate();
         [$invoice, $contractId] = $this->draftInvoice('ISSUED-STABLE');
         $orderId = $this->order($contractId, 30);
         $invoice->lines()->create($this->orderLine($orderId));
@@ -212,6 +214,7 @@ class InvoiceDueDateTest extends TestCase
 
     public function test_updating_order_terms_recalculates_linked_draft_in_both_directions(): void
     {
+        $this->grantSubjectUpdate();
         [$invoice, $contractId] = $this->draftInvoice('ORDER-SYNC');
         $orderId = $this->order($contractId, 30);
         $invoice->lines()->create($this->orderLine($orderId));
@@ -228,6 +231,7 @@ class InvoiceDueDateTest extends TestCase
 
     public function test_order_update_recalculates_whole_invoice_using_remaining_minimum(): void
     {
+        $this->grantSubjectUpdate();
         [$invoice, $contractId] = $this->draftInvoice('WHOLE-INVOICE');
         $thirtyDayOrder = $this->order($contractId, 30);
         $sevenDayOrder = $this->order($contractId, 7);
@@ -246,6 +250,7 @@ class InvoiceDueDateTest extends TestCase
 
     public function test_order_update_changes_all_open_invoices_but_not_paid_cancelled_or_unrelated(): void
     {
+        $this->grantSubjectUpdate();
         [$firstDraft, $contractId] = $this->draftInvoice('MULTI-FIRST');
         $orderId = $this->order($contractId, 30);
         $firstDraft->lines()->create($this->orderLine($orderId));
@@ -315,6 +320,7 @@ class InvoiceDueDateTest extends TestCase
 
     public function test_web_subscription_update_recalculates_linked_issued_invoice(): void
     {
+        $this->grantSubjectUpdate();
         [$invoice, $contractId] = $this->draftInvoice('WEB-SUBSCRIPTION-SYNC');
         $subscriptionId = $this->subscription($contractId, 30);
         $invoice->lines()->create($this->subscriptionLine($subscriptionId));
@@ -337,6 +343,7 @@ class InvoiceDueDateTest extends TestCase
 
     public function test_synchronization_failure_rolls_back_order_update(): void
     {
+        $this->grantSubjectUpdate();
         [, $contractId] = $this->companyAndContract('ROLLBACK-SYNC');
         $order = Order::findOrFail($this->order($contractId, 30));
 
@@ -373,6 +380,11 @@ class InvoiceDueDateTest extends TestCase
         ))->assertSessionHasErrors('due_date');
 
         $this->assertDatabaseCount('invoices', 0);
+    }
+
+    private function grantSubjectUpdate(): void
+    {
+        $this->authenticatedUser->givePermissionTo(PermissionName::ContractSubjectsUpdate->value);
     }
 
     public function test_rollback_compatibility_accepts_null_and_signed_tinyint_values(): void

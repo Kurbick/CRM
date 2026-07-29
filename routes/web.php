@@ -167,11 +167,6 @@ Route::middleware(['auth', 'active', 'password.changed'])->group(function (): vo
         [ContractSubjectController::class, 'create']
     )->name('contracts.subjects.create');
 
-    Route::post(
-        'contracts/{contract}/subjects',
-        [ContractSubjectController::class, 'store']
-    )->name('contracts.subjects.store');
-
     /*
     |--------------------------------------------------------------------------
     | Документы договоров

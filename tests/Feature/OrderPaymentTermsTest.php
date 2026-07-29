@@ -6,7 +6,10 @@ use App\Models\Company;
 use App\Models\Contract;
 use App\Models\Invoice;
 use App\Models\Order;
+use App\Services\AccessControlSynchronizer;
+use App\Support\Access\PermissionName;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\ViewErrorBag;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\AuthenticatedTestCase as TestCase;
 
@@ -14,20 +17,27 @@ class OrderPaymentTermsTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_combined_subject_form_shows_empty_required_order_terms_without_deadline(): void
+    protected function setUp(): void
     {
+        parent::setUp();
+
+        app(AccessControlSynchronizer::class)->sync();
+    }
+
+    public function test_selector_links_to_typed_order_form(): void
+    {
+        $this->grantSubjectPermission(PermissionName::ContractSubjectsCreate);
         [, $contract] = $this->companyAndContract();
 
         $response = $this->get(route('contracts.subjects.create', $contract))->assertOk();
-        $html = $response->getContent();
-
-        $response->assertSee('Срок оплаты (дней)')->assertDontSee('Срок выполнения')->assertDontSee('Дедлайн');
-        $this->assertDoesNotMatchRegularExpression('/name="payment_terms"[^>]*value="14"/', $html);
-        $this->assertMatchesRegularExpression('/name="payment_terms" value="" min="0"[^>]*required/', $html);
+        $response->assertSee(route('contracts.orders.create', $contract), false)
+            ->assertSee(route('contracts.subscriptions.create', $contract), false)
+            ->assertDontSee('name="payment_terms"', false);
     }
 
     public function test_order_create_form_is_empty_and_has_no_deadline(): void
     {
+        $this->grantSubjectPermission(PermissionName::ContractSubjectsCreate);
         [, $contract] = $this->companyAndContract();
         $response = $this->get(route('contracts.orders.create', $contract))->assertOk();
 
@@ -35,22 +45,23 @@ class OrderPaymentTermsTest extends TestCase
         $this->assertDoesNotMatchRegularExpression('/name="payment_terms"[^>]*value="14"/', $response->getContent());
     }
 
-    public function test_combined_order_requires_terms_and_saves_exact_zero_or_positive_value(): void
+    public function test_typed_order_requires_terms_and_saves_exact_zero_or_positive_value(): void
     {
+        $this->grantSubjectPermission(PermissionName::ContractSubjectsCreate);
         [, $contract] = $this->companyAndContract();
-        $base = ['subject_type' => 'one_time', 'title' => 'Разработка сайта', 'order_date' => '2026-08-01', 'price' => '100.00'];
+        $base = ['service_name' => 'Разработка сайта', 'order_date' => '2026-08-01', 'price' => '100.00', 'status' => 'in_progress'];
 
-        $this->post(route('contracts.subjects.store', $contract), $base)
+        $this->post(route('contracts.orders.store', $contract), $base)
             ->assertSessionHasErrors('payment_terms');
         $this->assertDatabaseCount('orders', 0);
 
-        $this->post(route('contracts.subjects.store', $contract), [...$base, 'payment_terms' => 30])
+        $this->post(route('contracts.orders.store', $contract), [...$base, 'payment_terms' => 30])
             ->assertSessionDoesntHaveErrors();
         $this->assertSame(30, (int) Order::query()->sole()->payment_terms);
         $this->assertNull(Order::query()->sole()->deadline);
 
         Order::query()->delete();
-        $this->post(route('contracts.subjects.store', $contract), [...$base, 'payment_terms' => 0])
+        $this->post(route('contracts.orders.store', $contract), [...$base, 'payment_terms' => 0])
             ->assertSessionDoesntHaveErrors();
         $this->assertSame(0, (int) Order::query()->sole()->payment_terms);
     }
@@ -58,10 +69,11 @@ class OrderPaymentTermsTest extends TestCase
     #[DataProvider('invalidTerms')]
     public function test_invalid_order_terms_are_rejected(mixed $terms): void
     {
+        $this->grantSubjectPermission(PermissionName::ContractSubjectsCreate);
         [, $contract] = $this->companyAndContract();
-        $this->post(route('contracts.subjects.store', $contract), [
-            'subject_type' => 'one_time', 'title' => 'Order', 'order_date' => '2026-08-01',
-            'price' => '10.00', 'payment_terms' => $terms,
+        $this->post(route('contracts.orders.store', $contract), [
+            'service_name' => 'Order', 'order_date' => '2026-08-01',
+            'price' => '10.00', 'payment_terms' => $terms, 'status' => 'in_progress',
         ])->assertSessionHasErrors('payment_terms');
         $this->assertDatabaseCount('orders', 0);
     }
@@ -73,19 +85,21 @@ class OrderPaymentTermsTest extends TestCase
 
     public function test_validation_error_preserves_entered_terms(): void
     {
+        $this->grantSubjectPermission(PermissionName::ContractSubjectsCreate);
         [, $contract] = $this->companyAndContract();
-        $this->from(route('contracts.subjects.create', $contract))
-            ->post(route('contracts.subjects.store', $contract), [
-                'subject_type' => 'one_time', 'title' => '', 'order_date' => '2026-08-01',
-                'price' => '10.00', 'payment_terms' => 30,
-            ])->assertRedirect(route('contracts.subjects.create', $contract));
+        $this->from(route('contracts.orders.create', $contract))
+            ->post(route('contracts.orders.store', $contract), [
+                'service_name' => '', 'order_date' => '2026-08-01',
+                'price' => '10.00', 'payment_terms' => 30, 'status' => 'in_progress',
+            ])->assertRedirect(route('contracts.orders.create', $contract));
 
-        $this->get(route('contracts.subjects.create', $contract))
+        $this->get(route('contracts.orders.create', $contract))
             ->assertSee('name="payment_terms" value="30"', false);
     }
 
     public function test_edit_shows_saved_terms_without_deadline_and_update_requires_exact_value(): void
     {
+        $this->grantSubjectPermission(PermissionName::ContractSubjectsUpdate);
         [, $contract] = $this->companyAndContract();
         $order = $contract->orders()->create($this->orderAttributes(30));
         $invoice = Invoice::create([
@@ -124,19 +138,21 @@ class OrderPaymentTermsTest extends TestCase
         $order->payment_terms = null;
         $order->setRelation('contract', $contract);
 
-        $errors = new \Illuminate\Support\ViewErrorBag();
-        $html = view('orders.edit', compact('order', 'contract', 'errors'))->render();
+        $errors = new ViewErrorBag;
+        $backUrl = route('dashboard');
+        $html = view('orders.edit', compact('order', 'contract', 'errors', 'backUrl'))->render();
         $this->assertStringContainsString('name="payment_terms" value=""', $html);
         $this->assertStringNotContainsString('name="payment_terms" value="14"', $html);
     }
 
     public function test_subscription_flow_keeps_its_own_terms_and_does_not_create_order(): void
     {
+        $this->grantSubjectPermission(PermissionName::ContractSubjectsCreate);
         [, $contract] = $this->companyAndContract();
-        $this->post(route('contracts.subjects.store', $contract), [
-            'subject_type' => 'subscription', 'title' => 'Support', 'start_date' => '2026-08-01',
+        $this->post(route('contracts.subscriptions.store', $contract), [
+            'service_name' => 'Support', 'start_date' => '2026-08-01',
             'billing_period' => 'monthly', 'amount' => '50.00', 'payment_terms' => 30,
-            'order_date' => '2026-01-01', 'price' => '999.00',
+            'status' => 'active', 'order_date' => '2026-01-01', 'price' => '999.00',
         ])->assertSessionDoesntHaveErrors();
 
         $this->assertDatabaseCount('orders', 0);
@@ -147,7 +163,13 @@ class OrderPaymentTermsTest extends TestCase
     {
         $company = Company::create(['name' => 'Order Terms Company', 'status' => 'active', 'invoice_mode' => 'separate']);
         $contract = Contract::create(['company_id' => $company->id, 'contract_number' => 'ORDER-TERMS', 'start_date' => '2026-01-01', 'status' => 'active']);
+
         return [$company, $contract];
+    }
+
+    private function grantSubjectPermission(PermissionName $permission): void
+    {
+        $this->authenticatedUser->givePermissionTo($permission->value);
     }
 
     private function orderAttributes(int $terms): array

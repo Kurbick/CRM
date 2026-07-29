@@ -4,70 +4,40 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Models\Contract;
-use Illuminate\Http\Request;
+use App\Models\Order;
+use App\Models\Subscription;
+use Illuminate\Support\Facades\Gate;
 
 class ContractSubjectController extends Controller
 {
     public function create(Contract $contract)
     {
-        $contract->load('company');
+        $canCreateOrder = Gate::allows('create', [Order::class, $contract]);
+        $canCreateSubscription = Gate::allows('create', [Subscription::class, $contract]);
 
-        return view('contract-subjects.create', compact('contract'));
+        abort_unless($canCreateOrder || $canCreateSubscription, 403);
+
+        $contract->loadMissing('company:id,name');
+        $backUrl = $this->backUrl($contract);
+
+        return view('contract-subjects.create', compact(
+            'contract',
+            'canCreateOrder',
+            'canCreateSubscription',
+            'backUrl'
+        ));
     }
 
-    public function store(Request $request, Contract $contract)
+    private function backUrl(Contract $contract): string
     {
-        $validated = $request->validate([
-            'subject_type' => 'required|in:one_time,subscription',
-
-            'title' => 'required|string|max:255',
-
-            'order_date' => 'nullable|required_if:subject_type,one_time|date',
-            'price' => 'nullable|required_if:subject_type,one_time|numeric|min:0',
-
-            'start_date' => 'nullable|required_if:subject_type,subscription|date',
-            'billing_period' => 'nullable|required_if:subject_type,subscription|in:monthly,quarterly,semiannual,annual,custom',
-            'billing_period_custom' => 'nullable|required_if:billing_period,custom|string|max:255',
-            'amount' => 'nullable|required_if:subject_type,subscription|numeric|min:0',
-
-            'payment_terms' => $request->input('subject_type') === 'one_time'
-                ? 'required|integer|min:0|max:3650'
-                : 'required|integer|min:1|max:365',
-            'comment' => 'nullable|string',
-        ], [
-            'payment_terms.required' => 'Укажите срок оплаты в днях.',
-            'payment_terms.integer' => 'Срок оплаты должен быть целым числом дней.',
-        ]);
-
-        if ($validated['subject_type'] === 'one_time') {
-            $contract->orders()->create([
-                'title' => trim($validated['title']),
-                'service_type_id' => null,
-                'order_date' => $validated['order_date'],
-                'price' => $validated['price'],
-                'payment_terms' => $validated['payment_terms'],
-                'status' => 'in_progress',
-                'comment' => $validated['comment'] ?? null,
-            ]);
-        } else {
-            $contract->subscriptions()->create([
-                'title' => trim($validated['title']),
-                'service_type_id' => null,
-                'start_date' => $validated['start_date'],
-                'billing_period' => $validated['billing_period'],
-                'billing_period_custom' => $validated['billing_period'] === 'custom'
-                    ? ($validated['billing_period_custom'] ?? null)
-                    : null,
-                'amount' => $validated['amount'],
-                'payment_terms' => $validated['payment_terms'],
-                'next_billing_date' => $validated['start_date'],
-                'status' => 'active',
-                'comment' => $validated['comment'] ?? null,
-            ]);
+        if (Gate::allows('view', $contract)) {
+            return route('contracts.show', $contract);
         }
 
-        return redirect()
-            ->route('contracts.show', $contract)
-            ->with('success', 'Предмет договора успешно добавлен.');
+        if (Gate::allows('view', $contract->company)) {
+            return route('companies.show', $contract->company);
+        }
+
+        return route('dashboard');
     }
 }

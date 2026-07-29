@@ -3,8 +3,7 @@
 @section('content')
 
     <div class="mb-6">
-        <a href="{{ route('contracts.show', $contract) }}" class="text-sm text-gray-500 hover:text-gray-700">← Назад к
-            договору</a>
+        <a href="{{ $backUrl }}" class="text-sm text-gray-500 hover:text-gray-700">← Назад</a>
         <h1 class="text-2xl font-bold text-gray-900 mt-2">Добавить заказ</h1>
         <p class="text-sm text-gray-500">Договор: {{ $contract->contract_number }} — {{ $contract->company->name }}</p>
     </div>
@@ -78,7 +77,7 @@
                     class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-6 py-2.5 rounded-lg transition">
                     Сохранить заказ
                 </button>
-                <a href="{{ route('contracts.show', $contract) }}"
+                <a href="{{ $backUrl }}"
                     class="px-6 py-2.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition">
                     Отмена
                 </a>

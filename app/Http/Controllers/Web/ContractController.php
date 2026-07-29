@@ -248,8 +248,12 @@ class ContractController extends Controller
 
         $contract->load([
             'company:id,name',
-            'orders.serviceType',
-            'subscriptions.serviceType',
+            'orders' => fn ($query) => $query
+                ->with('serviceType')
+                ->withExists('invoiceLines'),
+            'subscriptions' => fn ($query) => $query
+                ->with('serviceType')
+                ->withExists('invoiceLines'),
             'documents' => function ($query) {
                 $query->latest();
             },
