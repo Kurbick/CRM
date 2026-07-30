@@ -4,6 +4,8 @@
 
 @section('content')
 
+    @php($scheduleLocked = $subscription->invoice_lines_count > 0)
+
     <div class="mb-6">
         <a href="{{ $backUrl }}" class="text-sm text-gray-500 hover:text-gray-700">
             ← Назад
@@ -49,7 +51,10 @@
                     Дата начала <span class="text-red-500">*</span>
                 </label>
 
-                <x-form.date-input name="start_date" :value="old('start_date', $subscription->start_date)" required />
+                @if ($scheduleLocked)
+                    <input type="hidden" name="start_date" value="{{ old('start_date', $subscription->start_date->toDateString()) }}">
+                @endif
+                <x-form.date-input name="start_date" :value="old('start_date', $subscription->start_date)" required :disabled="$scheduleLocked" />
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -66,7 +71,7 @@
                                 .classList
                                 .toggle('hidden', this.value !== 'custom')
                         "
-                        required>
+                        required @disabled($scheduleLocked)>
                         <option value="monthly"
                             {{ old('billing_period', $subscription->billing_period) === 'monthly' ? 'selected' : '' }}>
                             Ежемесячно
@@ -92,6 +97,9 @@
                             Свой вариант
                         </option>
                     </select>
+                    @if ($scheduleLocked)
+                        <input type="hidden" name="billing_period" value="{{ $subscription->billing_period }}">
+                    @endif
 
                     @error('billing_period')
                         <p class="text-xs text-red-500 mt-1">
@@ -124,17 +132,34 @@
                     Свой период <span class="text-red-500">*</span>
                 </label>
 
-                <input type="text" name="billing_period_custom" id="custom_period"
-                    value="{{ old('billing_period_custom', $subscription->billing_period_custom) }}"
-                    placeholder="Например: каждые 2 месяца" maxlength="255"
-                    class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition">
+                <div class="grid grid-cols-2 gap-2">
+                    <input type="number" name="custom_interval_value"
+                        value="{{ old('custom_interval_value', $subscription->custom_interval_value) }}"
+                        min="1" max="3650" placeholder="Количество" @disabled($scheduleLocked)
+                        class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition disabled:bg-gray-100">
+                    <select name="custom_interval_unit" @disabled($scheduleLocked)
+                        class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition disabled:bg-gray-100">
+                        <option value="day" {{ old('custom_interval_unit', $subscription->custom_interval_unit) === 'day' ? 'selected' : '' }}>дней</option>
+                        <option value="month" {{ old('custom_interval_unit', $subscription->custom_interval_unit) === 'month' ? 'selected' : '' }}>месяцев</option>
+                        <option value="year" {{ old('custom_interval_unit', $subscription->custom_interval_unit) === 'year' ? 'selected' : '' }}>лет</option>
+                    </select>
+                </div>
+                @if ($scheduleLocked && $subscription->billing_period === 'custom')
+                    <input type="hidden" name="custom_interval_value" value="{{ $subscription->custom_interval_value }}">
+                    <input type="hidden" name="custom_interval_unit" value="{{ $subscription->custom_interval_unit }}">
+                @endif
 
-                @error('billing_period_custom')
+                @error('custom_interval_value')
                     <p class="text-xs text-red-500 mt-1">
                         {{ $message }}
                     </p>
                 @enderror
+                @error('custom_interval_unit')<p class="text-xs text-red-500 mt-1">{{ $message }}</p>@enderror
             </div>
+
+            @if ($scheduleLocked)
+                <p class="text-sm text-gray-500">График нельзя изменить после добавления подписки в счёт.</p>
+            @endif
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>

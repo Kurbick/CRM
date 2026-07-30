@@ -3,12 +3,13 @@
 namespace App\Http\Controllers\Web;
 
 use App\Actions\Subscriptions\DeleteSubscription;
+use App\Actions\Subscriptions\UpdateSubscription;
 use App\Exceptions\SubscriptionDeletionException;
 use App\Http\Controllers\Controller;
 use App\Models\Contract;
 use App\Models\ServiceType;
 use App\Models\Subscription;
-use App\Services\InvoiceDueDateSynchronizer;
+use App\Services\SubscriptionLifecycle;
 use App\Support\Navigation\AuthorizedLandingPage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -34,29 +35,33 @@ class SubscriptionController extends Controller
             'service_name' => 'required|string|max:255',
             'start_date' => 'required|date',
             'billing_period' => 'required|in:monthly,quarterly,semiannual,annual,custom',
-            'billing_period_custom' => 'nullable|required_if:billing_period,custom|string|max:255',
+            'custom_interval_value' => 'nullable|required_if:billing_period,custom|integer|min:1|max:3650',
+            'custom_interval_unit' => 'nullable|required_if:billing_period,custom|in:day,month,year',
             'amount' => 'required|numeric|min:0',
             'payment_terms' => 'required|integer|min:1|max:365',
             'status' => 'required|in:active,suspended,completed,cancelled',
             'comment' => 'nullable|string',
         ]);
 
-        $serviceType = ServiceType::firstOrCreate(
-            [
-                'name' => trim($validated['service_name']),
-                'type' => 'subscription',
-            ],
-            [
-                'base_price' => $validated['amount'],
-            ]
-        );
+        DB::transaction(function () use ($contract, $validated): void {
+            $serviceType = ServiceType::firstOrCreate(
+                [
+                    'name' => trim($validated['service_name']),
+                    'type' => 'subscription',
+                ],
+                [
+                    'base_price' => $validated['amount'],
+                ]
+            );
 
-        unset($validated['service_name']);
+            unset($validated['service_name']);
+            $validated = app(SubscriptionLifecycle::class)->normalizeInterval($validated);
+            $validated['service_type_id'] = $serviceType->id;
 
-        $validated['next_billing_date'] = $validated['start_date'];
-        $validated['service_type_id'] = $serviceType->id;
-
-        $contract->subscriptions()->create($validated);
+            $subscription = $contract->subscriptions()->make($validated);
+            $subscription->next_billing_date = $validated['start_date'];
+            $subscription->save();
+        });
 
         return $this->mutationRedirect($contract)
             ->with('success', 'Подписка успешно добавлена.');
@@ -71,6 +76,7 @@ class SubscriptionController extends Controller
             ->firstOrFail();
         $contract->loadMissing('company:id,name');
         $subscription->loadMissing('serviceType:id,name');
+        $subscription->loadCount('invoiceLines');
         $backUrl = $this->backUrl($contract);
 
         return view('subscriptions.edit', compact('subscription', 'contract', 'backUrl'));
@@ -79,7 +85,7 @@ class SubscriptionController extends Controller
     public function update(
         Request $request,
         Subscription $subscription,
-        InvoiceDueDateSynchronizer $dueDateSynchronizer
+        UpdateSubscription $updateSubscription
     ) {
         Gate::authorize('update', $subscription);
 
@@ -87,7 +93,8 @@ class SubscriptionController extends Controller
             'title' => 'required|string|max:255',
             'start_date' => 'required|date',
             'billing_period' => 'required|in:monthly,quarterly,semiannual,annual,custom',
-            'billing_period_custom' => 'nullable|required_if:billing_period,custom|string|max:255',
+            'custom_interval_value' => 'nullable|required_if:billing_period,custom|integer|min:1|max:3650',
+            'custom_interval_unit' => 'nullable|required_if:billing_period,custom|in:day,month,year',
             'amount' => 'required|numeric|min:0',
             'payment_terms' => 'required|integer|min:1|max:365',
             'status' => 'required|in:active,suspended,completed,cancelled',
@@ -96,16 +103,7 @@ class SubscriptionController extends Controller
 
         $validated['title'] = trim($validated['title']);
         $validated['service_type_id'] = null;
-        $validated['next_billing_date'] = $validated['start_date'];
-
-        if ($validated['billing_period'] !== 'custom') {
-            $validated['billing_period_custom'] = null;
-        }
-
-        DB::transaction(function () use ($subscription, $validated, $dueDateSynchronizer): void {
-            $subscription->update($validated);
-            $dueDateSynchronizer->synchronizeForSubscription($subscription);
-        });
+        $subscription = $updateSubscription->handle($subscription, $validated);
 
         $contract = $subscription->contract()
             ->select(['id', 'company_id', 'contract_number'])

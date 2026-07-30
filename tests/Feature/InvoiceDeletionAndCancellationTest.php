@@ -129,16 +129,34 @@ class InvoiceDeletionAndCancellationTest extends TestCase
         ]);
     }
 
-    public function test_later_draft_does_not_block_cancellation(): void
+    public function test_later_draft_reservation_blocks_cancellation_without_partial_changes(): void
     {
-        [$invoice, $subscriptionId] = $this->issuedSubscriptionInvoice();
+        [$invoice, $subscriptionId, $currentLineId] = $this->issuedSubscriptionInvoice();
+        $currentKey = str_repeat('a', 64);
+        DB::table('invoice_lines')->where('id', $currentLineId)->update([
+            'billing_occurrence_key' => $currentKey,
+        ]);
         $later = $this->invoice('draft', 'LATER-DRAFT');
-        $this->line($later, $subscriptionId, '2026-08-01', '2026-08-31');
+        $laterKey = str_repeat('b', 64);
+        $laterLineId = $this->line($later, $subscriptionId, '2026-08-01', '2026-08-31', $laterKey);
 
         $this->patch(route('invoices.cancel', $invoice))
-            ->assertSessionDoesntHaveErrors();
+            ->assertSessionHasErrors('cancel');
 
-        $this->assertDatabaseHas('invoices', ['id' => $invoice->id, 'status' => 'cancelled']);
+        $this->assertDatabaseHas('invoices', ['id' => $invoice->id, 'status' => 'issued']);
+        $this->assertDatabaseHas('subscriptions', [
+            'id' => $subscriptionId,
+            'next_billing_date' => '2026-08-01',
+        ]);
+        $this->assertDatabaseHas('invoice_lines', [
+            'id' => $currentLineId,
+            'billing_occurrence_key' => $currentKey,
+        ]);
+        $this->assertDatabaseHas('invoices', ['id' => $later->id, 'status' => 'draft']);
+        $this->assertDatabaseHas('invoice_lines', [
+            'id' => $laterLineId,
+            'billing_occurrence_key' => $laterKey,
+        ]);
     }
 
     public function test_later_active_invoice_statuses_block_cancellation(): void
@@ -159,18 +177,18 @@ class InvoiceDeletionAndCancellationTest extends TestCase
         }
     }
 
-    public function test_custom_billing_period_does_not_change_next_billing_date(): void
+    public function test_custom_billing_period_cancellation_restores_occurrence_start(): void
     {
         $invoice = $this->invoice('issued');
         $subscriptionId = $this->subscription('2026-10-15', 'custom');
-        $this->line($invoice, $subscriptionId, null, null);
+        $this->line($invoice, $subscriptionId, '2026-09-01', '2026-10-14');
 
         $this->patch(route('invoices.cancel', $invoice))
             ->assertSessionDoesntHaveErrors();
 
         $this->assertDatabaseHas('subscriptions', [
             'id' => $subscriptionId,
-            'next_billing_date' => '2026-10-15',
+            'next_billing_date' => '2026-09-01',
         ]);
     }
 
@@ -244,9 +262,9 @@ class InvoiceDeletionAndCancellationTest extends TestCase
     {
         $invoice = $this->invoice('issued', $suffix);
         $subscriptionId = $this->subscription('2026-08-01');
-        $this->line($invoice, $subscriptionId);
+        $lineId = $this->line($invoice, $subscriptionId);
 
-        return [$invoice, $subscriptionId];
+        return [$invoice, $subscriptionId, $lineId];
     }
 
     private function invoice(string $status, ?string $suffix = null): Invoice
@@ -285,6 +303,8 @@ class InvoiceDeletionAndCancellationTest extends TestCase
             'start_date' => '2026-01-01',
             'next_billing_date' => $nextBillingDate,
             'billing_period' => $billingPeriod,
+            'custom_interval_value' => $billingPeriod === 'custom' ? 45 : null,
+            'custom_interval_unit' => $billingPeriod === 'custom' ? 'day' : null,
             'amount' => 100,
         ]);
     }
@@ -293,7 +313,8 @@ class InvoiceDeletionAndCancellationTest extends TestCase
         Invoice $invoice,
         ?int $subscriptionId = null,
         ?string $periodStart = '2026-07-01',
-        ?string $periodEnd = '2026-07-31'
+        ?string $periodEnd = '2026-07-31',
+        ?string $occurrenceKey = null,
     ): int {
         return $invoice->lines()->create([
             'subscription_id' => $subscriptionId,
@@ -301,6 +322,7 @@ class InvoiceDeletionAndCancellationTest extends TestCase
             'amount' => 100,
             'period_start' => $periodStart,
             'period_end' => $periodEnd,
+            'billing_occurrence_key' => $occurrenceKey,
         ])->id;
     }
 

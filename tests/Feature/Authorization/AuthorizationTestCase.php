@@ -107,7 +107,7 @@ abstract class AuthorizationTestCase extends TestCase
     /** @param array<string, mixed> $overrides */
     protected function subjectSubscription(Contract $contract, array $overrides = []): Subscription
     {
-        return $contract->subscriptions()->create([
+        return $contract->subscriptions()->forceCreate([
             'service_type_id' => $this->subjectServiceType('subscription')->id,
             'title' => 'Authorization subscription',
             'start_date' => '2026-08-01',

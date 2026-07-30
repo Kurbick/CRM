@@ -46,7 +46,13 @@
                 'date' => $subscription->start_date,
                 'period' =>
                     $subscription->billing_period === 'custom'
-                        ? $subscription->billing_period_custom ?? 'Другой период'
+                        ? ($subscription->custom_interval_value && $subscription->custom_interval_unit
+                            ? $subscription->custom_interval_value.' '.match ($subscription->custom_interval_unit) {
+                                'day' => 'дн.',
+                                'month' => 'мес.',
+                                'year' => 'г.',
+                            }
+                            : 'Интервал не задан')
                         : $periods[$subscription->billing_period] ?? $subscription->billing_period,
                 'amount' => $subscription->amount,
                 'status' => $subscription->status,

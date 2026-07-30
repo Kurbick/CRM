@@ -47,13 +47,15 @@ class SubscriptionAuthorizationTest extends AuthorizationTestCase
         $this->assertSame($contract->id, $subscription->contract_id);
         $this->assertSame('subscription', $subscription->serviceType->type);
         $this->assertNotSame($wrongType->id, $subscription->service_type_id);
-        $this->assertSame('2026-08-10', $subscription->next_billing_date);
+        $this->assertSame('2026-08-10', $subscription->next_billing_date->toDateString());
     }
 
     public function test_forbidden_update_preserves_all_fields_schedule_and_invoice_due_date(): void
     {
         $contract = $this->contract($this->company());
-        $subscription = $this->subjectSubscription($contract);
+        $subscription = $this->subjectSubscription($contract, [
+            'next_billing_date' => '2026-12-01',
+        ]);
         $invoice = $this->invoiceForSubscription($subscription);
         $original = $subscription->fresh()->getAttributes();
         $this->actingAsPermissions([PermissionName::ContractSubjectsDelete->value]);
@@ -69,7 +71,9 @@ class SubscriptionAuthorizationTest extends AuthorizationTestCase
     {
         $contract = $this->contract($this->company('Subscription update A'));
         $other = $this->contract($this->company('Subscription update B'));
-        $subscription = $this->subjectSubscription($contract);
+        $subscription = $this->subjectSubscription($contract, [
+            'next_billing_date' => '2026-12-01',
+        ]);
         $maliciousType = $this->subjectServiceType('one_time');
         $originalCreatedAt = $subscription->created_at;
         $this->actingAsPermissions([PermissionName::ContractSubjectsUpdate->value]);
@@ -79,6 +83,8 @@ class SubscriptionAuthorizationTest extends AuthorizationTestCase
             ->assertDontSee('href="'.route('contracts.show', $contract).'"', false);
         $this->put(route('subscriptions.update', $subscription), [
             ...$this->updatePayload($other),
+            'start_date' => '2026-08-01',
+            'billing_period' => 'monthly',
             'service_type_id' => $maliciousType->id,
             'next_billing_date' => '2035-01-01',
             'created_at' => '1999-01-01 00:00:00',
@@ -88,7 +94,7 @@ class SubscriptionAuthorizationTest extends AuthorizationTestCase
 
         $subscription->refresh();
         $this->assertSame($contract->id, $subscription->contract_id);
-        $this->assertSame('2026-09-01', $subscription->next_billing_date);
+        $this->assertSame('2026-12-01', $subscription->next_billing_date->toDateString());
         $this->assertNull($subscription->service_type_id);
         $this->assertNotSame($maliciousType->id, $subscription->service_type_id);
         $this->assertTrue($originalCreatedAt->equalTo($subscription->created_at));

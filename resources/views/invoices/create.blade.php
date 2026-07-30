@@ -166,12 +166,12 @@
                             <div class="rounded-lg border border-gray-200 bg-gray-50 p-3">
                                 <input type="hidden" :name="`lines[${index}][subscription_id]`" :value="line.subscription_id || ''">
                                 <input type="hidden" :name="`lines[${index}][order_id]`" :value="line.order_id || ''">
-                                <input type="hidden" :name="line.subscription_id && !isCustomLine(line) ? `lines[${index}][period_start]` : null" :value="line.period_start || ''">
-                                <input type="hidden" :name="line.subscription_id && !isCustomLine(line) ? `lines[${index}][period_end]` : null" :value="line.period_end || ''">
+                                <input type="hidden" :name="line.subscription_id ? `lines[${index}][period_start]` : null" :value="line.period_start || ''">
+                                <input type="hidden" :name="line.subscription_id ? `lines[${index}][period_end]` : null" :value="line.period_end || ''">
                                 <div class="mb-2 flex items-center justify-between gap-3">
                                     <div>
                                         <p class="text-xs font-medium text-gray-500" x-text="lineType(line)"></p>
-                                        <p x-show="line.subscription_id && line.billing_period !== 'custom'" class="mt-0.5 text-xs text-gray-500">
+                                        <p x-show="line.subscription_id" class="mt-0.5 text-xs text-gray-500">
                                             Расчётный период: <span x-text="`${formatDate(line.period_start)} — ${formatDate(line.period_end)}`"></span>
                                         </p>
                                     </div>
@@ -187,16 +187,6 @@
                                         <label class="mb-1 block text-xs text-gray-500">Сумма (₼)</label>
                                         <input type="number" :name="`lines[${index}][amount]`" x-model="line.amount" min="0.01" step="0.01" required
                                             class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500">
-                                    </div>
-                                </div>
-                                <div x-show="isCustomLine(line)" class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                    <div>
-                                        <label :for="`line_${index}_period_start`" class="mb-1 block text-xs text-gray-500">Начало расчётного периода</label>
-                                        <x-form.date-input name="period_start" dynamic-name="`lines[${index}][period_start]`" dynamic-id="`line_${index}_period_start`" x-model="line.period_start" ::required="isCustomLine(line)" ::disabled="!isCustomLine(line)" />
-                                    </div>
-                                    <div>
-                                        <label :for="`line_${index}_period_end`" class="mb-1 block text-xs text-gray-500">Окончание расчётного периода</label>
-                                        <x-form.date-input name="period_end" dynamic-name="`lines[${index}][period_end]`" dynamic-id="`line_${index}_period_end`" dynamic-min="line.period_start || null" x-model="line.period_end" ::required="isCustomLine(line)" ::disabled="!isCustomLine(line)" />
                                     </div>
                                 </div>
                             </div>
@@ -356,10 +346,9 @@ document.addEventListener('alpine:init', () => {
         mergeOldMetadata() { this.lines.forEach(line => { const item = this.availableItems.find(i => this.itemKey(i) === line.key); if (item) { line.billing_period = item.billing_period || null; line.payment_terms = item.payment_terms ?? null } }) },
         normaliseOldLine(line, i) { const type = line.subscription_id ? 'subscription' : (line.order_id ? 'order' : 'manual'); const id = line.subscription_id || line.order_id || i; return { key: type === 'manual' ? `manual-old-${i}` : `${type}-${id}`, description: line.description || '', amount: line.amount || '', subscription_id: line.subscription_id || null, order_id: line.order_id || null, period_start: line.period_start || null, period_end: line.period_end || null, billing_period: line.billing_period || null, payment_terms: null } },
         itemKey(item) { return `${item.type}-${item.id}` }, isSelected(item) { return this.lines.some(line => line.key === this.itemKey(item)) },
-        isCustomLine(line) { return Boolean(line.subscription_id && line.billing_period === 'custom') },
         toggleItem(item, checked) { const key = this.itemKey(item); if (checked && !this.lines.some(line => line.key === key)) this.lines.push(this.lineFromItem(item)); else if (!checked) this.lines = this.lines.filter(line => line.key !== key); this.afterLinesChanged() },
         lineFromItem(item) { const period = item.type === 'subscription' ? this.subscriptionPeriod(item) : [null, null]; return { key: this.itemKey(item), description: item.description, amount: item.amount, subscription_id: item.type === 'subscription' ? item.id : null, order_id: item.type === 'order' ? item.id : null, period_start: period[0], period_end: period[1], billing_period: item.billing_period || null, payment_terms: item.payment_terms ?? null } },
-        subscriptionPeriod(item) { if (item.billing_period === 'custom') return [null, null]; const months = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12 }[item.billing_period]; if (!months || !item.next_billing_date) return [null, null]; const start = this.parseDate(item.next_billing_date); const end = new Date(start); const day = end.getDate(); end.setDate(1); end.setMonth(end.getMonth() + months); end.setDate(Math.min(day, new Date(end.getFullYear(), end.getMonth() + 1, 0).getDate())); end.setDate(end.getDate() - 1); return [this.inputDate(start), this.inputDate(end)] },
+        subscriptionPeriod(item) { if (!item.next_billing_date || !item.start_date) return [null, null]; const start = this.parseDate(item.next_billing_date); const anchor = this.parseDate(item.start_date); const next = new Date(start); if (item.billing_period === 'custom' && item.custom_interval_unit === 'day') { next.setDate(next.getDate() + Number(item.custom_interval_value)); } else { const standardMonths = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12 }; const months = item.billing_period === 'custom' ? Number(item.custom_interval_value) * (item.custom_interval_unit === 'year' ? 12 : 1) : standardMonths[item.billing_period]; if (!months) return [null, null]; const anchorIsEom = anchor.getDate() === new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0).getDate(); next.setDate(1); next.setMonth(next.getMonth() + months); const targetLastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate(); next.setDate(anchorIsEom ? targetLastDay : Math.min(anchor.getDate(), targetLastDay)); } const end = new Date(next); end.setDate(end.getDate() - 1); return [this.inputDate(start), this.inputDate(end)] },
         addManualLine() { this.lines.push({ key: `manual-${Date.now()}-${Math.random()}`, description: '', amount: '', subscription_id: null, order_id: null, period_start: null, period_end: null, billing_period: null, payment_terms: null }); this.afterLinesChanged() },
         removeLine(index) { this.lines.splice(index, 1); this.afterLinesChanged() },
         afterLinesChanged() { this.linesError = false; this.recalculateDueDate() },

@@ -45,7 +45,7 @@
                 <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Период <span class="text-red-500">*</span></label>
                 <select name="billing_period" id="billing_period"
                     class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition"
-                    onchange="document.getElementById('custom_period').classList.toggle('hidden', this.value !== 'custom')"
+                    onchange="document.getElementById('custom_interval_fields').classList.toggle('hidden', this.value !== 'custom')"
                     required>
                     <option value="monthly" {{ old('billing_period') === 'monthly' ? 'selected' : '' }}>Ежемесячно</option>
                     <option value="quarterly" {{ old('billing_period') === 'quarterly' ? 'selected' : '' }}>Ежеквартально</option>
@@ -53,10 +53,19 @@
                     <option value="annual" {{ old('billing_period') === 'annual' ? 'selected' : '' }}>Ежегодно</option>
                     <option value="custom" {{ old('billing_period') === 'custom' ? 'selected' : '' }}>Свой вариант</option>
                 </select>
-            <input type="text" name="billing_period_custom" id="custom_period"
-                    value="{{ old('billing_period_custom') }}"
-                    placeholder="Например: каждые 2 месяца..."
-                    class="hidden w-full mt-2 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition">
+                <div id="custom_interval_fields" class="{{ old('billing_period') === 'custom' ? '' : 'hidden' }} mt-2 grid grid-cols-2 gap-2">
+                    <input type="number" name="custom_interval_value" value="{{ old('custom_interval_value') }}"
+                        min="1" max="3650" placeholder="Количество"
+                        class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition">
+                    <select name="custom_interval_unit"
+                        class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition">
+                        <option value="day" {{ old('custom_interval_unit') === 'day' ? 'selected' : '' }}>дней</option>
+                        <option value="month" {{ old('custom_interval_unit') === 'month' ? 'selected' : '' }}>месяцев</option>
+                        <option value="year" {{ old('custom_interval_unit') === 'year' ? 'selected' : '' }}>лет</option>
+                    </select>
+                </div>
+                @error('custom_interval_value')<p class="text-xs text-red-500 mt-1">{{ $message }}</p>@enderror
+                @error('custom_interval_unit')<p class="text-xs text-red-500 mt-1">{{ $message }}</p>@enderror
             </div>
             <div>
                 <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Сумма (₼) <span class="text-red-500">*</span></label>

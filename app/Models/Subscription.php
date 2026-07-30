@@ -8,8 +8,14 @@ class Subscription extends Model
 {
     protected $fillable = [
         'contract_id', 'service_type_id', 'title', 'start_date',
-        'next_billing_date', 'billing_period', 'amount',
+        'billing_period', 'custom_interval_value', 'custom_interval_unit', 'amount',
         'payment_terms', 'status', 'comment',
+    ];
+
+    protected $casts = [
+        'start_date' => 'date',
+        'next_billing_date' => 'date',
+        'custom_interval_value' => 'integer',
     ];
 
     public function contract()

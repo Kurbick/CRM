@@ -16,6 +16,7 @@ class InvoiceLine extends Model
         'amount',
         'period_start',
         'period_end',
+        'billing_occurrence_key',
     ];
 
     protected $casts = [

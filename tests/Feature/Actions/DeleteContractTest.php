@@ -150,7 +150,7 @@ class DeleteContractTest extends AuthorizationTestCase
                 'price' => '10.00',
                 'payment_terms' => 14,
             ]),
-            'subscriptions' => $contract->subscriptions()->create([
+            'subscriptions' => $contract->subscriptions()->forceCreate([
                 'service_type_id' => $this->serviceType('subscription'),
                 'start_date' => '2026-08-01',
                 'next_billing_date' => '2026-09-01',
