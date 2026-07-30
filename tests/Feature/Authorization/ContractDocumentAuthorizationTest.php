@@ -223,7 +223,7 @@ class ContractDocumentAuthorizationTest extends AuthorizationTestCase
         }
     }
 
-    public function test_contract_show_metadata_and_actions_follow_permissions_without_technical_disclosure(): void
+    public function test_contract_show_hides_all_document_metadata_without_document_permission(): void
     {
         $contract = $this->contract($company = $this->company('DOCUMENT-COMPANY-NAME'));
         $company->forceFill([
@@ -239,12 +239,16 @@ class ContractDocumentAuthorizationTest extends AuthorizationTestCase
             'comment' => 'VISIBLE-DOCUMENT-COMMENT',
         ]);
 
-        $this->actingAsPermissions([PermissionName::ContractsView->value]);
+        $this->actingAsPermissions([
+            PermissionName::ContractsView->value,
+            PermissionName::ContractsDelete->value,
+        ]);
         DB::flushQueryLog();
         DB::enableQueryLog();
         $withoutActions = $this->get(route('contracts.show', $contract))->assertOk()
-            ->assertSee('VISIBLE-DISPLAY-NAME.pdf')
-            ->assertSee('VISIBLE-DOCUMENT-COMMENT')
+            ->assertDontSee('VISIBLE-DISPLAY-NAME.pdf')
+            ->assertDontSee('VISIBLE-DOCUMENT-COMMENT')
+            ->assertDontSee('Прикреплённых файлов:')
             ->assertDontSee('TECHNICAL-GENERATED-SECRET')
             ->assertDontSee('TECHNICAL-MIME-SECRET')
             ->assertDontSee('action="'.route('contracts.documents.store', $contract).'"', false)
@@ -255,7 +259,7 @@ class ContractDocumentAuthorizationTest extends AuthorizationTestCase
         $documentQueries = collect(DB::getQueryLog())->filter(
             fn (array $query): bool => str_contains($query['query'], 'contract_documents')
         );
-        $this->assertCount(1, $documentQueries);
+        $this->assertCount(0, $documentQueries);
         DB::disableQueryLog();
 
         $this->actingAsPermissions([
@@ -281,13 +285,21 @@ class ContractDocumentAuthorizationTest extends AuthorizationTestCase
             PermissionName::ContractDocumentsUpload->value,
         ]);
 
+        DB::flushQueryLog();
+        DB::enableQueryLog();
         $this->get(route('contracts.show', $contract))->assertOk()
-            ->assertSee($document->original_name)
+            ->assertDontSee($document->original_name)
+            ->assertDontSee('Прикреплённых файлов:')
             ->assertSee('action="'.route('contracts.documents.store', $contract).'"', false)
             ->assertSee('enctype="multipart/form-data"', false)
             ->assertDontSee(route('contract-documents.download', $document), false)
             ->assertDontSee('action="'.route('contract-documents.destroy', $document).'"', false)
             ->assertDontSee('name="_method" value="DELETE"', false);
+        $documentQueries = collect(DB::getQueryLog())->filter(
+            fn (array $query): bool => str_contains($query['query'], 'contract_documents')
+        );
+        $this->assertCount(0, $documentQueries);
+        DB::disableQueryLog();
     }
 
     public function test_contract_show_with_download_permission_displays_only_download_action(): void

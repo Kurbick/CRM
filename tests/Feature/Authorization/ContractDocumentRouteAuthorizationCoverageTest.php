@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Tests\Support\DomainQueryRecorder;
 
 class ContractDocumentRouteAuthorizationCoverageTest extends AuthorizationTestCase
 {
@@ -109,6 +110,39 @@ class ContractDocumentRouteAuthorizationCoverageTest extends AuthorizationTestCa
     {
         $this->actingAsPermissions([$definition['wrong_permission']]);
         $this->assertForbiddenHttp($definition);
+    }
+
+    #[DataProvider('provider')]
+    public function test_denied_existing_and_missing_ids_are_identical_without_domain_queries_or_storage(
+        array $definition,
+    ): void {
+        $contract = $this->contract($this->company('Pre-binding denial '.uniqid()));
+        $document = $this->document($contract);
+        $disk = Storage::disk('local');
+        $original = $document->fresh()->getAttributes();
+        $this->actingAsPermissions();
+        Storage::shouldReceive('disk')->never();
+
+        $existingId = $definition['scenario'] === 'store' ? $contract->id : $document->id;
+        $missingId = max($contract->id, $document->id) + 1_000_000;
+
+        foreach ([$existingId, $missingId] as $id) {
+            $capture = (new DomainQueryRecorder)->capture(fn () => match ($definition['scenario']) {
+                'store' => $this->post(route($definition['route'], $id), [
+                    'document_type' => 'signed',
+                    'document' => UploadedFile::fake()->create('denied.pdf', 4, 'application/pdf'),
+                ]),
+                'download' => $this->get(route($definition['route'], $id)),
+                'destroy' => $this->delete(route($definition['route'], $id)),
+            });
+
+            $capture['result']->assertForbidden();
+            $this->assertSame([], $capture['records']);
+        }
+
+        $this->assertSame($original, $document->fresh()->getAttributes());
+        $this->assertTrue($disk->exists($document->file_path));
+        $this->assertSame('MATRIX-CONTENT', $disk->get($document->file_path));
     }
 
     #[DataProvider('provider')]

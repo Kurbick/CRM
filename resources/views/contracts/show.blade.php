@@ -178,9 +178,10 @@
     </div>
 
     {{-- Документы договора --}}
-    <div x-data="{
-        uploadOpen: {{ $errors->has('document') || $errors->has('document_type') || $errors->has('comment') ? 'true' : 'false' }}
-    }" class="bg-white rounded-xl border border-gray-200 shadow-sm mb-6">
+    @if ($canUploadDocuments || $canReadDocumentMetadata)
+        <div x-data="{
+            uploadOpen: {{ $errors->has('document') || $errors->has('document_type') || $errors->has('comment') ? 'true' : 'false' }}
+        }" class="bg-white rounded-xl border border-gray-200 shadow-sm mb-6">
         {{-- Заголовок блока --}}
         <div class="px-6 py-5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
@@ -188,9 +189,11 @@
                     Документы договора
                 </h2>
 
-                <p class="text-sm text-gray-500 mt-1">
-                    Прикреплённых файлов: {{ $contract->documents->count() }}
-                </p>
+                @if ($canReadDocumentMetadata)
+                    <p class="text-sm text-gray-500 mt-1">
+                        Прикреплённых файлов: {{ $contract->documents->count() }}
+                    </p>
+                @endif
             </div>
 
             @can('create', [\App\Models\ContractDocument::class, $contract])
@@ -313,9 +316,10 @@
         @endcan
 
         {{-- Список документов --}}
-        @if ($contract->documents->isNotEmpty())
-            <div class="divide-y divide-gray-100">
-                @foreach ($contract->documents as $document)
+        @if ($canReadDocumentMetadata)
+            @if ($contract->documents->isNotEmpty())
+                <div class="divide-y divide-gray-100">
+                    @foreach ($contract->documents as $document)
                     @php
                         if ($document->file_size) {
                             $documentSize =
@@ -402,10 +406,14 @@
                             @endcan
                         </div>
                     </div>
-                @endforeach
-            </div>
+                    @endforeach
+                </div>
+            @else
+                <p class="px-6 py-5 text-sm text-gray-500">Документы пока не добавлены.</p>
+            @endif
         @endif
-    </div>
+        </div>
+    @endif
 
     {{-- Предмет договора --}}
     <div class="bg-white rounded-xl border border-gray-200 shadow-sm">

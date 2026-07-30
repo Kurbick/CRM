@@ -4,7 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\ContractDocument;
 use App\Support\Access\PermissionName;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Storage;
+use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Feature\Authorization\AuthorizationTestCase;
 
@@ -145,6 +147,30 @@ class ContractDocumentDownloadTest extends AuthorizationTestCase
 
         $this->assertSame('LEGACY-CONTENT', $response->streamedContent());
         Storage::disk('local')->assertExists($path);
+    }
+
+    public function test_download_opens_stream_before_response_and_does_not_repeat_storage_lookup(): void
+    {
+        $document = $this->document('eager-stream.pdf', '', false);
+        $stream = fopen('php://temp', 'r+');
+        $this->assertIsResource($stream);
+        fwrite($stream, 'EAGER-STREAM-CONTENT');
+        rewind($stream);
+
+        $disk = Mockery::mock(FilesystemAdapter::class);
+        $disk->shouldReceive('readStream')
+            ->once()
+            ->with($document->file_path)
+            ->andReturn($stream);
+        $disk->shouldNotReceive('exists', 'get', 'download');
+        Storage::shouldReceive('disk')->once()->with('local')->andReturn($disk);
+        $this->actingAsPermissions([PermissionName::ContractDocumentsDownload->value]);
+
+        $response = $this->get(route('contract-documents.download', $document))->assertOk();
+
+        $this->assertIsResource($stream);
+        $this->assertSame('EAGER-STREAM-CONTENT', $response->streamedContent());
+        $this->assertFalse(is_resource($stream));
     }
 
     #[DataProvider('safeFilenameProvider')]

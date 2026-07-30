@@ -107,6 +107,43 @@ class ContractAuthorizationTest extends AuthorizationTestCase
         ]);
     }
 
+    public function test_web_store_rejects_removed_signed_document_field(): void
+    {
+        $company = $this->company('Web stale store field');
+        $payload = [
+            ...$this->contractPayload($company, 'WEB-STALE-STORE'),
+            'signed_document' => 'legacy/public/path.pdf',
+        ];
+        $this->actingAsPermissions([PermissionName::ContractsCreate->value]);
+
+        $this->post(route('contracts.store'), $payload)
+            ->assertSessionHasErrors('signed_document');
+
+        $this->assertDatabaseMissing('contracts', [
+            'contract_number' => 'WEB-STALE-STORE',
+        ]);
+    }
+
+    public function test_web_update_rejects_removed_signed_document_without_partial_mutation(): void
+    {
+        $contract = $this->contract($this->company('Web stale update field'));
+        $before = (array) DB::table('contracts')->where('id', $contract->id)->first();
+        $this->actingAsPermissions([PermissionName::ContractsUpdate->value]);
+
+        $this->put(route('contracts.update', $contract), [
+            'contract_number' => $contract->contract_number,
+            'start_date' => $contract->start_date->toDateString(),
+            'status' => $contract->status,
+            'comment' => 'Must not be saved',
+            'signed_document' => 'legacy/public/path.pdf',
+        ])->assertSessionHasErrors('signed_document');
+
+        $this->assertSame(
+            $before,
+            (array) DB::table('contracts')->where('id', $contract->id)->first(),
+        );
+    }
+
     public function test_delete_only_user_deletes_empty_contract_and_redirects_safely(): void
     {
         $contract = $this->contract($this->company('Delete only company'));
@@ -230,6 +267,7 @@ class ContractAuthorizationTest extends AuthorizationTestCase
             PermissionName::ContractsCreate->value,
             PermissionName::ContractsUpdate->value,
             PermissionName::ContractsDelete->value,
+            PermissionName::ContractDocumentsDownload->value,
         ]);
         $this->get(route('contracts.index'))
             ->assertSee(route('contracts.create'), false)
@@ -250,6 +288,7 @@ class ContractAuthorizationTest extends AuthorizationTestCase
         $this->actingAsPermissions([
             PermissionName::ContractsView->value,
             PermissionName::ContractsDelete->value,
+            PermissionName::ContractDocumentsDownload->value,
         ]);
 
         $this->get(route('contracts.show', $contract))
@@ -264,6 +303,7 @@ class ContractAuthorizationTest extends AuthorizationTestCase
         $this->actingAsPermissions([
             PermissionName::ContractsView->value,
             PermissionName::ContractsDelete->value,
+            PermissionName::ContractDocumentsDownload->value,
         ]);
 
         $this->get(route('contracts.show', $contract))

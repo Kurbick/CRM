@@ -14,12 +14,12 @@ class StoreContractRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'contract_number'  => 'required|string|max:50|unique:contracts,contract_number',
-            'start_date'       => 'required|date',
-            'end_date'         => 'nullable|date|after:start_date',
-            'status'           => 'nullable|in:active,terminated',
-            'signed_document'  => 'nullable|string|max:255',
-            'comment'          => 'nullable|string',
+            'contract_number' => 'required|string|max:50|unique:contracts,contract_number',
+            'start_date' => 'required|date',
+            'end_date' => 'nullable|date|after:start_date',
+            'status' => 'nullable|in:active,terminated',
+            'signed_document' => 'prohibited',
+            'comment' => 'nullable|string',
         ];
     }
 }

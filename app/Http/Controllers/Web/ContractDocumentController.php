@@ -9,6 +9,7 @@ use App\Exceptions\ContractDocumentStorageException;
 use App\Http\Controllers\Controller;
 use App\Models\Contract;
 use App\Models\ContractDocument;
+use App\Support\Access\PermissionName;
 use App\Support\ContractDocuments\ContractDocumentFileType;
 use App\Support\ContractDocuments\ContractDocumentPath;
 use App\Support\ContractDocuments\SafeDocumentName;
@@ -20,15 +21,18 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rules\File;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 class ContractDocumentController extends Controller
 {
     public function store(
         Request $request,
-        Contract $contract,
+        string $contract,
         StoreContractDocument $storeDocument
     ): RedirectResponse {
-        Gate::authorize('create', [ContractDocument::class, $contract]);
+        Gate::authorize(PermissionName::ContractDocumentsUpload->value);
+
+        $contract = Contract::query()->findOrFail($contract);
 
         $validated = $request->validate([
             'document_type' => ['required', 'in:original,signed,other'],
@@ -82,23 +86,35 @@ class ContractDocumentController extends Controller
             ->with('success', 'Документ успешно загружен.');
     }
 
-    public function download(ContractDocument $document): StreamedResponse
+    public function download(string $document): StreamedResponse
     {
-        Gate::authorize('download', $document);
+        Gate::authorize(PermissionName::ContractDocumentsDownload->value);
+
+        $document = ContractDocument::query()->findOrFail($document);
 
         $path = (string) $document->file_path;
 
-        abort_unless(
-            ContractDocumentPath::isAllowed($document, $path)
-                && Storage::disk(ContractDocumentPath::DISK)->exists($path),
-            404,
-            'Файл не найден.'
-        );
+        abort_unless(ContractDocumentPath::isAllowed($document, $path), 404, 'Файл не найден.');
 
-        return Storage::disk(ContractDocumentPath::DISK)->download(
-            $path,
+        try {
+            $stream = Storage::disk(ContractDocumentPath::DISK)->readStream($path);
+        } catch (Throwable) {
+            abort(404, 'Файл не найден.');
+        }
+
+        abort_unless(is_resource($stream), 404, 'Файл не найден.');
+
+        return response()->streamDownload(
+            static function () use ($stream): void {
+                try {
+                    fpassthru($stream);
+                } finally {
+                    fclose($stream);
+                }
+            },
             SafeDocumentName::sanitize((string) $document->original_name),
             [
+                'Content-Type' => 'application/octet-stream',
                 'X-Content-Type-Options' => 'nosniff',
                 'Cache-Control' => 'private, no-store',
             ]
@@ -106,10 +122,12 @@ class ContractDocumentController extends Controller
     }
 
     public function destroy(
-        ContractDocument $document,
+        string $document,
         DeleteContractDocument $deleteDocument
     ): RedirectResponse {
-        Gate::authorize('delete', $document);
+        Gate::authorize(PermissionName::ContractDocumentsDelete->value);
+
+        $document = ContractDocument::query()->findOrFail($document);
 
         $contract = $document->contract()
             ->select(['id', 'company_id', 'contract_number'])

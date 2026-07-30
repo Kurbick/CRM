@@ -7,6 +7,7 @@ use App\Exceptions\ContractDeletionException;
 use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\Contract;
+use App\Support\Access\PermissionName;
 use App\Support\CompanyPageContext;
 use App\Support\Navigation\AuthorizedLandingPage;
 use Illuminate\Http\Request;
@@ -231,6 +232,7 @@ class ContractController extends Controller
             'start_date' => 'required|date',
             'end_date' => 'nullable|date|after:start_date',
             'status' => 'required|in:active,terminated',
+            'signed_document' => 'prohibited',
             'comment' => 'nullable|string',
         ]);
 
@@ -247,7 +249,10 @@ class ContractController extends Controller
     ) {
         Gate::authorize('view', $contract);
 
-        $contract->load([
+        $canUploadDocuments = Gate::allows(PermissionName::ContractDocumentsUpload->value);
+        $canReadDocumentMetadata = Gate::allows(PermissionName::ContractDocumentsDownload->value)
+            || Gate::allows(PermissionName::ContractDocumentsDelete->value);
+        $relations = [
             'company:id,name',
             'orders' => fn ($query) => $query
                 ->with('serviceType')
@@ -255,7 +260,10 @@ class ContractController extends Controller
             'subscriptions' => fn ($query) => $query
                 ->with('serviceType')
                 ->withExists('invoiceLines'),
-            'documents' => function ($query) {
+        ];
+
+        if ($canReadDocumentMetadata) {
+            $relations['documents'] = function ($query) {
                 $query
                     ->select([
                         'id',
@@ -267,16 +275,25 @@ class ContractController extends Controller
                         'created_at',
                     ])
                     ->latest();
-            },
-        ]);
+            };
+        }
+
+        $contract->load($relations);
 
         $companyContext = $this->safeCompanyContext($request, $contract->company);
         $contractCanBeDeleted = Gate::allows('delete', $contract)
+            && $canReadDocumentMetadata
             && $deleteContract->canDelete($contract);
 
         return view(
             'contracts.show',
-            compact('contract', 'companyContext', 'contractCanBeDeleted')
+            compact(
+                'contract',
+                'companyContext',
+                'contractCanBeDeleted',
+                'canUploadDocuments',
+                'canReadDocumentMetadata'
+            )
         );
     }
 
@@ -303,6 +320,7 @@ class ContractController extends Controller
             'start_date' => 'required|date',
             'end_date' => 'nullable|date|after:start_date',
             'status' => 'required|in:active,terminated',
+            'signed_document' => 'prohibited',
             'comment' => 'nullable|string',
         ]);
 

@@ -14,13 +14,13 @@ class UpdateContractRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'contract_number'  => 'sometimes|string|max:50|unique:contracts,contract_number,'
-                                   . $this->route('contract')->id,
-            'start_date'       => 'sometimes|date',
-            'end_date'         => 'nullable|date|after:start_date',
-            'status'           => 'nullable|in:active,terminated',
-            'signed_document'  => 'nullable|string|max:255',
-            'comment'          => 'nullable|string',
+            'contract_number' => 'sometimes|string|max:50|unique:contracts,contract_number,'
+                                   .$this->route('contract')->id,
+            'start_date' => 'sometimes|date',
+            'end_date' => 'nullable|date|after:start_date',
+            'status' => 'nullable|in:active,terminated',
+            'signed_document' => 'prohibited',
+            'comment' => 'nullable|string',
         ];
     }
 }

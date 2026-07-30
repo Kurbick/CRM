@@ -6,6 +6,7 @@ use App\Models\ContractDocument;
 use App\Support\Access\PermissionName;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Feature\Authorization\AuthorizationTestCase;
 use ZipArchive;
 
@@ -81,6 +82,37 @@ class ContractDocumentMimeValidationTest extends AuthorizationTestCase
 
         $this->assertDatabaseCount('contract_documents', 0);
         Storage::disk('local')->assertDirectoryEmpty('/');
+    }
+
+    #[DataProvider('dangerousExtensionProvider')]
+    public function test_dangerous_extensions_are_rejected_without_side_effects(
+        string $extension,
+        string $mimeType,
+    ): void {
+        $contract = $this->contract($this->company('Dangerous '.$extension));
+        $this->actingAsPermissions([PermissionName::ContractDocumentsUpload->value]);
+
+        $this->post(route('contracts.documents.store', $contract), [
+            'document_type' => 'other',
+            'document' => UploadedFile::fake()->create("payload.{$extension}", 4, $mimeType),
+        ])->assertSessionHasErrors('document');
+
+        $this->assertDatabaseCount('contract_documents', 0);
+        Storage::disk('local')->assertDirectoryEmpty('/');
+    }
+
+    public static function dangerousExtensionProvider(): array
+    {
+        return [
+            'php' => ['php', 'application/x-php'],
+            'phtml' => ['phtml', 'application/x-php'],
+            'phar' => ['phar', 'application/octet-stream'],
+            'svg' => ['svg', 'image/svg+xml'],
+            'html' => ['html', 'text/html'],
+            'javascript' => ['js', 'text/javascript'],
+            'executable' => ['exe', 'application/x-msdownload'],
+            'shell' => ['sh', 'application/x-sh'],
+        ];
     }
 
     private function upload(UploadedFile $file): ContractDocument
