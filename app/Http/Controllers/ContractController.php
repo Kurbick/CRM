@@ -8,17 +8,31 @@ use App\Http\Requests\StoreContractRequest;
 use App\Http\Requests\UpdateContractRequest;
 use App\Models\Company;
 use App\Models\Contract;
-use App\Support\Access\PermissionName;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Gate;
 
 class ContractController extends Controller
 {
+    private const COMPACT_FIELDS = [
+        'id',
+        'company_id',
+        'contract_number',
+        'start_date',
+        'end_date',
+        'status',
+        'created_at',
+        'updated_at',
+    ];
+
     public function index(Company $company): JsonResponse
     {
+        Gate::authorize('viewAny', Contract::class);
+
         $contracts = $company->contracts()
-            ->with(['orders', 'subscriptions'])
-            ->get();
+            ->select(self::COMPACT_FIELDS)
+            ->orderBy('id')
+            ->get()
+            ->map(fn (Contract $contract): array => $this->compactProjection($contract));
 
         return response()->json($contracts);
     }
@@ -27,32 +41,32 @@ class ContractController extends Controller
     {
         $contract = $company->contracts()->create($request->validated());
 
-        return response()->json($contract, 201);
+        return response()->json($this->detailProjection($contract, $company), 201);
     }
 
     public function show(Contract $contract): JsonResponse
     {
-        $contract->load([
-            'company',
-            'orders.serviceType',
-            'subscriptions.serviceType',
-        ]);
+        Gate::authorize('view', $contract);
 
-        return response()->json($contract);
+        return response()->json($this->detailProjection(
+            $contract,
+            $this->companySummaryModel($contract)
+        ));
     }
 
     public function update(UpdateContractRequest $request, Contract $contract): JsonResponse
     {
         $contract->update($request->validated());
 
-        return response()->json($contract);
+        return response()->json($this->detailProjection(
+            $contract,
+            $this->companySummaryModel($contract)
+        ));
     }
 
-    public function destroy(string $contract, DeleteContract $deleteContract): JsonResponse
+    public function destroy(Contract $contract, DeleteContract $deleteContract): JsonResponse
     {
-        Gate::authorize(PermissionName::ContractsDelete->value);
-
-        $contract = Contract::query()->findOrFail($contract);
+        Gate::authorize('delete', $contract);
 
         try {
             $deleteContract->handle($contract);
@@ -63,5 +77,48 @@ class ContractController extends Controller
                 'message' => $exception->getMessage(),
             ], 409);
         }
+    }
+
+    /** @return array<string, mixed> */
+    private function compactProjection(Contract $contract): array
+    {
+        return [
+            'id' => $contract->id,
+            'company_id' => $contract->company_id,
+            'contract_number' => $contract->contract_number,
+            'start_date' => $contract->start_date?->toJSON(),
+            'end_date' => $contract->end_date?->toJSON(),
+            'status' => $contract->status,
+            'created_at' => $contract->created_at?->toJSON(),
+            'updated_at' => $contract->updated_at?->toJSON(),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function detailProjection(Contract $contract, Company $company): array
+    {
+        return [
+            'id' => $contract->id,
+            'company_id' => $contract->company_id,
+            'contract_number' => $contract->contract_number,
+            'start_date' => $contract->start_date?->toJSON(),
+            'end_date' => $contract->end_date?->toJSON(),
+            'status' => $contract->status,
+            'comment' => $contract->comment,
+            'created_at' => $contract->created_at?->toJSON(),
+            'updated_at' => $contract->updated_at?->toJSON(),
+            'company' => [
+                'id' => $company->id,
+                'name' => $company->name,
+                'short_name' => $company->short_name,
+            ],
+        ];
+    }
+
+    private function companySummaryModel(Contract $contract): Company
+    {
+        return $contract->company()
+            ->select(['companies.id', 'companies.name', 'companies.short_name'])
+            ->firstOrFail();
     }
 }
