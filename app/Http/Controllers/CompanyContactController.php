@@ -2,21 +2,42 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Company;
-use App\Models\CompanyContact;
 use App\Http\Requests\StoreCompanyContactRequest;
 use App\Http\Requests\UpdateCompanyContactRequest;
+use App\Models\Company;
+use App\Models\CompanyContact;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Gate;
 
 class CompanyContactController extends Controller
 {
+    private const CONTACT_FIELDS = [
+        'id',
+        'company_id',
+        'first_name',
+        'last_name',
+        'position',
+        'phone',
+        'email',
+        'role',
+        'comment',
+        'created_at',
+        'updated_at',
+    ];
+
     /**
      * Все контактные лица конкретной компании.
      */
     public function index(Company $company): JsonResponse
     {
+        Gate::authorize('view', $company);
+
         return response()->json(
-            $company->contacts()->get()
+            $company->contacts()
+                ->select(self::CONTACT_FIELDS)
+                ->orderBy('id')
+                ->get()
+                ->map(fn (CompanyContact $contact): array => $this->contactProjection($contact))
         );
     }
 
@@ -28,27 +49,54 @@ class CompanyContactController extends Controller
     {
         $contact = $company->contacts()->create($request->validated());
 
-        return response()->json($contact, 201);
+        return response()->json($this->contactProjection($contact, $company), 201);
     }
 
-    public function show(CompanyContact $companyContact): JsonResponse
+    public function show(CompanyContact $contact): JsonResponse
     {
-        $companyContact->load('company');
+        Gate::authorize('view', $contact);
 
-        return response()->json($companyContact);
+        return response()->json($this->contactProjection(
+            $contact,
+            $this->companySummaryModel($contact)
+        ));
     }
 
-    public function update(UpdateCompanyContactRequest $request, CompanyContact $companyContact): JsonResponse
+    public function update(UpdateCompanyContactRequest $request, CompanyContact $contact): JsonResponse
     {
-        $companyContact->update($request->validated());
+        $contact->update($request->validated());
 
-        return response()->json($companyContact);
+        return response()->json($this->contactProjection(
+            $contact,
+            $this->companySummaryModel($contact)
+        ));
     }
 
-    public function destroy(CompanyContact $companyContact): JsonResponse
+    public function destroy(CompanyContact $contact): JsonResponse
     {
-        $companyContact->delete();
+        Gate::authorize('delete', $contact);
+
+        $contact->delete();
 
         return response()->json(['message' => 'Контакт удалён'], 200);
+    }
+
+    /** @return array<string, mixed> */
+    private function contactProjection(CompanyContact $contact, ?Company $company = null): array
+    {
+        $projection = $contact->only(self::CONTACT_FIELDS);
+
+        if ($company !== null) {
+            $projection['company'] = $company->only(['id', 'name', 'short_name']);
+        }
+
+        return $projection;
+    }
+
+    private function companySummaryModel(CompanyContact $contact): Company
+    {
+        return $contact->company()
+            ->select(['companies.id', 'companies.name', 'companies.short_name'])
+            ->firstOrFail();
     }
 }

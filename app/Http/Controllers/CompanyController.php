@@ -2,61 +2,104 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Company;
+use App\Actions\Companies\DeleteCompany;
+use App\Exceptions\CompanyDeletionException;
 use App\Http\Requests\StoreCompanyRequest;
 use App\Http\Requests\UpdateCompanyRequest;
+use App\Models\Company;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Gate;
 
 class CompanyController extends Controller
 {
-    
+    private const COMPACT_FIELDS = [
+        'id',
+        'type',
+        'name',
+        'short_name',
+        'voen',
+        'email',
+        'phone',
+        'website',
+        'status',
+        'invoice_mode',
+        'created_at',
+        'updated_at',
+    ];
+
+    private const DETAIL_FIELDS = [
+        'bank_name',
+        'iban',
+        'bank_code',
+        'bank_voen',
+        'swift',
+        'legal_address',
+        'actual_address',
+        'comment',
+    ];
+
     public function index(): JsonResponse
     {
-        $companies = Company::with(['contacts', 'contracts'])->get();
+        Gate::authorize('viewAny', Company::class);
+
+        $companies = Company::query()
+            ->select(self::COMPACT_FIELDS)
+            ->orderBy('id')
+            ->get()
+            ->map(fn (Company $company): array => $this->compactProjection($company));
 
         return response()->json($companies);
     }
 
-    
     public function store(StoreCompanyRequest $request): JsonResponse
     {
         $company = Company::create($request->validated());
+        $company->refresh();
 
-        return response()->json($company, 201);
+        return response()->json($this->detailProjection($company), 201);
     }
 
-   
     public function show(Company $company): JsonResponse
     {
-        $company->load([
-            'contacts',
-            'contracts.orders',
-            'contracts.subscriptions',
-            'invoices',
-            'payments',
-        ]);
+        Gate::authorize('view', $company);
 
-        return response()->json($company);
+        return response()->json($this->detailProjection($company));
     }
 
-    
     public function update(UpdateCompanyRequest $request, Company $company): JsonResponse
     {
         $company->update($request->validated());
 
-        return response()->json($company);
+        return response()->json($this->detailProjection($company));
     }
 
-    
-    public function destroy(Company $company): JsonResponse
+    public function destroy(Company $company, DeleteCompany $deleteCompany): JsonResponse
     {
+        Gate::authorize('delete', $company);
+
         try {
-            $company->delete(); // @phpstan-ignore-line
-            return response()->json(['message' => 'Компания удалена'], 200);
-        } catch (\Exception $e) {
+            $deleteCompany->handle($company);
+        } catch (CompanyDeletionException) {
             return response()->json([
-                'message' => 'Невозможно удалить компанию — есть связанные данные'
-            ], 409); // 409 Conflict
+                'message' => 'Невозможно удалить компанию — есть связанные данные',
+            ], 409);
         }
+
+        return response()->json(['message' => 'Компания удалена'], 200);
+    }
+
+    /** @return array<string, mixed> */
+    private function compactProjection(Company $company): array
+    {
+        return $company->only(self::COMPACT_FIELDS);
+    }
+
+    /** @return array<string, mixed> */
+    private function detailProjection(Company $company): array
+    {
+        return $company->only([
+            ...self::COMPACT_FIELDS,
+            ...self::DETAIL_FIELDS,
+        ]);
     }
 }

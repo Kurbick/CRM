@@ -9,6 +9,11 @@ use App\Support\Access\PermissionName;
 
 final class CompanyContactPolicy
 {
+    public function view(User $user, CompanyContact $contact): bool
+    {
+        return $user->can(PermissionName::CompaniesView->value);
+    }
+
     public function create(User $user, Company $company): bool
     {
         return $user->can(PermissionName::CompanyContactsCreate->value);
