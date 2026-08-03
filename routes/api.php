@@ -1,18 +1,26 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\CompanyContactController;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\ContractController;
-use App\Http\Controllers\ServiceTypeController;
-use App\Http\Controllers\OrderController;
-use App\Http\Controllers\SubscriptionController;
-use App\Http\Controllers\InvoiceController;
-use App\Http\Controllers\PaymentController;
-use App\Http\Controllers\CompanyContactController;
-use App\Http\Controllers\ServiceTypeItemController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\InvoiceController;
+use App\Http\Controllers\OrderController;
+use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\ServiceTypeController;
+use App\Http\Controllers\ServiceTypeItemController;
+use App\Http\Controllers\SubscriptionController;
+use App\Http\Middleware\AuthorizeApiRoute;
+use Illuminate\Routing\Middleware\SubstituteBindings;
+use Illuminate\Support\Facades\Route;
 
-Route::middleware(['auth:sanctum', 'active', 'password.changed'])->name('api.')->group(function () {
+Route::middleware([
+    'auth:sanctum',
+    'active',
+    'password.changed',
+    AuthorizeApiRoute::class,
+    SubstituteBindings::class,
+])->name('api.')->group(function () {
     Route::apiResource('companies', CompanyController::class);
 
     Route::apiResource('companies.contracts', ContractController::class)

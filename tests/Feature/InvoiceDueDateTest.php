@@ -292,6 +292,7 @@ class InvoiceDueDateTest extends TestCase
 
     public function test_api_order_update_recalculates_linked_draft(): void
     {
+        $this->grantSubjectUpdate();
         [$invoice, $contractId] = $this->draftInvoice('API-ORDER-SYNC');
         $orderId = $this->order($contractId, 30);
         $invoice->lines()->create($this->orderLine($orderId));
@@ -304,6 +305,7 @@ class InvoiceDueDateTest extends TestCase
 
     public function test_subscription_update_recalculates_linked_partially_paid_invoice(): void
     {
+        $this->grantSubjectUpdate();
         [$invoice, $contractId] = $this->draftInvoice('SUBSCRIPTION-SYNC');
         $subscriptionId = $this->subscription($contractId, 30);
         $invoice->lines()->create($this->subscriptionLine($subscriptionId));

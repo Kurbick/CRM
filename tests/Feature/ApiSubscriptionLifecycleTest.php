@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Invoice;
 use App\Models\ServiceType;
 use App\Models\Subscription;
+use App\Support\Access\PermissionName;
 use Carbon\CarbonImmutable;
 use Tests\Feature\Authorization\AuthorizationTestCase;
 
@@ -12,7 +13,7 @@ class ApiSubscriptionLifecycleTest extends AuthorizationTestCase
 {
     public function test_api_rejects_client_next_date_and_calculates_it_on_create(): void
     {
-        $this->actingAsPermissions();
+        $this->actingAsPermissions([PermissionName::ContractSubjectsCreate->value]);
         $contract = $this->contract($this->company());
         $serviceType = $this->serviceType();
 
@@ -29,7 +30,10 @@ class ApiSubscriptionLifecycleTest extends AuthorizationTestCase
 
     public function test_api_custom_validation_and_ordinary_update_preserve_schedule(): void
     {
-        $this->actingAsPermissions();
+        $this->actingAsPermissions([
+            PermissionName::ContractSubjectsCreate->value,
+            PermissionName::ContractSubjectsUpdate->value,
+        ]);
         $contract = $this->contract($this->company());
         $serviceType = $this->serviceType();
 
@@ -55,7 +59,7 @@ class ApiSubscriptionLifecycleTest extends AuthorizationTestCase
         CarbonImmutable::setTestNow('2026-07-30');
 
         try {
-            $this->actingAsPermissions();
+            $this->actingAsPermissions([PermissionName::ContractSubjectsUpdate->value]);
             $contract = $this->contract($this->company());
             $subscription = $this->subjectSubscription($contract, [
                 'status' => 'suspended',
@@ -96,7 +100,7 @@ class ApiSubscriptionLifecycleTest extends AuthorizationTestCase
 
     public function test_api_partial_period_and_start_updates_use_effective_schedule_state(): void
     {
-        $this->actingAsPermissions();
+        $this->actingAsPermissions([PermissionName::ContractSubjectsUpdate->value]);
         $contract = $this->contract($this->company());
         $subscription = $this->subjectSubscription($contract, [
             'start_date' => '2026-08-01',
@@ -127,7 +131,7 @@ class ApiSubscriptionLifecycleTest extends AuthorizationTestCase
 
     public function test_api_custom_updates_require_a_pair_but_ordinary_update_reuses_saved_pair(): void
     {
-        $this->actingAsPermissions();
+        $this->actingAsPermissions([PermissionName::ContractSubjectsUpdate->value]);
         $subscription = $this->subjectSubscription($this->contract($this->company()), [
             'billing_period' => 'custom',
             'custom_interval_value' => 2,
@@ -172,7 +176,7 @@ class ApiSubscriptionLifecycleTest extends AuthorizationTestCase
 
     public function test_api_standard_custom_transitions_are_complete_and_normalized(): void
     {
-        $this->actingAsPermissions();
+        $this->actingAsPermissions([PermissionName::ContractSubjectsUpdate->value]);
         $subscription = $this->subjectSubscription($this->contract($this->company()));
 
         $this->patchJson(route('api.subscriptions.update', $subscription), [
@@ -215,7 +219,7 @@ class ApiSubscriptionLifecycleTest extends AuthorizationTestCase
 
     public function test_api_partial_schedule_changes_are_rejected_for_all_history_states(): void
     {
-        $this->actingAsPermissions();
+        $this->actingAsPermissions([PermissionName::ContractSubjectsUpdate->value]);
 
         foreach (['draft', 'cancelled', 'issued'] as $index => $status) {
             $contract = $this->contract($this->company('API partial history '.$status));

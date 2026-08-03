@@ -72,7 +72,7 @@ class ApiContractDocumentIntegrityTest extends AuthorizationTestCase
     public function test_api_contract_store_rejects_removed_signed_document_field(): void
     {
         $company = $this->company('API stale store field');
-        $this->actingAsPermissions();
+        $this->actingAsPermissions([PermissionName::ContractsCreate->value]);
 
         $this->postJson(route('api.companies.contracts.store', $company), [
             'contract_number' => 'API-STALE-STORE',
@@ -88,7 +88,7 @@ class ApiContractDocumentIntegrityTest extends AuthorizationTestCase
     {
         $contract = $this->contract($this->company('API stale update field'));
         $before = (array) DB::table('contracts')->where('id', $contract->id)->first();
-        $this->actingAsPermissions();
+        $this->actingAsPermissions([PermissionName::ContractsUpdate->value]);
 
         $this->patchJson(route('api.contracts.update', $contract), [
             'comment' => 'Must not be saved',
