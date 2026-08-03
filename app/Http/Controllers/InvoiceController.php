@@ -13,10 +13,14 @@ use App\Models\Subscription;
 use App\Services\InvoiceEditabilityService;
 use App\Services\SubscriptionBillingSchedule;
 use Carbon\CarbonImmutable;
+use DateTimeInterface;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
+use LogicException;
 
 class InvoiceController extends Controller
 {
@@ -27,12 +31,31 @@ class InvoiceController extends Controller
 
     public function index(Company $company): JsonResponse
     {
+        Gate::authorize('viewAny', Invoice::class);
+
         $invoices = $company->invoices()
-            ->with('lines')
+            ->select([
+                'id',
+                'company_id',
+                'contract_id',
+                'invoice_number',
+                'issue_date',
+                'due_date',
+                'status',
+                'total_amount',
+                'created_at',
+                'updated_at',
+            ])
+            ->withSum([
+                'payments as confirmed_paid_amount' => fn ($query) => $query
+                    ->where('status', 'confirmed'),
+            ], 'amount')
+            ->orderBy('id')
             ->get()
-            ->each(function ($invoice) {
-                $invoice->append(['paid_amount', 'remaining_amount', 'is_overdue']);
-            });
+            ->map(fn (Invoice $invoice): array => $this->compactProjection(
+                $invoice,
+                $invoice->getAttribute('confirmed_paid_amount')
+            ));
 
         return response()->json($invoices);
     }
@@ -163,10 +186,38 @@ class InvoiceController extends Controller
 
     public function show(Invoice $invoice): JsonResponse
     {
-        $invoice->load(['company', 'lines', 'payments']);
-        $invoice->append(['paid_amount', 'remaining_amount', 'is_overdue']);
+        Gate::authorize('view', $invoice);
 
-        return response()->json($invoice);
+        $company = $invoice->company()
+            ->select(['companies.id', 'companies.name', 'companies.short_name'])
+            ->firstOrFail();
+        $contract = $invoice->contract_id === null
+            ? null
+            : $invoice->contract()
+                ->select(['contracts.id', 'contracts.company_id', 'contracts.contract_number'])
+                ->first();
+        $lines = $invoice->lines()
+            ->select([
+                'invoice_lines.id',
+                'invoice_lines.invoice_id',
+                'invoice_lines.description',
+                'invoice_lines.amount',
+                'invoice_lines.period_start',
+                'invoice_lines.period_end',
+            ])
+            ->orderBy('invoice_lines.id')
+            ->get();
+        $confirmedPaidAmount = $invoice->payments()
+            ->where('status', 'confirmed')
+            ->sum('amount');
+
+        return response()->json($this->detailProjection(
+            $invoice,
+            $company,
+            $contract,
+            $lines,
+            $confirmedPaidAmount
+        ));
     }
 
     public function update(UpdateInvoiceRequest $request, Invoice $invoice): JsonResponse
@@ -227,5 +278,126 @@ class InvoiceController extends Controller
         });
 
         return response()->json(['message' => 'Инвойс удалён'], 200);
+    }
+
+    /** @return array<string, mixed> */
+    private function compactProjection(Invoice $invoice, mixed $confirmedPaidAmount): array
+    {
+        return [
+            'id' => $invoice->id,
+            'company_id' => $invoice->company_id,
+            'contract_id' => $invoice->contract_id,
+            'invoice_number' => $invoice->invoice_number,
+            'issue_date' => $this->dateValue($invoice->issue_date),
+            'due_date' => $this->dateValue($invoice->due_date),
+            'status' => $invoice->status,
+            'total_amount' => $this->decimalValue($invoice->total_amount),
+            'paid_amount' => $this->decimalValue($confirmedPaidAmount),
+            'remaining_amount' => $this->remainingAmount($invoice->total_amount, $confirmedPaidAmount),
+            'is_overdue' => $invoice->is_overdue,
+            'created_at' => $invoice->created_at?->toJSON(),
+            'updated_at' => $invoice->updated_at?->toJSON(),
+        ];
+    }
+
+    /**
+     * @param  Collection<int, InvoiceLine>  $lines
+     * @return array<string, mixed>
+     */
+    private function detailProjection(
+        Invoice $invoice,
+        Company $company,
+        ?Contract $contract,
+        Collection $lines,
+        mixed $confirmedPaidAmount
+    ): array {
+        return [
+            'id' => $invoice->id,
+            'company_id' => $invoice->company_id,
+            'contract_id' => $invoice->contract_id,
+            'invoice_number' => $invoice->invoice_number,
+            'issue_date' => $this->dateValue($invoice->issue_date),
+            'due_date' => $this->dateValue($invoice->due_date),
+            'period_start' => $this->dateValue($invoice->period_start),
+            'period_end' => $this->dateValue($invoice->period_end),
+            'status' => $invoice->status,
+            'total_amount' => $this->decimalValue($invoice->total_amount),
+            'paid_amount' => $this->decimalValue($confirmedPaidAmount),
+            'remaining_amount' => $this->remainingAmount($invoice->total_amount, $confirmedPaidAmount),
+            'is_overdue' => $invoice->is_overdue,
+            'comment' => $invoice->comment,
+            'seller_name' => $invoice->seller_name,
+            'seller_voen' => $invoice->seller_voen,
+            'seller_bank_name' => $invoice->seller_bank_name,
+            'seller_iban' => $invoice->seller_iban,
+            'seller_bank_code' => $invoice->seller_bank_code,
+            'seller_bank_voen' => $invoice->seller_bank_voen,
+            'seller_swift' => $invoice->seller_swift,
+            'payer_name' => $invoice->payer_name,
+            'payer_voen' => $invoice->payer_voen,
+            'contract_reference' => $invoice->contract_reference,
+            'created_at' => $invoice->created_at?->toJSON(),
+            'updated_at' => $invoice->updated_at?->toJSON(),
+            'company' => [
+                'id' => $company->id,
+                'name' => $company->name,
+                'short_name' => $company->short_name,
+            ],
+            'contract' => $contract === null ? null : [
+                'id' => $contract->id,
+                'company_id' => $contract->company_id,
+                'contract_number' => $contract->contract_number,
+            ],
+            'lines' => $lines
+                ->map(fn (InvoiceLine $line): array => [
+                    'id' => $line->id,
+                    'description' => $line->description,
+                    'amount' => $this->decimalValue($line->amount),
+                    'period_start' => $this->dateValue($line->period_start),
+                    'period_end' => $this->dateValue($line->period_end),
+                ])
+                ->values()
+                ->all(),
+        ];
+    }
+
+    private function dateValue(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        return $value instanceof DateTimeInterface
+            ? $value->format('Y-m-d')
+            : substr((string) $value, 0, 10);
+    }
+
+    private function remainingAmount(mixed $totalAmount, mixed $paidAmount): string
+    {
+        return $this->formatMinorUnits(max(
+            $this->toMinorUnits($totalAmount) - $this->toMinorUnits($paidAmount),
+            0
+        ));
+    }
+
+    private function decimalValue(mixed $value): string
+    {
+        return $this->formatMinorUnits($this->toMinorUnits($value));
+    }
+
+    private function toMinorUnits(mixed $value): int
+    {
+        $decimal = trim((string) ($value ?? '0'));
+        if (preg_match('/^(\d+)(?:\.(\d{1,2}))?$/', $decimal, $matches) !== 1) {
+            throw new LogicException("Invalid Invoice decimal value [{$decimal}].");
+        }
+
+        return ((int) $matches[1] * 100)
+            + (int) str_pad($matches[2] ?? '', 2, '0');
+    }
+
+    private function formatMinorUnits(int $minorUnits): string
+    {
+        return sprintf('%d.%02d', intdiv($minorUnits, 100), $minorUnits % 100);
     }
 }
