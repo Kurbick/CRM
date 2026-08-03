@@ -4,19 +4,26 @@ namespace App\Http\Requests;
 
 use App\Models\Subscription;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 class UpdateSubscriptionRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        $subscription = $this->route('subscription');
+
+        return $subscription instanceof Subscription
+            && ($this->user()?->can('update', $subscription) ?? false);
     }
 
     public function rules(): array
     {
         return [
-            'service_type_id' => 'sometimes|exists:service_types,id',
+            'service_type_id' => [
+                'sometimes',
+                Rule::exists('service_types', 'id')->where('type', 'subscription'),
+            ],
             'title' => 'sometimes|string|max:255',
             'start_date' => 'sometimes|date',
             'next_billing_date' => 'prohibited',

@@ -2,19 +2,28 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Contract;
+use App\Models\Subscription;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreSubscriptionRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        $contract = $this->route('contract');
+
+        return $contract instanceof Contract
+            && ($this->user()?->can('create', [Subscription::class, $contract]) ?? false);
     }
 
     public function rules(): array
     {
         return [
-            'service_type_id' => 'required|exists:service_types,id',
+            'service_type_id' => [
+                'required',
+                Rule::exists('service_types', 'id')->where('type', 'subscription'),
+            ],
             'start_date' => 'required|date',
             'next_billing_date' => 'prohibited',
             'billing_period' => 'required|in:monthly,quarterly,semiannual,annual,custom',
