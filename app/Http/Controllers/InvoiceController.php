@@ -10,6 +10,7 @@ use App\Models\Invoice;
 use App\Models\InvoiceLine;
 use App\Models\Order;
 use App\Models\Subscription;
+use App\Services\InvoiceDueDateCalculator;
 use App\Services\InvoiceEditabilityService;
 use App\Services\SubscriptionBillingSchedule;
 use Carbon\CarbonImmutable;
@@ -25,6 +26,7 @@ use LogicException;
 class InvoiceController extends Controller
 {
     public function __construct(
+        private readonly InvoiceDueDateCalculator $dueDateCalculator,
         private readonly InvoiceEditabilityService $editabilityService,
         private readonly SubscriptionBillingSchedule $billingSchedule,
     ) {}
@@ -62,12 +64,23 @@ class InvoiceController extends Controller
 
     public function store(StoreInvoiceRequest $request, Company $company): JsonResponse
     {
+        $validated = $request->validated();
+
         try {
-            $invoice = DB::transaction(function () use ($request, $company) {
-                $validated = $request->validated();
+            [$invoice, $invoiceCompany, $contract, $createdLines] = DB::transaction(function () use (
+                $validated,
+                $company
+            ): array {
+                $invoiceCompany = Company::query()
+                    ->select(['id', 'name', 'short_name', 'voen'])
+                    ->whereKey($company->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
                 $contract = Contract::query()
+                    ->select(['id', 'company_id', 'contract_number'])
                     ->whereKey($validated['contract_id'])
-                    ->where('company_id', $company->id)
+                    ->where('company_id', $invoiceCompany->id)
+                    ->lockForUpdate()
                     ->first();
                 if (! $contract) {
                     throw ValidationException::withMessages([
@@ -75,46 +88,59 @@ class InvoiceController extends Controller
                     ]);
                 }
 
-                $lines = $validated['lines'];
-                $subscriptionIds = collect($lines)
-                    ->pluck('subscription_id')
-                    ->filter()
-                    ->map(fn ($id): int => (int) $id)
-                    ->unique()
-                    ->sort()
-                    ->values();
-                $subscriptions = Subscription::query()
-                    ->whereIn('id', $subscriptionIds)
-                    ->orderBy('id')
-                    ->lockForUpdate()
-                    ->get()
-                    ->keyBy('id');
+                $lines = array_values($validated['lines']);
+                [$orderIds, $subscriptionIds] = $this->sourceIds($lines);
+                $orders = $orderIds === []
+                    ? collect()
+                    : Order::query()
+                        ->whereIn('id', $orderIds)
+                        ->orderBy('id')
+                        ->lockForUpdate()
+                        ->get(['id', 'contract_id', 'status'])
+                        ->keyBy('id');
+                $subscriptions = $subscriptionIds === []
+                    ? collect()
+                    : Subscription::query()
+                        ->whereIn('id', $subscriptionIds)
+                        ->orderBy('id')
+                        ->lockForUpdate()
+                        ->get()
+                        ->keyBy('id');
 
-                foreach ($lines as $index => &$line) {
-                    if (! empty($line['subscription_id']) && ! empty($line['order_id'])) {
-                        throw ValidationException::withMessages([
-                            "lines.{$index}" => 'Позиция не может одновременно быть заказом и подпиской.',
-                        ]);
-                    }
+                $normalizedLines = [];
+                $occurrenceKeys = [];
+                foreach ($lines as $index => $line) {
+                    $orderId = $line['order_id'] ?? null;
+                    $subscriptionId = $line['subscription_id'] ?? null;
 
-                    if (! empty($line['order_id'])) {
-                        $orderExists = Order::query()
-                            ->whereKey($line['order_id'])
-                            ->where('contract_id', $contract->id)
-                            ->where('status', '!=', 'cancelled')
-                            ->exists();
-                        if (! $orderExists) {
+                    if ($orderId !== null) {
+                        $order = $orders->get((int) $orderId);
+                        if (! $order
+                            || (int) $order->contract_id !== (int) $contract->id
+                            || $order->status === 'cancelled') {
                             throw ValidationException::withMessages([
                                 "lines.{$index}.order_id" => 'Разовая услуга не принадлежит договору или отменена.',
                             ]);
                         }
                     }
 
-                    if (empty($line['subscription_id'])) {
+                    $normalizedLine = [
+                        'description' => $line['description'],
+                        'amount' => $this->decimalValue($line['amount']),
+                        'subscription_id' => $subscriptionId,
+                        'order_id' => $orderId,
+                        'period_start' => null,
+                        'period_end' => null,
+                        'billing_occurrence_key' => null,
+                    ];
+
+                    if ($subscriptionId === null) {
+                        $normalizedLines[] = $normalizedLine;
+
                         continue;
                     }
 
-                    $subscription = $subscriptions->get((int) $line['subscription_id']);
+                    $subscription = $subscriptions->get((int) $subscriptionId);
                     if (! $subscription
                         || (int) $subscription->contract_id !== (int) $contract->id
                         || $subscription->status !== 'active') {
@@ -136,37 +162,66 @@ class InvoiceController extends Controller
                         ]);
                     }
 
-                    if (InvoiceLine::query()
-                        ->where('subscription_id', $subscription->id)
-                        ->whereDate('period_start', $periodStart->toDateString())
-                        ->whereDate('period_end', $periodEnd->toDateString())
-                        ->whereHas('invoice', fn ($query) => $query->where('status', '!=', 'cancelled'))
-                        ->exists()) {
-                        throw ValidationException::withMessages([
-                            "lines.{$index}.subscription_id" => 'Эта billing occurrence уже зарезервирована.',
-                        ]);
-                    }
-
-                    $line['period_start'] = $periodStart->toDateString();
-                    $line['period_end'] = $periodEnd->toDateString();
-                    $line['billing_occurrence_key'] = $this->billingSchedule->occurrenceKey(
+                    $occurrenceKey = $this->billingSchedule->occurrenceKey(
                         (int) $subscription->id,
                         $periodStart,
                         $periodEnd,
                     );
-                }
-                unset($line);
-
-                $invoiceData = collect($validated)->except(['lines', 'status'])->toArray();
-                $invoiceData['status'] = 'draft';
-                $invoiceData['total_amount'] = collect($lines)->sum('amount');
-                $invoice = $company->invoices()->create($invoiceData);
-
-                foreach ($lines as $line) {
-                    $invoice->lines()->create($line);
+                    $occurrenceKeys[] = $occurrenceKey;
+                    $normalizedLine['period_start'] = $periodStart->toDateString();
+                    $normalizedLine['period_end'] = $periodEnd->toDateString();
+                    $normalizedLine['billing_occurrence_key'] = $occurrenceKey;
+                    $normalizedLines[] = $normalizedLine;
                 }
 
-                return $invoice;
+                if ($occurrenceKeys !== [] && InvoiceLine::query()
+                    ->whereIn('billing_occurrence_key', $occurrenceKeys)
+                    ->whereHas('invoice', fn ($query) => $query->where('status', '!=', 'cancelled'))
+                    ->exists()) {
+                    throw ValidationException::withMessages([
+                        'lines' => 'Эта billing occurrence уже зарезервирована.',
+                    ]);
+                }
+
+                $dueDate = $this->dueDateCalculator->calculate(
+                    issueDate: $validated['issue_date'],
+                    manualDueDate: $validated['due_date'] ?? null,
+                    contractId: (int) $contract->id,
+                    orderIds: $orderIds,
+                    subscriptionIds: $subscriptionIds,
+                );
+                $totalMinorUnits = array_sum(array_map(
+                    fn (array $line): int => $this->toMinorUnits($line['amount']),
+                    $normalizedLines
+                ));
+                $invoiceData = [
+                    'contract_id' => $contract->id,
+                    'invoice_number' => $validated['invoice_number'],
+                    'issue_date' => $validated['issue_date'],
+                    'due_date' => $dueDate,
+                    'period_start' => null,
+                    'period_end' => null,
+                    'total_amount' => $this->formatMinorUnits($totalMinorUnits),
+                    'status' => 'draft',
+                    'seller_name' => $validated['seller_name'] ?? null,
+                    'seller_voen' => $validated['seller_voen'] ?? null,
+                    'seller_bank_name' => $validated['seller_bank_name'] ?? null,
+                    'seller_iban' => $validated['seller_iban'] ?? null,
+                    'seller_bank_code' => $validated['seller_bank_code'] ?? null,
+                    'seller_bank_voen' => $validated['seller_bank_voen'] ?? null,
+                    'seller_swift' => $validated['seller_swift'] ?? null,
+                    'payer_name' => $invoiceCompany->name,
+                    'payer_voen' => $invoiceCompany->voen,
+                    'contract_reference' => $contract->contract_number,
+                    'comment' => $validated['comment'] ?? null,
+                ];
+                $invoice = $invoiceCompany->invoices()->create($invoiceData);
+                $createdLines = collect();
+                foreach ($normalizedLines as $line) {
+                    $createdLines->push($invoice->lines()->create($line));
+                }
+
+                return [$invoice, $invoiceCompany, $contract, $createdLines];
             });
         } catch (UniqueConstraintViolationException $exception) {
             if (! str_contains($exception->getMessage(), 'billing_occurrence_key')) {
@@ -178,10 +233,13 @@ class InvoiceController extends Controller
             ]);
         }
 
-        $invoice->load('lines');
-        $invoice->append(['paid_amount', 'remaining_amount', 'is_overdue']);
-
-        return response()->json($invoice, 201);
+        return response()->json($this->detailProjection(
+            $invoice,
+            $invoiceCompany,
+            $contract,
+            $createdLines,
+            '0.00'
+        ), 201);
     }
 
     public function show(Invoice $invoice): JsonResponse
@@ -278,6 +336,52 @@ class InvoiceController extends Controller
         });
 
         return response()->json(['message' => 'Инвойс удалён'], 200);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $lines
+     * @return array{list<int>, list<int>}
+     */
+    private function sourceIds(array $lines): array
+    {
+        $orderIds = [];
+        $subscriptionIds = [];
+
+        foreach ($lines as $index => $line) {
+            $orderId = isset($line['order_id']) ? (int) $line['order_id'] : null;
+            $subscriptionId = isset($line['subscription_id']) ? (int) $line['subscription_id'] : null;
+
+            if ($orderId !== null && $subscriptionId !== null) {
+                throw ValidationException::withMessages([
+                    "lines.{$index}" => 'Позиция не может одновременно быть заказом и подпиской.',
+                ]);
+            }
+
+            if ($orderId !== null) {
+                if (in_array($orderId, $orderIds, true)) {
+                    throw ValidationException::withMessages([
+                        "lines.{$index}.order_id" => 'Эта разовая услуга уже добавлена в инвойс.',
+                    ]);
+                }
+
+                $orderIds[] = $orderId;
+            }
+
+            if ($subscriptionId !== null) {
+                if (in_array($subscriptionId, $subscriptionIds, true)) {
+                    throw ValidationException::withMessages([
+                        "lines.{$index}.subscription_id" => 'Эта подписка уже добавлена в инвойс.',
+                    ]);
+                }
+
+                $subscriptionIds[] = $subscriptionId;
+            }
+        }
+
+        sort($orderIds);
+        sort($subscriptionIds);
+
+        return [$orderIds, $subscriptionIds];
     }
 
     /** @return array<string, mixed> */

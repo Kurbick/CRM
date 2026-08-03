@@ -36,10 +36,11 @@ class ApiInvoiceLifecycleTest extends FinancialTestCase
         $response = $this->postJson(route('api.companies.invoices.store', $company), $payload)
             ->assertCreated()
             ->assertJsonPath('status', 'draft')
-            ->assertJsonPath('lines.0.period_start', '2026-01-31T00:00:00.000000Z')
-            ->assertJsonPath('lines.0.period_end', '2026-02-27T00:00:00.000000Z');
+            ->assertJsonPath('lines.0.period_start', '2026-01-31')
+            ->assertJsonPath('lines.0.period_end', '2026-02-27')
+            ->assertJsonMissingPath('lines.0.billing_occurrence_key');
 
-        $this->assertSame(64, strlen($response->json('lines.0.billing_occurrence_key')));
+        $this->assertSame(64, strlen(Invoice::query()->sole()->lines()->sole()->billing_occurrence_key));
         $this->assertSame('2026-01-31', $subscription->fresh()->next_billing_date->toDateString());
     }
 

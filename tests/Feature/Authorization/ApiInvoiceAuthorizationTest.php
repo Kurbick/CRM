@@ -3,6 +3,7 @@
 namespace Tests\Feature\Authorization;
 
 use App\Models\Company;
+use App\Models\Contract;
 use App\Models\Invoice;
 use App\Models\User;
 use App\Support\Access\PermissionName;
@@ -185,6 +186,144 @@ class ApiInvoiceAuthorizationTest extends AuthorizationTestCase
         $response->assertDontSee($other->invoice_number);
     }
 
+    public function test_store_guest_is_rejected_without_mutation(): void
+    {
+        $company = $this->company('API-INVOICE-STORE-STATE');
+        $contract = $this->contract($company);
+        $payload = $this->invoiceCreationPayload($contract, 'API-INVOICE-STORE-STATE');
+
+        $this->postJson(route('api.companies.invoices.store', $company), $payload)
+            ->assertUnauthorized();
+
+        $this->assertDatabaseCount('invoices', 0);
+    }
+
+    public function test_store_inactive_user_is_rejected_without_mutation(): void
+    {
+        $company = $this->company('API-INVOICE-STORE-INACTIVE');
+        $contract = $this->contract($company);
+        $payload = $this->invoiceCreationPayload($contract, 'API-INVOICE-STORE-INACTIVE');
+
+        $inactive = User::factory()->inactive()->create();
+        $inactive->givePermissionTo(PermissionName::InvoicesCreate->value);
+        $this->actingAs($inactive, 'web');
+        $this->postJson(route('api.companies.invoices.store', $company), $payload)
+            ->assertForbidden();
+
+        $this->assertDatabaseCount('invoices', 0);
+    }
+
+    public function test_store_password_change_user_is_rejected_without_mutation(): void
+    {
+        $company = $this->company('API-INVOICE-STORE-PASSWORD');
+        $contract = $this->contract($company);
+        $payload = $this->invoiceCreationPayload($contract, 'API-INVOICE-STORE-PASSWORD');
+        $passwordChange = User::factory()->requiringPasswordChange()->create();
+        $passwordChange->givePermissionTo(PermissionName::InvoicesCreate->value);
+        $this->actingAs($passwordChange, 'web');
+        $this->postJson(route('api.companies.invoices.store', $company), $payload)
+            ->assertForbidden()
+            ->assertJsonPath('code', 'password_change_required');
+
+        $this->assertDatabaseCount('invoices', 0);
+    }
+
+    public function test_store_missing_and_wrong_permissions_precede_existing_or_missing_company_binding(): void
+    {
+        $company = $this->company('API-INVOICE-STORE-DENIED');
+        $contract = $this->contract($company);
+        $payload = $this->invoiceCreationPayload($contract, 'API-INVOICE-STORE-DENIED');
+
+        foreach ([[], [PermissionName::InvoicesUpdate->value]] as $permissions) {
+            $this->actingAsPermissions($permissions);
+
+            $existing = (new DomainQueryRecorder)->capture(
+                fn () => $this->postJson(route('api.companies.invoices.store', $company), $payload),
+            );
+            $missing = (new DomainQueryRecorder)->capture(
+                fn () => $this->postJson(
+                    route('api.companies.invoices.store', ['company' => 1_000_000]),
+                    $payload
+                ),
+            );
+
+            $existing['result']->assertForbidden();
+            $missing['result']->assertForbidden();
+            $this->assertSame($existing['result']->json('message'), $missing['result']->json('message'));
+            $this->assertSame([], $existing['records']);
+            $this->assertSame([], $missing['records']);
+        }
+
+        $this->assertDatabaseCount('invoices', 0);
+    }
+
+    public function test_exact_create_permission_has_no_hidden_sibling_permissions(): void
+    {
+        $company = $this->company('API-INVOICE-STORE-EXACT');
+        $contract = $this->contract($company);
+        $user = $this->actingAsPermissions([PermissionName::InvoicesCreate->value]);
+
+        $this->postJson(
+            route('api.companies.invoices.store', $company),
+            $this->invoiceCreationPayload($contract, 'API-INVOICE-STORE-EXACT')
+        )->assertCreated();
+
+        $this->assertFalse($user->can(PermissionName::CompaniesView->value));
+        $this->assertFalse($user->can(PermissionName::ContractsView->value));
+        $this->assertFalse($user->can(PermissionName::PaymentsView->value));
+    }
+
+    public function test_custom_role_and_administrator_can_create_invoices(): void
+    {
+        $company = $this->company('API-INVOICE-STORE-ROLES');
+        $contract = $this->contract($company);
+        $custom = $this->actingAsCustomRole([PermissionName::InvoicesCreate->value]);
+
+        $this->postJson(
+            route('api.companies.invoices.store', $company),
+            $this->invoiceCreationPayload($contract, 'API-INVOICE-STORE-CUSTOM')
+        )->assertCreated();
+        $this->assertFalse($custom->hasRole('administrator'));
+
+        $administrator = User::factory()->create();
+        $administrator->assignRole('administrator');
+        $this->actingAs($administrator, 'web');
+        $this->postJson(
+            route('api.companies.invoices.store', $company),
+            $this->invoiceCreationPayload($contract, 'API-INVOICE-STORE-ADMIN')
+        )->assertCreated();
+    }
+
+    public function test_create_policy_runs_after_company_binding_and_before_validation_or_domain_queries(): void
+    {
+        $company = $this->company('API-INVOICE-STORE-POLICY');
+        $contract = $this->contract($company);
+        $this->actingAsPermissions([PermissionName::InvoicesCreate->value]);
+        $abilities = [];
+        Gate::after(function ($user, string $ability, $result, array $arguments) use (&$abilities): void {
+            if ($ability === 'create' && ($arguments[0] ?? null) === Invoice::class) {
+                $abilities[] = $ability;
+            }
+        });
+
+        $this->postJson(
+            route('api.companies.invoices.store', $company),
+            $this->invoiceCreationPayload($contract, 'API-INVOICE-STORE-POLICY')
+        )->assertCreated();
+        $this->assertContains('create', $abilities);
+
+        Gate::before(fn ($user, string $ability): ?bool => $ability === 'create' ? false : null);
+        $capture = (new DomainQueryRecorder)->capture(
+            fn () => $this->postJson(route('api.companies.invoices.store', $company), []),
+        );
+
+        $capture['result']->assertForbidden();
+        $this->assertSame(['companies'], DomainQueryRecorder::tables($capture['records']));
+        $this->assertSame(1, DomainQueryRecorder::count($capture['records']));
+        $this->assertDatabaseCount('invoices', 1);
+        $this->assertDatabaseCount('invoice_lines', 1);
+    }
+
     private function invoiceForCompany(Company $company, string $number): Invoice
     {
         $contract = $this->contract($company);
@@ -197,5 +336,21 @@ class ApiInvoiceAuthorizationTest extends AuthorizationTestCase
             'total_amount' => '100.00',
             'status' => 'draft',
         ]);
+    }
+
+    /** @return array<string, mixed> */
+    private function invoiceCreationPayload(Contract $contract, string $number): array
+    {
+        return [
+            'contract_id' => $contract->id,
+            'invoice_number' => $number,
+            'issue_date' => '2026-08-01',
+            'due_date' => '2026-08-31',
+            'total_amount' => '999.99',
+            'lines' => [[
+                'description' => 'Authorization manual line',
+                'amount' => '100.00',
+            ]],
+        ];
     }
 }
