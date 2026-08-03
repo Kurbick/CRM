@@ -9,6 +9,11 @@ use App\Support\Access\PermissionName;
 
 final class OrderPolicy
 {
+    public function view(User $user, Order $order): bool
+    {
+        return $user->can(PermissionName::ContractsView->value);
+    }
+
     public function create(User $user, Contract $contract): bool
     {
         return $user->can(PermissionName::ContractSubjectsCreate->value);
