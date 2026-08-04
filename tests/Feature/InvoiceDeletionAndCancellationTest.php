@@ -2,11 +2,18 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Invoices\DeleteInvoice;
+use App\Exceptions\Invoices\InvoiceDeletionException;
 use App\Http\Controllers\Web\InvoiceController;
+use App\Models\CreditBalance;
 use App\Models\Invoice;
+use App\Models\PaymentAllocation;
+use App\Services\SubscriptionBillingSchedule;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use RuntimeException;
 use Tests\Feature\FinancialTestCase as TestCase;
 
 class InvoiceDeletionAndCancellationTest extends TestCase
@@ -25,18 +32,141 @@ class InvoiceDeletionAndCancellationTest extends TestCase
         $this->assertDatabaseMissing('invoice_lines', ['id' => $lineId]);
     }
 
-    public function test_deleting_subscription_draft_does_not_change_next_billing_date(): void
+    public function test_deleting_subscription_draft_restores_next_billing_date(): void
     {
         $invoice = $this->invoice('draft');
         $subscriptionId = $this->subscription('2026-08-01');
-        $this->line($invoice, $subscriptionId);
+        $key = app(SubscriptionBillingSchedule::class)->occurrenceKey(
+            $subscriptionId,
+            CarbonImmutable::parse('2026-07-01'),
+            CarbonImmutable::parse('2026-07-31'),
+        );
+        $this->line($invoice, $subscriptionId, occurrenceKey: $key);
 
-        $this->delete(route('invoices.destroy', $invoice));
+        $this->delete(route('invoices.destroy', $invoice))
+            ->assertRedirect(route('invoices.index'))
+            ->assertSessionHas('success');
 
         $this->assertDatabaseHas('subscriptions', [
             'id' => $subscriptionId,
-            'next_billing_date' => '2026-08-01',
+            'next_billing_date' => '2026-07-01',
         ]);
+    }
+
+    public function test_every_payment_status_blocks_web_deletion(): void
+    {
+        foreach (['pending', 'confirmed', 'cancelled'] as $status) {
+            $invoice = $this->invoice('draft', 'WEB-DELETE-PAYMENT-'.$status);
+            $lineId = $this->line($invoice);
+            $paymentId = $this->payment($invoice, $status);
+
+            $this->delete(route('invoices.destroy', $invoice))
+                ->assertSessionHasErrors('delete');
+
+            $this->assertDatabaseHas('invoices', ['id' => $invoice->id]);
+            $this->assertDatabaseHas('invoice_lines', ['id' => $lineId]);
+            $this->assertDatabaseHas('payments', ['id' => $paymentId, 'status' => $status]);
+        }
+    }
+
+    public function test_allocation_and_credit_dependencies_block_web_deletion_explicitly(): void
+    {
+        $source = $this->invoice('draft', 'WEB-DELETE-ALLOCATION-SOURCE');
+        $this->line($source);
+        $target = $this->invoice('draft', 'WEB-DELETE-ALLOCATION-TARGET');
+        $targetLineId = $this->line($target);
+        $paymentId = $this->payment($source, 'pending');
+        $allocation = PaymentAllocation::query()->create([
+            'payment_id' => $paymentId,
+            'invoice_line_id' => $targetLineId,
+            'amount' => '10.00',
+        ]);
+
+        $this->delete(route('invoices.destroy', $target))
+            ->assertSessionHasErrors('delete');
+        $this->assertDatabaseHas('payment_allocations', ['id' => $allocation->id]);
+        $this->assertDatabaseHas('invoices', ['id' => $target->id]);
+
+        $creditInvoice = $this->invoice('draft', 'WEB-DELETE-CREDIT');
+        $creditLineId = $this->line($creditInvoice);
+        $balance = CreditBalance::query()->create([
+            'company_id' => $creditInvoice->company_id,
+            'amount' => '10.00',
+        ]);
+        $entry = $balance->entries()->create([
+            'type' => 'applied',
+            'amount' => '-10.00',
+            'invoice_id' => $creditInvoice->id,
+        ]);
+
+        $this->delete(route('invoices.destroy', $creditInvoice))
+            ->assertSessionHasErrors('delete');
+        $this->assertDatabaseHas('invoices', ['id' => $creditInvoice->id]);
+        $this->assertDatabaseHas('invoice_lines', ['id' => $creditLineId]);
+        $this->assertDatabaseHas('credit_balance_entries', [
+            'id' => $entry->id,
+            'invoice_id' => $creditInvoice->id,
+        ]);
+    }
+
+    public function test_later_subscription_occurrence_blocks_web_deletion_without_changes(): void
+    {
+        $invoice = $this->invoice('draft', 'WEB-DELETE-EARLY');
+        $subscriptionId = $this->subscription('2026-09-01');
+        $earlyKey = app(SubscriptionBillingSchedule::class)->occurrenceKey(
+            $subscriptionId,
+            CarbonImmutable::parse('2026-07-01'),
+            CarbonImmutable::parse('2026-07-31'),
+        );
+        $earlyLineId = $this->line($invoice, $subscriptionId, occurrenceKey: $earlyKey);
+        $later = $this->invoice('draft', 'WEB-DELETE-LATER');
+        $laterKey = app(SubscriptionBillingSchedule::class)->occurrenceKey(
+            $subscriptionId,
+            CarbonImmutable::parse('2026-08-01'),
+            CarbonImmutable::parse('2026-08-31'),
+        );
+        $laterLineId = $this->line(
+            $later,
+            $subscriptionId,
+            '2026-08-01',
+            '2026-08-31',
+            $laterKey,
+        );
+
+        $this->delete(route('invoices.destroy', $invoice))
+            ->assertSessionHasErrors('delete');
+
+        $this->assertDatabaseHas('invoices', ['id' => $invoice->id]);
+        $this->assertDatabaseHas('invoice_lines', ['id' => $earlyLineId, 'billing_occurrence_key' => $earlyKey]);
+        $this->assertDatabaseHas('invoice_lines', ['id' => $laterLineId, 'billing_occurrence_key' => $laterKey]);
+        $this->assertDatabaseHas('subscriptions', ['id' => $subscriptionId, 'next_billing_date' => '2026-09-01']);
+    }
+
+    public function test_unexpected_web_delete_exception_is_not_mapped_to_business_error_and_rolls_back(): void
+    {
+        $invoice = $this->invoice('draft', 'WEB-DELETE-ROLLBACK');
+        $subscriptionId = $this->subscription('2026-08-01');
+        $key = app(SubscriptionBillingSchedule::class)->occurrenceKey(
+            $subscriptionId,
+            CarbonImmutable::parse('2026-07-01'),
+            CarbonImmutable::parse('2026-07-31'),
+        );
+        $lineId = $this->line($invoice, $subscriptionId, occurrenceKey: $key);
+        Invoice::deleting(fn (): never => throw new RuntimeException('BROKEN WEB INVOICE DELETE'));
+        $this->withoutExceptionHandling();
+
+        $thrown = null;
+        try {
+            $this->delete(route('invoices.destroy', $invoice));
+        } catch (RuntimeException $exception) {
+            $thrown = $exception;
+        }
+
+        $this->assertInstanceOf(RuntimeException::class, $thrown);
+        $this->assertSame('BROKEN WEB INVOICE DELETE', $thrown->getMessage());
+        $this->assertDatabaseHas('invoices', ['id' => $invoice->id]);
+        $this->assertDatabaseHas('invoice_lines', ['id' => $lineId, 'billing_occurrence_key' => $key]);
+        $this->assertDatabaseHas('subscriptions', ['id' => $subscriptionId, 'next_billing_date' => '2026-08-01']);
     }
 
     public function test_non_draft_statuses_cannot_be_physically_deleted(): void
@@ -241,10 +371,10 @@ class InvoiceDeletionAndCancellationTest extends TestCase
         DB::table('invoices')->where('id', $staleDelete->id)->update(['status' => 'issued']);
 
         try {
-            app(InvoiceController::class)->destroy($staleDelete);
+            app(DeleteInvoice::class)->execute($staleDelete);
             $this->fail('Deletion should have been blocked.');
-        } catch (ValidationException $exception) {
-            $this->assertArrayHasKey('delete', $exception->errors());
+        } catch (InvoiceDeletionException $exception) {
+            $this->assertSame('Удалить можно только черновик инвойса.', $exception->getMessage());
         }
 
         $staleCancel = $this->invoice('issued', 'STALE-CANCEL');
@@ -335,6 +465,7 @@ class InvoiceDeletionAndCancellationTest extends TestCase
             'amount' => 10,
             'payment_method' => 'transfer',
             'status' => $status,
+            'cancelled_at' => $status === 'cancelled' ? now() : null,
         ]);
     }
 }

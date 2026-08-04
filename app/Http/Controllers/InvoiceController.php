@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Invoices\DeleteInvoice;
+use App\Exceptions\Invoices\InvoiceDeletionException;
 use App\Http\Requests\StoreInvoiceRequest;
 use App\Http\Requests\UpdateInvoiceRequest;
 use App\Models\Company;
@@ -364,28 +366,20 @@ class InvoiceController extends Controller
         };
     }
 
-    public function destroy(Invoice $invoice): JsonResponse
+    public function destroy(Invoice $invoice, DeleteInvoice $deleteInvoice): JsonResponse
     {
-        DB::transaction(function () use ($invoice): void {
-            $lockedInvoice = Invoice::query()
-                ->whereKey($invoice->id)
-                ->lockForUpdate()
-                ->firstOrFail();
+        Gate::authorize('delete', $invoice);
 
-            if ($lockedInvoice->status !== 'draft') {
-                throw ValidationException::withMessages([
-                    'invoice' => 'Удалить можно только черновик инвойса.',
-                ]);
-            }
-
-            if ($lockedInvoice->payments()->exists()) {
-                throw ValidationException::withMessages([
-                    'invoice' => 'Нельзя удалить инвойс, по которому зарегистрирован платёж.',
-                ]);
-            }
-
-            $lockedInvoice->delete();
-        });
+        try {
+            $deleteInvoice->execute($invoice);
+        } catch (InvoiceDeletionException $exception) {
+            return response()->json([
+                'message' => 'The given data was invalid.',
+                'errors' => [
+                    'invoice' => [$exception->getMessage()],
+                ],
+            ], 422);
+        }
 
         return response()->json(['message' => 'Инвойс удалён'], 200);
     }

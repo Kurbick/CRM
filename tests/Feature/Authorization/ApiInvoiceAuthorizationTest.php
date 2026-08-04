@@ -332,6 +332,116 @@ class ApiInvoiceAuthorizationTest extends AuthorizationTestCase
         )->assertNotFound();
     }
 
+    public function test_destroy_guest_account_restrictions_and_permission_precede_binding(): void
+    {
+        $invoice = $this->invoice(number: 'API-INVOICE-DELETE-PIPELINE');
+
+        $guestCapture = (new DomainQueryRecorder)->capture(
+            fn () => $this->deleteJson(route('api.invoices.destroy', $invoice)),
+        );
+        $guestCapture['result']->assertUnauthorized();
+        $this->assertSame([], $guestCapture['records']);
+
+        $inactive = User::factory()->inactive()->create();
+        $inactive->givePermissionTo(PermissionName::InvoicesDelete->value);
+        $this->actingAs($inactive, 'web');
+        $inactiveCapture = (new DomainQueryRecorder)->capture(
+            fn () => $this->deleteJson(route('api.invoices.destroy', $invoice)),
+        );
+        $inactiveCapture['result']->assertForbidden();
+        $this->assertSame([], $inactiveCapture['records']);
+
+        $passwordChange = User::factory()->requiringPasswordChange()->create();
+        $passwordChange->givePermissionTo(PermissionName::InvoicesDelete->value);
+        $this->actingAs($passwordChange, 'web');
+        $passwordCapture = (new DomainQueryRecorder)->capture(
+            fn () => $this->deleteJson(route('api.invoices.destroy', $invoice)),
+        );
+        $passwordCapture['result']->assertForbidden();
+        $this->assertSame([], $passwordCapture['records']);
+
+        foreach ([[], [PermissionName::InvoicesUpdate->value]] as $permissions) {
+            $this->actingAsPermissions($permissions);
+            $existing = (new DomainQueryRecorder)->capture(
+                fn () => $this->deleteJson(route('api.invoices.destroy', $invoice)),
+            );
+            $missing = (new DomainQueryRecorder)->capture(
+                fn () => $this->deleteJson(route('api.invoices.destroy', ['invoice' => 1_000_000])),
+            );
+
+            $existing['result']->assertForbidden();
+            $missing['result']->assertForbidden();
+            $this->assertSame($existing['result']->json('message'), $missing['result']->json('message'));
+            $this->assertSame([], $existing['records']);
+            $this->assertSame([], $missing['records']);
+        }
+
+        $this->assertDatabaseHas('invoices', ['id' => $invoice->id]);
+    }
+
+    public function test_exact_delete_permission_and_custom_role_delete_bound_invoices(): void
+    {
+        $invoice = $this->invoice(number: 'API-INVOICE-DELETE-EXACT');
+        $user = $this->actingAsPermissions([PermissionName::InvoicesDelete->value]);
+
+        $this->deleteJson(route('api.invoices.destroy', $invoice))
+            ->assertOk()
+            ->assertExactJson(['message' => 'Инвойс удалён']);
+        $this->assertFalse($user->can(PermissionName::InvoicesView->value));
+
+        $customInvoice = $this->invoice(number: 'API-INVOICE-DELETE-CUSTOM');
+        $custom = $this->actingAsCustomRole([PermissionName::InvoicesDelete->value]);
+        $this->deleteJson(route('api.invoices.destroy', $customInvoice))->assertOk();
+        $this->assertFalse($custom->hasRole('administrator'));
+    }
+
+    public function test_destroy_policy_receives_bound_invoice_before_dependency_queries(): void
+    {
+        $invoice = $this->invoice(number: 'API-INVOICE-DELETE-POLICY');
+        $this->payment($invoice, 'pending', 'API-INVOICE-DELETE-POLICY-PAYMENT');
+        $this->actingAsPermissions([PermissionName::InvoicesDelete->value]);
+        $authorizedInvoiceId = null;
+        Gate::after(function ($user, string $ability, $result, array $arguments) use (&$authorizedInvoiceId): void {
+            if ($ability === 'delete' && ($arguments[0] ?? null) instanceof Invoice) {
+                $authorizedInvoiceId = $arguments[0]->id;
+            }
+        });
+
+        $this->deleteJson(route('api.invoices.destroy', $invoice))->assertUnprocessable();
+        $this->assertSame($invoice->id, $authorizedInvoiceId);
+
+        Gate::before(fn ($user, string $ability): ?bool => $ability === 'delete' ? false : null);
+        $capture = (new DomainQueryRecorder)->capture(
+            fn () => $this->deleteJson(route('api.invoices.destroy', $invoice)),
+        );
+
+        $capture['result']->assertForbidden();
+        $this->assertSame(['invoices'], DomainQueryRecorder::tables($capture['records']));
+        $this->assertSame(1, DomainQueryRecorder::count($capture['records']));
+        $this->assertDatabaseHas('invoices', ['id' => $invoice->id]);
+        $this->assertDatabaseHas('payments', ['invoice_id' => $invoice->id]);
+    }
+
+    public function test_authorized_destroy_missing_invoice_is_not_found(): void
+    {
+        $this->actingAsPermissions([PermissionName::InvoicesDelete->value]);
+
+        $this->deleteJson(route('api.invoices.destroy', ['invoice' => 1_000_000]))->assertNotFound();
+    }
+
+    public function test_administrator_authorization_does_not_bypass_destroy_business_rules(): void
+    {
+        $invoice = $this->invoice(status: 'issued', number: 'API-INVOICE-DELETE-ADMIN');
+        $administrator = User::factory()->create();
+        $administrator->assignRole('administrator');
+        $this->actingAs($administrator, 'web');
+
+        $this->deleteJson(route('api.invoices.destroy', $invoice))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('invoice');
+        $this->assertDatabaseHas('invoices', ['id' => $invoice->id, 'status' => 'issued']);
+    }
+
     public function test_store_guest_is_rejected_without_mutation(): void
     {
         $company = $this->company('API-INVOICE-STORE-STATE');

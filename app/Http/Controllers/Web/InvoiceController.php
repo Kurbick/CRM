@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Web;
 
+use App\Actions\Invoices\DeleteInvoice;
+use App\Exceptions\Invoices\InvoiceDeletionException;
 use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\Contract;
@@ -1459,46 +1461,15 @@ class InvoiceController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Invoice $invoice)
+    public function destroy(Invoice $invoice, DeleteInvoice $deleteInvoice)
     {
         Gate::authorize('delete', $invoice);
 
-        DB::transaction(function () use ($invoice) {
-            /*
-             * Повторно читаем и блокируем строку: статус мог измениться
-             * после route model binding и до фактического удаления.
-             */
-            $invoice = Invoice::query()
-                ->whereKey($invoice->id)
-                ->lockForUpdate()
-                ->firstOrFail();
-
-            if ($invoice->status !== 'draft') {
-                throw ValidationException::withMessages([
-                    'delete' => 'Удалить можно только черновик инвойса.',
-                ]);
-            }
-
-            /*
-             * Подтверждённый платёж всегда запрещает удаление. Любой другой
-             * зарегистрированный платёж также сохраняем согласно FK restrict.
-             */
-            if ($invoice->payments()
-                ->where('status', 'confirmed')
-                ->exists()) {
-                throw ValidationException::withMessages([
-                    'delete' => 'Нельзя удалить инвойс с подтверждённым платежом.',
-                ]);
-            }
-
-            if ($invoice->payments()->exists()) {
-                throw ValidationException::withMessages([
-                    'delete' => 'Нельзя удалить инвойс, по которому зарегистрирован платёж.',
-                ]);
-            }
-
-            $invoice->delete();
-        });
+        try {
+            $deleteInvoice->execute($invoice);
+        } catch (InvoiceDeletionException $exception) {
+            return back()->withErrors(['delete' => $exception->getMessage()]);
+        }
 
         $redirect = Gate::allows('viewAny', Invoice::class)
             ? redirect()->route('invoices.index')
