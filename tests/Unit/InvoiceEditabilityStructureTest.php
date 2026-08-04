@@ -22,7 +22,7 @@ class InvoiceEditabilityStructureTest extends TestCase
         $this->assertStringContainsString('Нельзя удалить связанную позицию из уже выставленного инвойса.', $update);
     }
 
-    public function test_api_update_uses_same_lock_and_does_not_validate_protected_fields(): void
+    public function test_api_update_uses_same_lock_and_explicitly_prohibits_protected_fields(): void
     {
         $controller = file_get_contents(app_path('Http/Controllers/InvoiceController.php'));
         $request = file_get_contents(app_path('Http/Requests/UpdateInvoiceRequest.php'));
@@ -31,8 +31,8 @@ class InvoiceEditabilityStructureTest extends TestCase
         $this->assertStringContainsString('->lockForUpdate()', $controller);
         $this->assertStringContainsString('$this->editabilityService->evaluate($lockedInvoice)', $controller);
 
-        foreach (['status', 'total_amount', 'seller_name', 'payer_name'] as $protectedField) {
-            $this->assertStringNotContainsString("'{$protectedField}'", $request);
+        foreach (['status', 'total_amount', 'seller_name', 'payer_name', 'lines'] as $protectedField) {
+            $this->assertStringContainsString("'{$protectedField}' => 'prohibited'", $request);
         }
     }
 

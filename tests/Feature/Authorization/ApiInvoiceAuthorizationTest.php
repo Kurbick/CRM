@@ -186,6 +186,152 @@ class ApiInvoiceAuthorizationTest extends AuthorizationTestCase
         $response->assertDontSee($other->invoice_number);
     }
 
+    public function test_update_guest_is_stopped_before_invoice_binding(): void
+    {
+        $invoice = $this->invoice(number: 'API-INVOICE-UPDATE-GUEST');
+
+        $capture = (new DomainQueryRecorder)->capture(
+            fn () => $this->patchJson(route('api.invoices.update', $invoice), ['comment' => 'Denied']),
+        );
+
+        $capture['result']->assertUnauthorized();
+        $this->assertSame([], $capture['records']);
+        $this->assertNull($invoice->fresh()->comment);
+    }
+
+    public function test_update_inactive_account_is_stopped_before_invoice_binding(): void
+    {
+        $invoice = $this->invoice(number: 'API-INVOICE-UPDATE-ACCOUNT');
+
+        $inactive = User::factory()->inactive()->create();
+        $inactive->givePermissionTo(PermissionName::InvoicesUpdate->value);
+        $this->actingAs($inactive, 'web');
+        $inactiveCapture = (new DomainQueryRecorder)->capture(
+            fn () => $this->patchJson(route('api.invoices.update', $invoice), ['comment' => 'Inactive']),
+        );
+        $inactiveCapture['result']->assertForbidden();
+        $this->assertSame([], $inactiveCapture['records']);
+        $this->assertNull($invoice->fresh()->comment);
+    }
+
+    public function test_update_password_change_requirement_precedes_invoice_binding(): void
+    {
+        $invoice = $this->invoice(number: 'API-INVOICE-UPDATE-PASSWORD');
+
+        $passwordChange = User::factory()->requiringPasswordChange()->create();
+        $passwordChange->givePermissionTo(PermissionName::InvoicesUpdate->value);
+        $this->actingAs($passwordChange, 'web');
+        $passwordCapture = (new DomainQueryRecorder)->capture(
+            fn () => $this->patchJson(route('api.invoices.update', $invoice), ['comment' => 'Password']),
+        );
+        $passwordCapture['result']
+            ->assertForbidden()
+            ->assertJsonPath('code', 'password_change_required');
+        $this->assertSame([], $passwordCapture['records']);
+        $this->assertNull($invoice->fresh()->comment);
+    }
+
+    public function test_update_permission_precedes_existing_or_missing_invoice_binding(): void
+    {
+        $invoice = $this->invoice(number: 'API-INVOICE-UPDATE-DENIED');
+
+        foreach ([[], [PermissionName::InvoicesView->value]] as $permissions) {
+            $this->actingAsPermissions($permissions);
+
+            $existing = (new DomainQueryRecorder)->capture(
+                fn () => $this->patchJson(route('api.invoices.update', $invoice), ['comment' => 'Denied']),
+            );
+            $missing = (new DomainQueryRecorder)->capture(
+                fn () => $this->patchJson(
+                    route('api.invoices.update', ['invoice' => 1_000_000]),
+                    ['comment' => 'Denied']
+                ),
+            );
+
+            $existing['result']->assertForbidden();
+            $missing['result']->assertForbidden();
+            $this->assertSame($existing['result']->json('message'), $missing['result']->json('message'));
+            $this->assertSame([], $existing['records']);
+            $this->assertSame([], $missing['records']);
+        }
+
+        $this->assertNull($invoice->fresh()->comment);
+    }
+
+    public function test_exact_update_permission_and_custom_role_update_bound_invoice(): void
+    {
+        $invoice = $this->invoice(number: 'API-INVOICE-UPDATE-EXACT');
+        $user = $this->actingAsPermissions([PermissionName::InvoicesUpdate->value]);
+
+        $this->patchJson(route('api.invoices.update', $invoice), ['comment' => 'Exact update'])
+            ->assertOk()
+            ->assertJsonPath('id', $invoice->id)
+            ->assertJsonPath('comment', 'Exact update');
+        $this->assertFalse($user->can(PermissionName::InvoicesView->value));
+
+        $customInvoice = $this->invoice(number: 'API-INVOICE-UPDATE-CUSTOM');
+        $custom = $this->actingAsCustomRole([PermissionName::InvoicesUpdate->value]);
+        $this->patchJson(route('api.invoices.update', $customInvoice), ['comment' => 'Custom update'])
+            ->assertOk();
+
+        $this->assertFalse($custom->hasRole('administrator'));
+        $this->assertSame('Custom update', $customInvoice->fresh()->comment);
+    }
+
+    public function test_administrator_uses_central_bypass_for_update_authorization(): void
+    {
+        $invoice = $this->invoice(number: 'API-INVOICE-UPDATE-ADMIN');
+        $administrator = User::factory()->create();
+        $administrator->assignRole('administrator');
+        $this->actingAs($administrator, 'web');
+
+        $this->patchJson(route('api.invoices.update', $invoice), ['comment' => 'Admin update'])
+            ->assertOk();
+
+        $this->assertSame('Admin update', $invoice->fresh()->comment);
+    }
+
+    public function test_update_policy_receives_bound_invoice_before_validation_and_domain_queries(): void
+    {
+        $invoice = $this->invoice(number: 'API-INVOICE-UPDATE-POLICY');
+        $this->payment($invoice, 'pending', 'API-INVOICE-UPDATE-POLICY-PAYMENT');
+        $this->actingAsPermissions([PermissionName::InvoicesUpdate->value]);
+        $authorizedInvoiceId = null;
+        Gate::after(function ($user, string $ability, $result, array $arguments) use (&$authorizedInvoiceId): void {
+            if ($ability === 'update' && ($arguments[0] ?? null) instanceof Invoice) {
+                $authorizedInvoiceId = $arguments[0]->id;
+            }
+        });
+
+        $this->patchJson(route('api.invoices.update', $invoice), ['comment' => 'Policy update'])
+            ->assertOk();
+        $this->assertSame($invoice->id, $authorizedInvoiceId);
+
+        Gate::before(fn ($user, string $ability): ?bool => $ability === 'update' ? false : null);
+        $capture = (new DomainQueryRecorder)->capture(
+            fn () => $this->patchJson(route('api.invoices.update', $invoice), [
+                'invoice_number' => ['validation must not run'],
+            ]),
+        );
+
+        $capture['result']->assertForbidden();
+        $this->assertSame(['invoices'], DomainQueryRecorder::tables($capture['records']));
+        $this->assertSame(1, DomainQueryRecorder::count($capture['records']));
+        $this->assertSame('Policy update', $invoice->fresh()->comment);
+        $this->assertDatabaseCount('invoice_lines', 1);
+        $this->assertDatabaseCount('payments', 1);
+    }
+
+    public function test_authorized_update_missing_invoice_is_not_found(): void
+    {
+        $this->actingAsPermissions([PermissionName::InvoicesUpdate->value]);
+
+        $this->patchJson(
+            route('api.invoices.update', ['invoice' => 1_000_000]),
+            ['comment' => 'Missing']
+        )->assertNotFound();
+    }
+
     public function test_store_guest_is_rejected_without_mutation(): void
     {
         $company = $this->company('API-INVOICE-STORE-STATE');

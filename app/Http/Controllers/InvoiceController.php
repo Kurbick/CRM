@@ -242,43 +242,16 @@ class InvoiceController extends Controller
     {
         Gate::authorize('view', $invoice);
 
-        $company = $invoice->company()
-            ->select(['companies.id', 'companies.name', 'companies.short_name'])
-            ->firstOrFail();
-        $contract = $invoice->contract_id === null
-            ? null
-            : $invoice->contract()
-                ->select(['contracts.id', 'contracts.company_id', 'contracts.contract_number'])
-                ->first();
-        $lines = $invoice->lines()
-            ->select([
-                'invoice_lines.id',
-                'invoice_lines.invoice_id',
-                'invoice_lines.description',
-                'invoice_lines.amount',
-                'invoice_lines.period_start',
-                'invoice_lines.period_end',
-            ])
-            ->orderBy('invoice_lines.id')
-            ->get();
-        $confirmedPaidAmount = $invoice->payments()
-            ->where('status', 'confirmed')
-            ->sum('amount');
-
-        return response()->json($this->detailProjection(
-            $invoice,
-            $company,
-            $contract,
-            $lines,
-            $confirmedPaidAmount
-        ));
+        return response()->json($this->detailProjectionFor($invoice));
     }
 
     public function update(UpdateInvoiceRequest $request, Invoice $invoice): JsonResponse
     {
-        $invoice = DB::transaction(function () use ($request, $invoice): Invoice {
+        $validated = $request->validated();
+
+        $invoice = DB::transaction(function () use ($validated, $invoice): Invoice {
             $lockedInvoice = Invoice::query()
-                ->whereKey($invoice->id)
+                ->whereKey($invoice->getKey())
                 ->lockForUpdate()
                 ->firstOrFail();
 
@@ -289,14 +262,97 @@ class InvoiceController extends Controller
                 ]);
             }
 
-            $lockedInvoice->update($request->validated());
+            $lockedLines = $lockedInvoice->lines()
+                ->select([
+                    'invoice_lines.id',
+                    'invoice_lines.invoice_id',
+                    'invoice_lines.order_id',
+                    'invoice_lines.subscription_id',
+                ])
+                ->orderBy('invoice_lines.id')
+                ->lockForUpdate()
+                ->get();
+
+            $changes = $this->metadataChanges($lockedInvoice, $validated, $lockedLines);
+            if ($changes !== []) {
+                $lockedInvoice->update($changes);
+            }
 
             return $lockedInvoice;
         });
 
-        $invoice->append(['paid_amount', 'remaining_amount', 'is_overdue']);
+        return response()->json($this->detailProjectionFor($invoice));
+    }
 
-        return response()->json($invoice);
+    /**
+     * @param  array<string, mixed>  $validated
+     * @param  Collection<int, InvoiceLine>  $lines
+     * @return array<string, mixed>
+     */
+    private function metadataChanges(Invoice $invoice, array $validated, Collection $lines): array
+    {
+        if ($invoice->status === 'issued') {
+            $forbiddenFields = array_values(array_diff(array_keys($validated), ['comment']));
+            if ($forbiddenFields !== []) {
+                throw ValidationException::withMessages(array_fill_keys(
+                    $forbiddenFields,
+                    'Для выставленного инвойса разрешено изменять только комментарий.'
+                ));
+            }
+
+            return array_key_exists('comment', $validated)
+                ? ['comment' => $validated['comment']]
+                : [];
+        }
+
+        $changes = [];
+        foreach (['invoice_number', 'issue_date', 'comment'] as $field) {
+            if (array_key_exists($field, $validated)) {
+                $changes[$field] = $validated[$field];
+            }
+        }
+
+        $isSourced = $lines->contains(
+            fn (InvoiceLine $line): bool => $line->order_id !== null || $line->subscription_id !== null
+        );
+        if ($isSourced) {
+            if (array_key_exists('due_date', $validated)) {
+                throw ValidationException::withMessages([
+                    'due_date' => 'Срок оплаты инвойса со связанными позициями рассчитывается сервером.',
+                ]);
+            }
+
+            if (array_key_exists('issue_date', $validated)) {
+                $changes['due_date'] = $this->dueDateCalculator->calculate(
+                    issueDate: $validated['issue_date'],
+                    manualDueDate: null,
+                    contractId: (int) $invoice->contract_id,
+                    orderIds: $lines->pluck('order_id')->filter()->all(),
+                    subscriptionIds: $lines->pluck('subscription_id')->filter()->all(),
+                );
+            }
+
+            return $changes;
+        }
+
+        $effectiveIssueDate = $validated['issue_date']
+            ?? $this->dateValue($invoice->issue_date)
+            ?? throw new LogicException('Invoice issue date is required.');
+        $effectiveDueDate = array_key_exists('due_date', $validated)
+            ? $validated['due_date']
+            : $this->dateValue($invoice->due_date);
+
+        if ($effectiveDueDate !== null && $effectiveDueDate < $effectiveIssueDate) {
+            throw ValidationException::withMessages([
+                'due_date' => 'Срок оплаты не может быть раньше даты выставления.',
+            ]);
+        }
+
+        if (array_key_exists('due_date', $validated)) {
+            $changes['due_date'] = $validated['due_date'];
+        }
+
+        return $changes;
     }
 
     private function editabilityMessage(?string $reason): string
@@ -398,6 +454,41 @@ class InvoiceController extends Controller
             'created_at' => $invoice->created_at?->toJSON(),
             'updated_at' => $invoice->updated_at?->toJSON(),
         ];
+    }
+
+    /** @return array<string, mixed> */
+    private function detailProjectionFor(Invoice $invoice): array
+    {
+        $company = $invoice->company()
+            ->select(['companies.id', 'companies.name', 'companies.short_name'])
+            ->firstOrFail();
+        $contract = $invoice->contract_id === null
+            ? null
+            : $invoice->contract()
+                ->select(['contracts.id', 'contracts.company_id', 'contracts.contract_number'])
+                ->first();
+        $lines = $invoice->lines()
+            ->select([
+                'invoice_lines.id',
+                'invoice_lines.invoice_id',
+                'invoice_lines.description',
+                'invoice_lines.amount',
+                'invoice_lines.period_start',
+                'invoice_lines.period_end',
+            ])
+            ->orderBy('invoice_lines.id')
+            ->get();
+        $confirmedPaidAmount = $invoice->payments()
+            ->where('status', 'confirmed')
+            ->sum('amount');
+
+        return $this->detailProjection(
+            $invoice,
+            $company,
+            $contract,
+            $lines,
+            $confirmedPaidAmount
+        );
     }
 
     /**

@@ -180,7 +180,7 @@ class InvoiceEditabilityTest extends TestCase
         $this->assertSame('issued', $invoice->fresh()->status);
     }
 
-    public function test_api_uses_same_rule_and_ignores_protected_fields(): void
+    public function test_api_uses_same_editability_rule_and_rejects_protected_fields(): void
     {
         Sanctum::actingAs($this->authenticatedUser);
         $invoice = $this->invoice('issued');
@@ -194,14 +194,22 @@ class InvoiceEditabilityTest extends TestCase
             'total_amount' => '999.00',
             'seller_name' => 'Tampered seller',
             'payer_name' => 'Tampered payer',
-        ])->assertOk();
+        ])->assertUnprocessable()->assertJsonValidationErrors([
+            'status',
+            'total_amount',
+            'seller_name',
+            'payer_name',
+        ]);
 
         $invoice->refresh();
         $this->assertSame('issued', $invoice->status);
         $this->assertSame($originalTotal, $invoice->total_amount);
         $this->assertSame($originalSeller, $invoice->seller_name);
         $this->assertSame($originalPayer, $invoice->payer_name);
-        $this->assertSame('API update', $invoice->comment);
+        $this->assertNull($invoice->comment);
+
+        $this->patchJson(route('api.invoices.update', $invoice), ['comment' => 'API update'])
+            ->assertOk();
 
         $this->payment($invoice, 'confirmed', '10.00');
         $this->patchJson(route('api.invoices.update', $invoice), ['comment' => 'Blocked'])

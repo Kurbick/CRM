@@ -86,7 +86,7 @@ class ApiInvoiceLifecycleTest extends FinancialTestCase
         }
     }
 
-    public function test_api_update_cannot_change_invoice_line_occurrence_or_subscription_schedule(): void
+    public function test_api_update_rejects_line_and_lifecycle_fields_without_side_effects(): void
     {
         [$company, $contract, $subscription] = $this->subscription();
         $this->postJson(route('api.companies.invoices.store', $company), $this->payload($contract, $subscription))
@@ -114,12 +114,19 @@ class ApiInvoiceLifecycleTest extends FinancialTestCase
                 'period_end' => '2035-12-31',
                 'billing_occurrence_key' => str_repeat('f', 64),
             ]],
-        ])->assertOk();
+        ])->assertUnprocessable()->assertJsonValidationErrors([
+            'status',
+            'subscription_id',
+            'period_start',
+            'period_end',
+            'billing_occurrence_key',
+            'lines',
+        ]);
 
         $invoice->refresh();
         $line->refresh();
         $this->assertSame('draft', $invoice->status);
-        $this->assertSame('Allowed API comment', $invoice->comment);
+        $this->assertNull($invoice->comment);
         $this->assertSame($original['subscription_id'], $line->subscription_id);
         $this->assertSame($original['period_start']->toDateString(), $line->period_start->toDateString());
         $this->assertSame($original['period_end']->toDateString(), $line->period_end->toDateString());
