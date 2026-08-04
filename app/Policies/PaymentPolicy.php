@@ -9,7 +9,7 @@ use App\Support\Access\PermissionName;
 
 final class PaymentPolicy
 {
-    public function viewAny(User $user): bool
+    public function viewAny(User $user, ?Invoice $invoice = null): bool
     {
         return $user->can(PermissionName::PaymentsView->value);
     }
