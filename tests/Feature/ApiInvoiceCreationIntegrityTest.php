@@ -49,6 +49,7 @@ class ApiInvoiceCreationIntegrityTest extends AuthorizationTestCase
 
     public function test_manual_invoice_uses_bound_parent_server_snapshots_total_and_safe_response(): void
     {
+        $sellerSnapshot = $this->configureSeller('API CREATE SELLER');
         $company = $this->company('API CREATE PAYER');
         $company->update(['short_name' => 'Payer', 'voen' => 'PAYER-VOEN']);
         $otherCompany = $this->company('API CREATE OTHER');
@@ -63,8 +64,6 @@ class ApiInvoiceCreationIntegrityTest extends AuthorizationTestCase
             'payer_name' => 'FORGED PAYER',
             'payer_voen' => 'FORGED VOEN',
             'contract_reference' => 'FORGED CONTRACT',
-            'seller_name' => 'Legacy seller snapshot',
-            'seller_iban' => 'AZ00LEGACYSELLER',
             'period_start' => '2020-01-01',
             'period_end' => '2020-12-31',
         ];
@@ -92,8 +91,6 @@ class ApiInvoiceCreationIntegrityTest extends AuthorizationTestCase
             ->assertJsonPath('payer_name', $company->name)
             ->assertJsonPath('payer_voen', $company->voen)
             ->assertJsonPath('contract_reference', $contract->contract_number)
-            ->assertJsonPath('seller_name', 'Legacy seller snapshot')
-            ->assertJsonPath('seller_iban', 'AZ00LEGACYSELLER')
             ->assertJsonMissingPath('payments')
             ->assertJsonMissingPath('lines.0.invoice_id')
             ->assertJsonMissingPath('lines.0.order_id')
@@ -104,8 +101,100 @@ class ApiInvoiceCreationIntegrityTest extends AuthorizationTestCase
         $this->assertSame('10.05', $invoice->total_amount);
         $this->assertNull($invoice->period_start);
         $this->assertNull($invoice->period_end);
+        $this->assertSellerSnapshot($invoice, $sellerSnapshot);
+        foreach ($sellerSnapshot as $field => $value) {
+            $response->assertJsonPath($field, $value);
+        }
         $this->assertDatabaseCount('payments', 0);
         $this->assertDatabaseCount('credit_balance_entries', 0);
+    }
+
+    public function test_forged_seller_fields_are_rejected_before_any_mutation(): void
+    {
+        $company = $this->company('API CREATE FORGED SELLER');
+        $contract = $this->contract($company);
+        $subscription = $this->subjectSubscription($contract, [
+            'next_billing_date' => '2026-09-01',
+        ]);
+        $originalNextBillingDate = $subscription->next_billing_date->toDateString();
+        $this->actingAsPermissions([PermissionName::InvoicesCreate->value]);
+        $forged = [
+            'seller_name' => 'FORGED SELLER NAME',
+            'seller_voen' => 'FORGED-VOEN',
+            'seller_bank_name' => 'FORGED BANK NAME',
+            'seller_iban' => 'FORGED-IBAN',
+            'seller_bank_code' => 'FORGED-CODE',
+            'seller_bank_voen' => 'FORGED-BANK-VOEN',
+            'seller_swift' => 'FORGED-SWIFT',
+        ];
+
+        $this->postJson(
+            route('api.companies.invoices.store', $company),
+            $this->payload(
+                $contract,
+                [$this->subscriptionLine($subscription)],
+                'API-CREATE-FORGED-SELLER'
+            ) + $forged
+        )->assertUnprocessable()->assertJsonValidationErrors(array_keys($forged));
+
+        $this->assertDatabaseCount('invoices', 0);
+        $this->assertDatabaseCount('invoice_lines', 0);
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertDatabaseCount('payment_allocations', 0);
+        $this->assertDatabaseCount('credit_balances', 0);
+        $this->assertDatabaseCount('credit_balance_entries', 0);
+        $this->assertSame(
+            $originalNextBillingDate,
+            $subscription->fresh()->next_billing_date->toDateString()
+        );
+    }
+
+    public function test_empty_seller_config_values_are_normalized_to_null(): void
+    {
+        config([
+            'invoice.seller.name' => '',
+            'invoice.seller.voen' => '   ',
+            'invoice.seller.bank_name' => null,
+            'invoice.seller.iban' => '  AZ00SERVERIBAN  ',
+            'invoice.seller.bank_code' => '  SERVER-CODE  ',
+            'invoice.seller.bank_voen' => '  SERVER-BANK-VOEN  ',
+            'invoice.seller.swift' => '  SERVER-SWIFT  ',
+        ]);
+        $company = $this->company('API CREATE NULL SELLER');
+        $contract = $this->contract($company);
+        $this->actingAsPermissions([PermissionName::InvoicesCreate->value]);
+
+        $this->postJson(
+            route('api.companies.invoices.store', $company),
+            $this->payload($contract, [$this->manualLine()], 'API-CREATE-NULL-SELLER')
+        )->assertCreated();
+
+        $invoice = Invoice::query()->sole();
+        $this->assertNull($invoice->seller_name);
+        $this->assertNull($invoice->seller_voen);
+        $this->assertNull($invoice->seller_bank_name);
+        $this->assertSame('AZ00SERVERIBAN', $invoice->seller_iban);
+        $this->assertSame('SERVER-CODE', $invoice->seller_bank_code);
+        $this->assertSame('SERVER-BANK-VOEN', $invoice->seller_bank_voen);
+        $this->assertSame('SERVER-SWIFT', $invoice->seller_swift);
+    }
+
+    public function test_seller_snapshot_is_immutable_after_configuration_changes(): void
+    {
+        $snapshot = $this->configureSeller('API SELLER SNAPSHOT A');
+        $company = $this->company('API CREATE IMMUTABLE SELLER');
+        $contract = $this->contract($company);
+        $this->actingAsPermissions([PermissionName::InvoicesCreate->value]);
+
+        $this->postJson(
+            route('api.companies.invoices.store', $company),
+            $this->payload($contract, [$this->manualLine()], 'API-CREATE-IMMUTABLE-SELLER')
+        )->assertCreated();
+
+        $invoice = Invoice::query()->sole();
+        $this->configureSeller('API SELLER SNAPSHOT B');
+
+        $this->assertSellerSnapshot($invoice->fresh(), $snapshot);
     }
 
     public function test_contract_is_required_and_must_belong_to_bound_company(): void
@@ -466,5 +555,40 @@ class ApiInvoiceCreationIntegrityTest extends AuthorizationTestCase
             'description' => $subscription->title,
             'amount' => $subscription->amount,
         ];
+    }
+
+    /** @return array<string, string> */
+    private function configureSeller(string $prefix): array
+    {
+        $token = strtoupper(substr(hash('sha256', $prefix), 0, 8));
+        $snapshot = [
+            'seller_name' => $prefix.' NAME',
+            'seller_voen' => 'V'.$token,
+            'seller_bank_name' => $prefix.' BANK',
+            'seller_iban' => 'AZ00'.$token.'IBAN',
+            'seller_bank_code' => 'C'.$token,
+            'seller_bank_voen' => 'BV'.$token,
+            'seller_swift' => 'S'.$token,
+        ];
+
+        config([
+            'invoice.seller.name' => $snapshot['seller_name'],
+            'invoice.seller.voen' => $snapshot['seller_voen'],
+            'invoice.seller.bank_name' => $snapshot['seller_bank_name'],
+            'invoice.seller.iban' => $snapshot['seller_iban'],
+            'invoice.seller.bank_code' => $snapshot['seller_bank_code'],
+            'invoice.seller.bank_voen' => $snapshot['seller_bank_voen'],
+            'invoice.seller.swift' => $snapshot['seller_swift'],
+        ]);
+
+        return $snapshot;
+    }
+
+    /** @param array<string, ?string> $snapshot */
+    private function assertSellerSnapshot(Invoice $invoice, array $snapshot): void
+    {
+        foreach ($snapshot as $field => $value) {
+            $this->assertSame($value, $invoice->getAttribute($field), $field);
+        }
     }
 }

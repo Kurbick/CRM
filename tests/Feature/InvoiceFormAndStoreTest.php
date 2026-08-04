@@ -83,6 +83,7 @@ class InvoiceFormAndStoreTest extends TestCase
 
     public function test_store_forces_draft_and_server_snapshots_and_ignores_invoice_periods(): void
     {
+        $sellerSnapshot = $this->configureSeller('WEB SELLER SNAPSHOT');
         [$companyId, $contractId] = $this->companyAndContract('Main', 'AZ123', 'C-001');
 
         $response = $this->post(route('invoices.store'), array_merge(
@@ -105,6 +106,7 @@ class InvoiceFormAndStoreTest extends TestCase
         $this->assertSame('C-001', $invoice->contract_reference);
         $this->assertNull($invoice->period_start);
         $this->assertNull($invoice->period_end);
+        $this->assertSellerSnapshot($invoice, $sellerSnapshot);
         $this->assertDatabaseHas('invoice_lines', [
             'invoice_id' => $invoice->id,
             'subscription_id' => null,
@@ -112,6 +114,60 @@ class InvoiceFormAndStoreTest extends TestCase
             'period_start' => null,
             'period_end' => null,
         ]);
+    }
+
+    public function test_web_store_rejects_forged_seller_fields_without_mutation(): void
+    {
+        [$companyId, $contractId] = $this->companyAndContract('Forged seller payer');
+        $forged = [
+            'seller_name' => 'WEB FORGED SELLER NAME',
+            'seller_voen' => 'WEB-FORGED-VOEN',
+            'seller_bank_name' => 'WEB FORGED BANK',
+            'seller_iban' => 'WEB-FORGED-IBAN',
+            'seller_bank_code' => 'WEB-FORGED-CODE',
+            'seller_bank_voen' => 'WEB-FORGED-BANK-VOEN',
+            'seller_swift' => 'WEB-FORGED-SWIFT',
+        ];
+
+        $this->post(
+            route('invoices.store'),
+            $this->basePayload($companyId, $contractId) + $forged
+        )->assertSessionHasErrors(array_keys($forged));
+
+        $this->assertDatabaseCount('invoices', 0);
+        $this->assertDatabaseCount('invoice_lines', 0);
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertDatabaseCount('credit_balance_entries', 0);
+    }
+
+    public function test_api_and_web_creation_use_the_same_seller_snapshot(): void
+    {
+        $sellerSnapshot = $this->configureSeller('PARITY SELLER');
+        [$webCompanyId, $webContractId] = $this->companyAndContract(
+            'Web payer',
+            contract: 'WEB-PARITY-CONTRACT'
+        );
+        [$apiCompanyId, $apiContractId] = $this->companyAndContract(
+            'API payer',
+            contract: 'API-PARITY-CONTRACT'
+        );
+
+        $this->post(
+            route('invoices.store'),
+            $this->basePayload($webCompanyId, $webContractId)
+        )->assertRedirect();
+
+        $apiPayload = $this->basePayload($apiCompanyId, $apiContractId);
+        $apiPayload['total_amount'] = '999.99';
+        $this->postJson(
+            route('api.companies.invoices.store', ['company' => $apiCompanyId]),
+            $apiPayload
+        )->assertCreated();
+
+        $invoices = Invoice::query()->orderBy('id')->get();
+        $this->assertCount(2, $invoices);
+        $this->assertSellerSnapshot($invoices[0], $sellerSnapshot);
+        $this->assertSellerSnapshot($invoices[1], $sellerSnapshot);
     }
 
     public function test_contract_must_belong_to_selected_company(): void
@@ -227,5 +283,40 @@ class InvoiceFormAndStoreTest extends TestCase
                 'amount' => 25,
             ]],
         ];
+    }
+
+    /** @return array<string, string> */
+    private function configureSeller(string $prefix): array
+    {
+        $token = strtoupper(substr(hash('sha256', $prefix), 0, 8));
+        $snapshot = [
+            'seller_name' => $prefix.' NAME',
+            'seller_voen' => 'V'.$token,
+            'seller_bank_name' => $prefix.' BANK',
+            'seller_iban' => 'AZ00'.$token.'IBAN',
+            'seller_bank_code' => 'C'.$token,
+            'seller_bank_voen' => 'BV'.$token,
+            'seller_swift' => 'S'.$token,
+        ];
+
+        config([
+            'invoice.seller.name' => $snapshot['seller_name'],
+            'invoice.seller.voen' => $snapshot['seller_voen'],
+            'invoice.seller.bank_name' => $snapshot['seller_bank_name'],
+            'invoice.seller.iban' => $snapshot['seller_iban'],
+            'invoice.seller.bank_code' => $snapshot['seller_bank_code'],
+            'invoice.seller.bank_voen' => $snapshot['seller_bank_voen'],
+            'invoice.seller.swift' => $snapshot['seller_swift'],
+        ]);
+
+        return $snapshot;
+    }
+
+    /** @param array<string, string> $snapshot */
+    private function assertSellerSnapshot(Invoice $invoice, array $snapshot): void
+    {
+        foreach ($snapshot as $field => $value) {
+            $this->assertSame($value, $invoice->getAttribute($field), $field);
+        }
     }
 }

@@ -148,36 +148,36 @@
                     {{-- Данные продавца (Мы) --}}
                     <div class="space-y-1">
                         <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Поставщик услуг</div>
-                        <h2 class="text-lg font-bold text-gray-900">{{ $invoice->seller_name ?? 'IT Solutions MMC' }}</h2>
-                        <div class="text-sm text-gray-600 font-mono">VÖEN: {{ $invoice->seller_voen ?? '9900123456' }}
+                        <h2 class="text-lg font-bold text-gray-900">{{ $invoice->seller_name ?? $sellerFallback['seller_name'] }}</h2>
+                        <div class="text-sm text-gray-600 font-mono">VÖEN: {{ $invoice->seller_voen ?? $sellerFallback['seller_voen'] }}
                         </div>
-                        @if ($invoice->seller_bank_name ?? 'Pasha Bank OJSC')
+                        @if ($invoice->seller_bank_name ?? $sellerFallback['seller_bank_name'])
                             <div class="text-sm text-gray-600 mt-1.5">
                                 <span class="font-medium text-gray-800">Банк:</span>
-                                {{ $invoice->seller_bank_name ?? 'Pasha Bank OJSC' }}
+                                {{ $invoice->seller_bank_name ?? $sellerFallback['seller_bank_name'] }}
                             </div>
                         @endif
-                        @if ($invoice->seller_iban ?? 'AZ00PRCB0000000000000000000')
+                        @if ($invoice->seller_iban ?? $sellerFallback['seller_iban'])
                             <div class="text-sm text-gray-600 break-words [overflow-wrap:anywhere]">
                                 <span class="font-medium text-gray-800">IBAN:</span>
-                                <span class="font-mono">{{ $invoice->seller_iban ?? 'AZ00PRCB0000000000000000000' }}</span>
+                                <span class="font-mono">{{ $invoice->seller_iban ?? $sellerFallback['seller_iban'] }}</span>
                             </div>
                         @endif
-                        @if (($invoice->seller_swift ?? 'PAHBAZ2D') || ($invoice->seller_bank_code ?? '505050'))
+                        @if (($invoice->seller_swift ?? $sellerFallback['seller_swift']) || ($invoice->seller_bank_code ?? $sellerFallback['seller_bank_code']))
                             <div class="grid grid-cols-2 gap-2 text-sm text-gray-600">
-                            @if ($invoice->seller_swift ?? 'PAHBAZ2D')
+                            @if ($invoice->seller_swift ?? $sellerFallback['seller_swift'])
                                 <div><span class="font-medium text-gray-800">SWIFT:</span> <span
-                                        class="font-mono">{{ $invoice->seller_swift ?? 'PAHBAZ2D' }}</span></div>
+                                        class="font-mono">{{ $invoice->seller_swift ?? $sellerFallback['seller_swift'] }}</span></div>
                             @endif
-                            @if ($invoice->seller_bank_code ?? '505050')
+                            @if ($invoice->seller_bank_code ?? $sellerFallback['seller_bank_code'])
                                 <div><span class="font-medium text-gray-800">Код банка:</span> <span
-                                        class="font-mono">{{ $invoice->seller_bank_code ?? '505050' }}</span></div>
+                                        class="font-mono">{{ $invoice->seller_bank_code ?? $sellerFallback['seller_bank_code'] }}</span></div>
                             @endif
                             </div>
                         @endif
-                        @if ($invoice->seller_bank_voen)
+                        @if ($invoice->seller_bank_voen ?? $sellerFallback['seller_bank_voen'])
                             <div class="text-sm text-gray-600 font-mono">
-                                <span class="font-medium text-gray-800">VÖEN банка:</span> {{ $invoice->seller_bank_voen }}
+                                <span class="font-medium text-gray-800">VÖEN банка:</span> {{ $invoice->seller_bank_voen ?? $sellerFallback['seller_bank_voen'] }}
                             </div>
                         @endif
                     </div>

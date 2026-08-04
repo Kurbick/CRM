@@ -33,14 +33,14 @@ class StoreInvoiceRequest extends FormRequest
             'total_amount' => 'required|numeric|min:0',
             'status' => 'prohibited',
 
-            // Реквизиты продавца (наша компания)
-            'seller_name' => 'nullable|string|max:255',
-            'seller_voen' => 'nullable|string|max:20',
-            'seller_bank_name' => 'nullable|string|max:255',
-            'seller_iban' => 'nullable|string|max:50',
-            'seller_bank_code' => 'nullable|string|max:20',
-            'seller_bank_voen' => 'nullable|string|max:20',
-            'seller_swift' => 'nullable|string|max:20',
+            // Реквизиты продавца принадлежат deployment configuration.
+            'seller_name' => 'prohibited',
+            'seller_voen' => 'prohibited',
+            'seller_bank_name' => 'prohibited',
+            'seller_iban' => 'prohibited',
+            'seller_bank_code' => 'prohibited',
+            'seller_bank_voen' => 'prohibited',
+            'seller_swift' => 'prohibited',
 
             // Реквизиты плательщика (клиент)
             'payer_name' => 'nullable|string|max:255',

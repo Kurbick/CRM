@@ -43,6 +43,49 @@ class InvoicePrintAndDisplayTest extends TestCase
         $this->assertStringContainsString('invoice-print-only hidden', $content);
     }
 
+    public function test_stored_seller_snapshot_has_priority_over_current_configuration(): void
+    {
+        $invoice = $this->invoice('issued', '100.00');
+        $this->line($invoice, 'Stored snapshot line', '100.00');
+        $stored = $this->sellerValues('STORED SELLER');
+        $configured = $this->sellerValues('CONFIGURED SELLER');
+        $invoice->forceFill($stored)->save();
+        $this->configureSeller($configured);
+
+        $response = $this->get(route('invoices.show', $invoice))->assertOk();
+
+        foreach ($stored as $value) {
+            $response->assertSee($value);
+        }
+        foreach ($configured as $value) {
+            $response->assertDontSee($value);
+        }
+    }
+
+    public function test_legacy_null_seller_snapshot_uses_current_configuration_without_hardcoded_values(): void
+    {
+        $invoice = $this->invoice('issued', '100.00');
+        $this->line($invoice, 'Legacy snapshot line', '100.00');
+        $configured = $this->sellerValues('LEGACY CONFIG SELLER');
+        $this->configureSeller($configured);
+
+        $response = $this->get(route('invoices.show', $invoice))->assertOk();
+
+        foreach ($configured as $value) {
+            $response->assertSee($value);
+        }
+        foreach ([
+            'Поставщик услуг',
+            'VÖEN:',
+            'Банк:',
+            'IBAN:',
+            'SWIFT:',
+            'Код банка:',
+        ] as $sellerLabel) {
+            $response->assertSee($sellerLabel);
+        }
+    }
+
     public function test_payment_history_uses_precise_labels_and_accessible_responsive_drawer(): void
     {
         $invoice = $this->invoice('paid', '100.00');
@@ -217,6 +260,36 @@ class InvoicePrintAndDisplayTest extends TestCase
             'payment_id' => $payment->id,
             'invoice_line_id' => $lineId,
             'amount' => $amount,
+        ]);
+    }
+
+    /** @return array<string, string> */
+    private function sellerValues(string $prefix): array
+    {
+        $token = strtoupper(substr(hash('sha256', $prefix), 0, 8));
+
+        return [
+            'seller_name' => $prefix.' NAME',
+            'seller_voen' => 'V'.$token,
+            'seller_bank_name' => $prefix.' BANK',
+            'seller_iban' => 'AZ00'.$token.'IBAN',
+            'seller_bank_code' => 'C'.$token,
+            'seller_bank_voen' => 'BV'.$token,
+            'seller_swift' => 'S'.$token,
+        ];
+    }
+
+    /** @param array<string, string> $values */
+    private function configureSeller(array $values): void
+    {
+        config([
+            'invoice.seller.name' => $values['seller_name'],
+            'invoice.seller.voen' => $values['seller_voen'],
+            'invoice.seller.bank_name' => $values['seller_bank_name'],
+            'invoice.seller.iban' => $values['seller_iban'],
+            'invoice.seller.bank_code' => $values['seller_bank_code'],
+            'invoice.seller.bank_voen' => $values['seller_bank_voen'],
+            'invoice.seller.swift' => $values['seller_swift'],
         ]);
     }
 }

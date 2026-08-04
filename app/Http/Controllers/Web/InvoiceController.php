@@ -19,6 +19,7 @@ use App\Services\InvoicePaymentSourceResolver;
 use App\Services\SubscriptionBillingSchedule;
 use App\Support\Access\PermissionName;
 use App\Support\CompanyPageContext;
+use App\Support\Invoices\InvoiceSellerSnapshot;
 use App\Support\Navigation\AuthorizedLandingPage;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -38,6 +39,7 @@ class InvoiceController extends Controller
         private readonly InvoicePaymentBreakdownPresenter $paymentBreakdownPresenter,
         private readonly InvoicePaymentSourceResolver $paymentSourceResolver,
         private readonly SubscriptionBillingSchedule $billingSchedule,
+        private readonly InvoiceSellerSnapshot $sellerSnapshot,
     ) {}
 
     /**
@@ -183,13 +185,13 @@ class InvoiceController extends Controller
             'issue_date' => 'required|date',
             'due_date' => 'nullable|date',
 
-            'seller_name' => 'nullable|string|max:255',
-            'seller_voen' => 'nullable|string|max:20',
-            'seller_bank_name' => 'nullable|string|max:255',
-            'seller_iban' => 'nullable|string|max:50',
-            'seller_bank_code' => 'nullable|string|max:20',
-            'seller_bank_voen' => 'nullable|string|max:20',
-            'seller_swift' => 'nullable|string|max:20',
+            'seller_name' => 'prohibited',
+            'seller_voen' => 'prohibited',
+            'seller_bank_name' => 'prohibited',
+            'seller_iban' => 'prohibited',
+            'seller_bank_code' => 'prohibited',
+            'seller_bank_voen' => 'prohibited',
+            'seller_swift' => 'prohibited',
 
             'comment' => 'nullable|string',
 
@@ -540,6 +542,10 @@ class InvoiceController extends Controller
                 $invoiceData['payer_name'] = $company->name;
                 $invoiceData['payer_voen'] = $company->voen;
                 $invoiceData['contract_reference'] = $contract->contract_number;
+                $invoiceData = array_merge(
+                    $invoiceData,
+                    $this->sellerSnapshot->toArray()
+                );
 
                 $invoice = Invoice::create($invoiceData);
 
@@ -643,6 +649,7 @@ class InvoiceController extends Controller
             'hasPayments',
             'actionablePayments'
         );
+        $viewData['sellerFallback'] = $this->sellerSnapshot->toArray();
 
         if ($canViewPaymentHistory) {
             $viewData += compact('paymentsById', 'paymentSource');

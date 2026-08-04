@@ -13,6 +13,7 @@ use App\Models\Subscription;
 use App\Services\InvoiceDueDateCalculator;
 use App\Services\InvoiceEditabilityService;
 use App\Services\SubscriptionBillingSchedule;
+use App\Support\Invoices\InvoiceSellerSnapshot;
 use Carbon\CarbonImmutable;
 use DateTimeInterface;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -29,6 +30,7 @@ class InvoiceController extends Controller
         private readonly InvoiceDueDateCalculator $dueDateCalculator,
         private readonly InvoiceEditabilityService $editabilityService,
         private readonly SubscriptionBillingSchedule $billingSchedule,
+        private readonly InvoiceSellerSnapshot $sellerSnapshot,
     ) {}
 
     public function index(Company $company): JsonResponse
@@ -203,13 +205,7 @@ class InvoiceController extends Controller
                     'period_end' => null,
                     'total_amount' => $this->formatMinorUnits($totalMinorUnits),
                     'status' => 'draft',
-                    'seller_name' => $validated['seller_name'] ?? null,
-                    'seller_voen' => $validated['seller_voen'] ?? null,
-                    'seller_bank_name' => $validated['seller_bank_name'] ?? null,
-                    'seller_iban' => $validated['seller_iban'] ?? null,
-                    'seller_bank_code' => $validated['seller_bank_code'] ?? null,
-                    'seller_bank_voen' => $validated['seller_bank_voen'] ?? null,
-                    'seller_swift' => $validated['seller_swift'] ?? null,
+                    ...$this->sellerSnapshot->toArray(),
                     'payer_name' => $invoiceCompany->name,
                     'payer_voen' => $invoiceCompany->voen,
                     'contract_reference' => $contract->contract_number,
