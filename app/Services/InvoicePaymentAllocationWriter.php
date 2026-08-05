@@ -15,9 +15,9 @@ use UnexpectedValueException;
 class InvoicePaymentAllocationWriter
 {
     public function __construct(
-        private readonly InvoicePaymentAllocationCalculator $calculator
-    ) {
-    }
+        private readonly InvoicePaymentAllocationCalculator $calculator,
+        private readonly InvoicePaymentAvailabilityService $money
+    ) {}
 
     /**
      * Recalculate and synchronize persisted allocations for one invoice.
@@ -35,7 +35,7 @@ class InvoicePaymentAllocationWriter
      */
     public function synchronize(Invoice $invoice): array
     {
-        if (!$invoice->exists || $invoice->getKey() === null) {
+        if (! $invoice->exists || $invoice->getKey() === null) {
             throw new InvalidArgumentException('Invoice must exist in the database before allocations can be synchronized.');
         }
 
@@ -65,7 +65,12 @@ class InvoicePaymentAllocationWriter
                 $lockedInvoice->getKey()
             );
 
-            $calculation = $this->calculator->calculate($lines, $payments);
+            $calculationPayments = $payments->filter(
+                fn (Payment $payment): bool => $this->money->toMinorUnits(
+                    $payment->getRawOriginal('amount')
+                ) > 0
+            );
+            $calculation = $this->calculator->calculate($lines, $calculationPayments);
             $desired = $this->validateCalculation($calculation, $payments, $lines);
             $changes = $this->synchronizeAllocations($existingAllocations, $desired);
 
@@ -89,7 +94,7 @@ class InvoicePaymentAllocationWriter
         $lineIds = $lines->modelKeys();
 
         if ($paymentIds === [] && $lineIds === []) {
-            return new Collection();
+            return new Collection;
         }
 
         $allocations = PaymentAllocation::query()
@@ -115,13 +120,13 @@ class InvoicePaymentAllocationWriter
             ->whereIn('id', $allocations->pluck('payment_id')->unique()->values())
             ->lockForUpdate()
             ->get()
-            ->keyBy(fn(Payment $payment): int => (int) $payment->getKey());
+            ->keyBy(fn (Payment $payment): int => (int) $payment->getKey());
 
         $relatedLines = InvoiceLine::query()
             ->whereIn('id', $allocations->pluck('invoice_line_id')->unique()->values())
             ->lockForUpdate()
             ->get()
-            ->keyBy(fn(InvoiceLine $line): int => (int) $line->getKey());
+            ->keyBy(fn (InvoiceLine $line): int => (int) $line->getKey());
 
         foreach ($allocations as $allocation) {
             $payment = $relatedPayments->get((int) $allocation->payment_id);
@@ -157,8 +162,8 @@ class InvoicePaymentAllocationWriter
             $lineInvoiceId = $line instanceof InvoiceLine ? (int) $line->invoice_id : null;
 
             if (
-                !$payment instanceof Payment
-                || !$line instanceof InvoiceLine
+                ! $payment instanceof Payment
+                || ! $line instanceof InvoiceLine
                 || $paymentInvoiceId !== $lineInvoiceId
                 || $paymentInvoiceId !== $expectedInvoiceId
             ) {
@@ -186,12 +191,12 @@ class InvoicePaymentAllocationWriter
         Collection $payments,
         Collection $lines
     ): array {
-        if (!isset($calculation['allocations'], $calculation['totals']) || !is_array($calculation['allocations'])) {
+        if (! isset($calculation['allocations'], $calculation['totals']) || ! is_array($calculation['allocations'])) {
             throw new UnexpectedValueException('Allocation calculator returned an invalid result structure.');
         }
 
-        $paymentMap = $payments->keyBy(fn(Payment $payment): int => (int) $payment->getKey());
-        $lineMap = $lines->keyBy(fn(InvoiceLine $line): int => (int) $line->getKey());
+        $paymentMap = $payments->keyBy(fn (Payment $payment): int => (int) $payment->getKey());
+        $lineMap = $lines->keyBy(fn (InvoiceLine $line): int => (int) $line->getKey());
         $desired = [];
         $paymentSums = [];
         $lineSums = [];
@@ -200,7 +205,7 @@ class InvoicePaymentAllocationWriter
         $actualConfirmedPaymentTotal = 0;
 
         foreach ($calculation['allocations'] as $allocation) {
-            if (!is_array($allocation)) {
+            if (! is_array($allocation)) {
                 throw new UnexpectedValueException('Each calculated allocation must be an array.');
             }
 
@@ -209,7 +214,7 @@ class InvoicePaymentAllocationWriter
             $payment = $paymentMap->get($paymentId);
             $line = $lineMap->get($lineId);
 
-            if (!$payment instanceof Payment || !$line instanceof InvoiceLine) {
+            if (! $payment instanceof Payment || ! $line instanceof InvoiceLine) {
                 throw new LogicException("Calculated allocation references payment {$paymentId} or invoice line {$lineId} outside the invoice.");
             }
 
@@ -245,7 +250,15 @@ class InvoicePaymentAllocationWriter
         foreach ($payments as $payment) {
             $paymentId = (int) $payment->getKey();
             $allocated = $paymentSums[$paymentId] ?? 0;
-            $paymentAmount = $this->toMinorUnits($payment->amount, "Payment {$paymentId} amount");
+            $paymentAmount = $this->money->toMinorUnits($payment->getRawOriginal('amount'));
+
+            if ($paymentAmount <= 0) {
+                if ($allocated !== 0) {
+                    throw new LogicException("Non-positive payment {$paymentId} has calculated allocations.");
+                }
+
+                continue;
+            }
 
             if ($payment->status !== 'confirmed' && $allocated !== 0) {
                 throw new LogicException("Pending or cancelled payment {$paymentId} has calculated allocations.");
@@ -306,6 +319,7 @@ class InvoicePaymentAllocationWriter
             if ($target === null) {
                 $allocation->delete();
                 $changes['deleted']++;
+
                 continue;
             }
 
@@ -335,7 +349,7 @@ class InvoicePaymentAllocationWriter
     /** @param array<string, mixed> $calculation */
     private function totalMinorUnits(array $calculation, string $key): int
     {
-        if (!isset($calculation['totals']) || !is_array($calculation['totals']) || !array_key_exists($key, $calculation['totals'])) {
+        if (! isset($calculation['totals']) || ! is_array($calculation['totals']) || ! array_key_exists($key, $calculation['totals'])) {
             throw new UnexpectedValueException("Allocation calculator result is missing totals.{$key}.");
         }
 
@@ -355,7 +369,7 @@ class InvoicePaymentAllocationWriter
     {
         $value = is_int($value) ? (string) $value : $value;
 
-        if (!is_string($value) || preg_match('/^(\d+)(?:\.(\d{1,2}))?$/', trim($value), $matches) !== 1) {
+        if (! is_string($value) || preg_match('/^(\d+)(?:\.(\d{1,2}))?$/', trim($value), $matches) !== 1) {
             throw new UnexpectedValueException("{$field} must be a non-negative decimal with at most two decimal places.");
         }
 

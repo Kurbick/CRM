@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Payments\ApplyConfirmedPaymentLifecycle;
 use App\Actions\Payments\ConfirmPayment;
 use App\Exceptions\Payments\PaymentConfirmationException;
 use App\Models\CreditBalance;
@@ -214,7 +215,7 @@ class PaymentConfirmationActionTest extends AuthorizationTestCase
         $invalidParser->shouldReceive('toMinorUnits')->once()->andThrow(new LogicException('internal parser detail'));
         $invalidAction = new ConfirmPayment(
             $invalidParser,
-            app(InvoicePaymentAllocationWriter::class)
+            app(ApplyConfirmedPaymentLifecycle::class)
         );
 
         $this->expectBusinessConflict(fn () => $invalidAction->execute($invalidPayment));
@@ -225,7 +226,7 @@ class PaymentConfirmationActionTest extends AuthorizationTestCase
         $overflowParser->shouldReceive('toMinorUnits')->once()->andReturn(10_000_000_000);
         $overflowAction = new ConfirmPayment(
             $overflowParser,
-            app(InvoicePaymentAllocationWriter::class)
+            app(ApplyConfirmedPaymentLifecycle::class)
         );
 
         $this->expectBusinessConflict(fn () => $overflowAction->execute($overflowPayment));
@@ -310,26 +311,28 @@ class PaymentConfirmationActionTest extends AuthorizationTestCase
         $this->assertFinancialSideEffectsAbsent();
     }
 
-    public function test_model_event_failure_propagates_and_rolls_back_every_financial_write(): void
+    public function test_confirmation_uses_quiet_save_and_explicit_lifecycle(): void
     {
         [$invoice] = $this->invoiceFixture('issued');
         $payment = $this->pendingPayment($invoice, '130.00');
-        Payment::saved(function (Payment $saved) use ($payment): void {
+        $savedEventRan = false;
+        Payment::saved(function (Payment $saved) use ($payment, &$savedEventRan): void {
             if ($saved->is($payment) && $saved->status === 'confirmed') {
-                throw new RuntimeException('model-event-failure');
+                $savedEventRan = true;
             }
         });
 
         try {
             app(ConfirmPayment::class)->execute($payment);
-            $this->fail('Model event failure must propagate.');
-        } catch (RuntimeException $exception) {
-            $this->assertSame('model-event-failure', $exception->getMessage());
+        } finally {
+            Payment::flushEventListeners();
         }
 
-        $this->assertSame('pending', $payment->fresh()->status);
-        $this->assertSame('issued', $invoice->fresh()->status);
-        $this->assertFinancialSideEffectsAbsent();
+        $this->assertFalse($savedEventRan);
+        $this->assertSame('confirmed', $payment->fresh()->status);
+        $this->assertSame('paid', $invoice->fresh()->status);
+        $this->assertDatabaseCount('payment_allocations', 1);
+        $this->assertDatabaseCount('credit_balance_entries', 1);
     }
 
     public function test_policy_denial_happens_after_binding_and_before_financial_queries(): void

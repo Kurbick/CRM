@@ -70,9 +70,10 @@ class InvoiceEditabilityStructureTest extends TestCase
         );
     }
 
-    public function test_new_payment_recalculates_availability_after_invoice_lock_only_for_store(): void
+    public function test_new_payment_recalculates_availability_after_invoice_lock_for_both_store_paths(): void
     {
         $source = file_get_contents(app_path('Http/Controllers/Web/PaymentController.php'));
+        $confirmedSource = file_get_contents(app_path('Actions/Payments/CreateConfirmedPayment.php'));
         $store = $this->methodSource($source, 'public function store(', 'public function confirm(');
         $confirm = $this->methodSource($source, 'public function confirm(', 'public function cancel(');
 
@@ -81,12 +82,20 @@ class InvoiceEditabilityStructureTest extends TestCase
             $store,
             '$this->paymentAvailabilityService->evaluate($lockedInvoice)'
         );
-        $createPosition = strpos($store, '$payment = Payment::query()->create(');
+        $createPosition = strpos($store, 'Payment::query()->create(');
 
         $this->assertLessThan($availabilityPosition, $lockPosition);
         $this->assertLessThan($createPosition, $availabilityPosition);
         $this->assertStringContainsString("\$paymentAvailability['pending_minor'] > 0", $store);
         $this->assertStringContainsString('Сумма платежа не может превышать остаток', $store);
+        $this->assertLessThan(
+            strpos($confirmedSource, 'evaluatePendingCreation($lockedInvoice)'),
+            strpos($confirmedSource, '->lockForUpdate()')
+        );
+        $this->assertLessThan(
+            strpos($confirmedSource, 'Payment::withoutEvents('),
+            strpos($confirmedSource, 'evaluatePendingCreation($lockedInvoice)')
+        );
         $this->assertStringNotContainsString('paymentAvailabilityService', $confirm);
     }
 

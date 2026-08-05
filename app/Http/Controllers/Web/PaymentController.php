@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Web;
 
 use App\Actions\Payments\ConfirmPayment;
+use App\Actions\Payments\CreateConfirmedPayment;
 use App\Exceptions\Payments\PaymentConfirmationException;
 use App\Http\Controllers\Controller;
 use App\Models\CreditBalance;
@@ -24,7 +25,8 @@ class PaymentController extends Controller
     public function __construct(
         private readonly InvoicePaymentAllocationWriter $allocationWriter,
         private readonly InvoicePaymentAvailabilityService $paymentAvailabilityService,
-        private readonly ConfirmPayment $confirmPayment
+        private readonly ConfirmPayment $confirmPayment,
+        private readonly CreateConfirmedPayment $createConfirmedPayment
     ) {}
 
     /**
@@ -93,70 +95,65 @@ class PaymentController extends Controller
             'comment.max' => 'Комментарий не должен превышать 2000 символов.',
         ]);
 
-        DB::transaction(function () use (
-            $validated,
-            $invoice
-        ): void {
-            /*
-             * Блокируем инвойс на время регистрации платежа,
-             * чтобы два одновременных платежа не нарушили
-             * расчёт статуса и переплаты.
-             */
-            $lockedInvoice = Invoice::query()
-                ->whereKey($invoice->id)
-                ->lockForUpdate()
-                ->firstOrFail();
+        if ($validated['status'] === 'confirmed') {
+            $this->createConfirmedPayment->execute($invoice, $validated);
+        } else {
+            DB::transaction(function () use (
+                $validated,
+                $invoice
+            ): void {
+                /*
+                 * Блокируем инвойс на время регистрации платежа,
+                 * чтобы два одновременных платежа не нарушили
+                 * расчёт статуса и переплаты.
+                 */
+                $lockedInvoice = Invoice::query()
+                    ->whereKey($invoice->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
 
-            /*
-             * Платежи разрешены только по выставленному
-             * или частично оплаченному инвойсу.
-             */
-            if (
-                ! in_array(
-                    $lockedInvoice->status,
-                    ['issued', 'partially_paid'],
-                    true
-                )
-            ) {
-                throw ValidationException::withMessages([
-                    'amount' => 'Платёж можно добавить только по выставленному или частично оплаченному инвойсу.',
+                /*
+                 * Платежи разрешены только по выставленному
+                 * или частично оплаченному инвойсу.
+                 */
+                if (
+                    ! in_array(
+                        $lockedInvoice->status,
+                        ['issued', 'partially_paid'],
+                        true
+                    )
+                ) {
+                    throw ValidationException::withMessages([
+                        'amount' => 'Платёж можно добавить только по выставленному или частично оплаченному инвойсу.',
+                    ]);
+                }
+
+                $paymentAvailability = $this->paymentAvailabilityService->evaluate($lockedInvoice);
+                $paymentAmountMinor = $this->paymentAvailabilityService->toMinorUnits($validated['amount']);
+
+                if (
+                    $paymentAvailability['pending_minor'] > 0
+                    && $paymentAmountMinor > $paymentAvailability['available_minor']
+                ) {
+                    throw ValidationException::withMessages([
+                        'amount' => 'Сумма платежа не может превышать остаток '
+                            .$this->paymentAvailabilityService->formatMinorUnits(
+                                $paymentAvailability['available_minor']
+                            ).'.',
+                    ]);
+                }
+
+                Payment::query()->create([
+                    'company_id' => $lockedInvoice->company_id,
+                    'invoice_id' => $lockedInvoice->id,
+                    'payment_date' => $validated['payment_date'],
+                    'amount' => $this->paymentAvailabilityService->fromMinorUnits($paymentAmountMinor),
+                    'payment_method' => $validated['payment_method'],
+                    'status' => 'pending',
+                    'comment' => $validated['comment'] ?? null,
                 ]);
-            }
-
-            $paymentAvailability = $this->paymentAvailabilityService->evaluate($lockedInvoice);
-            $paymentAmountMinor = $this->paymentAvailabilityService->toMinorUnits($validated['amount']);
-
-            if (
-                $paymentAvailability['pending_minor'] > 0
-                && $paymentAmountMinor > $paymentAvailability['available_minor']
-            ) {
-                throw ValidationException::withMessages([
-                    'amount' => 'Сумма платежа не может превышать остаток '
-                        .$this->paymentAvailabilityService->formatMinorUnits(
-                            $paymentAvailability['available_minor']
-                        ).'.',
-                ]);
-            }
-
-            $payment = Payment::query()->create([
-                'company_id' => $lockedInvoice->company_id,
-                'invoice_id' => $lockedInvoice->id,
-                'payment_date' => $validated['payment_date'],
-                'amount' => $this->paymentAvailabilityService->fromMinorUnits($paymentAmountMinor),
-                'payment_method' => $validated['payment_method'],
-                'status' => $validated['status'],
-                'comment' => $validated['comment'] ?? null,
-            ]);
-
-            if ($payment->status === 'confirmed') {
-                $this->allocationWriter->synchronize($lockedInvoice);
-            }
-
-            /*
-             * Пересчёт статуса инвойса и создание переплаты
-             * выполняются в booted() модели Payment.
-             */
-        });
+            });
+        }
 
         return $this->mutationRedirect($invoice)
             ->with(
@@ -168,10 +165,7 @@ class PaymentController extends Controller
     /**
      * Подтверждение ожидающего платежа.
      *
-     * После изменения статуса модель Payment автоматически:
-     * 1. пересчитает статус инвойса;
-     * 2. обновит оплаченную сумму;
-     * 3. создаст переплату в Credit Balance при необходимости.
+     * Финансовый lifecycle выполняется явно в ConfirmPayment.
      */
     public function confirm(
         Payment $payment

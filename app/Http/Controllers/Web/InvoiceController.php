@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Web;
 
 use App\Actions\Invoices\DeleteInvoice;
+use App\Actions\Payments\ApplyConfirmedPaymentLifecycle;
 use App\Exceptions\Invoices\InvoiceDeletionException;
 use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\Contract;
+use App\Models\CreditBalance;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
 use App\Models\Order;
@@ -14,7 +16,6 @@ use App\Models\Payment;
 use App\Models\Subscription;
 use App\Services\InvoiceDueDateCalculator;
 use App\Services\InvoiceEditabilityService;
-use App\Services\InvoicePaymentAllocationWriter;
 use App\Services\InvoicePaymentAvailabilityService;
 use App\Services\InvoicePaymentBreakdownPresenter;
 use App\Services\InvoicePaymentSourceResolver;
@@ -964,11 +965,11 @@ class InvoiceController extends Controller
 
     public function issue(
         Invoice $invoice,
-        InvoicePaymentAllocationWriter $allocationWriter
+        ApplyConfirmedPaymentLifecycle $paymentLifecycle
     ) {
         Gate::authorize('issue', $invoice);
 
-        DB::transaction(function () use ($invoice, $allocationWriter) {
+        DB::transaction(function () use ($invoice, $paymentLifecycle) {
             /*
          * Блокируем инвойс, чтобы его нельзя было
          * выставить одновременно двумя запросами.
@@ -1244,29 +1245,40 @@ class InvoiceController extends Controller
          * Применяем кредитный баланс только после
          * успешного выставления черновика.
          */
-            $company = $invoice->company()
-                ->firstOrFail();
-
-            $creditBalance = $company
-                ->creditBalance()
+            $creditBalance = CreditBalance::query()
+                ->where('company_id', $invoice->company_id)
                 ->lockForUpdate()
                 ->first();
 
-            if ($creditBalance && $creditBalance->amount > 0) {
+            if ($creditBalance !== null) {
+                if ((int) $creditBalance->company_id !== (int) $invoice->company_id) {
+                    throw new \LogicException('Credit Balance and Invoice companies do not match.');
+                }
+
+                $balanceMinor = $this->paymentAvailabilityService->toMinorUnits(
+                    $creditBalance->getRawOriginal('amount')
+                );
+
+                if ($balanceMinor <= 0) {
+                    return;
+                }
+
                 $applied = $creditBalance->apply(
                     $invoice->total_amount,
                     $invoice
                 );
+                $appliedMinor = $this->paymentAvailabilityService->toMinorUnits($applied);
 
-                if ($applied > 0) {
-                    $payment = $invoice->payments()->create([
-                        'company_id' => $company->id,
+                if ($appliedMinor > 0) {
+                    $appliedAmount = $this->paymentAvailabilityService->fromMinorUnits($appliedMinor);
+                    $payment = Payment::withoutEvents(fn (): Payment => $invoice->payments()->create([
+                        'company_id' => $invoice->company_id,
                         'payment_date' => now()->toDateString(),
-                        'amount' => $applied,
+                        'amount' => $appliedAmount,
                         'payment_method' => 'transfer',
                         'status' => 'confirmed',
                         'comment' => "Автоматически применён Credit Balance ({$applied} ₼)",
-                    ]);
+                    ]));
 
                     $creditBalance->entries()
                         ->where('type', 'applied')
@@ -1274,7 +1286,7 @@ class InvoiceController extends Controller
                         ->whereNull('payment_id')
                         ->update(['payment_id' => $payment->id]);
 
-                    $allocationWriter->synchronize($invoice);
+                    $paymentLifecycle->execute($invoice, $payment);
                 }
             }
         });

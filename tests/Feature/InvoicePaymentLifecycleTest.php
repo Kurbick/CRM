@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Payments\CreateConfirmedPayment;
 use App\Models\CreditBalance;
 use App\Models\Invoice;
 use App\Models\Payment;
@@ -98,7 +99,7 @@ class InvoicePaymentLifecycleTest extends TestCase
     public function test_confirmed_payment_cannot_be_cancelled_without_reason(): void
     {
         $invoice = $this->invoice();
-        $payment = Payment::create($this->paymentAttributes($invoice, 'confirmed', 125));
+        $payment = $this->confirmedPayment($invoice, 125);
         $balance = CreditBalance::where('company_id', $invoice->company_id)->firstOrFail();
 
         $this->assertSame(25.0, (float) $balance->amount);
@@ -144,7 +145,7 @@ class InvoicePaymentLifecycleTest extends TestCase
     public function test_cancelling_confirmed_partial_payment_recalculates_invoice_status(): void
     {
         $invoice = $this->invoice();
-        $payment = Payment::create($this->paymentAttributes($invoice, 'confirmed', 40));
+        $payment = $this->confirmedPayment($invoice, 40);
 
         $this->assertSame('partially_paid', $invoice->fresh()->status);
 
@@ -162,7 +163,7 @@ class InvoicePaymentLifecycleTest extends TestCase
     public function test_cancelling_overpayment_creates_top_up_reversal(): void
     {
         $invoice = $this->invoice();
-        $payment = Payment::create($this->paymentAttributes($invoice, 'confirmed', 125));
+        $payment = $this->confirmedPayment($invoice, 125);
 
         $this->assertDatabaseHas('credit_balance_entries', [
             'type' => 'top_up',
@@ -190,7 +191,7 @@ class InvoicePaymentLifecycleTest extends TestCase
     public function test_cancellation_is_blocked_when_overpayment_was_used(): void
     {
         $invoice = $this->invoice();
-        $payment = Payment::create($this->paymentAttributes($invoice, 'confirmed', 125));
+        $payment = $this->confirmedPayment($invoice, 125);
         $otherInvoice = $this->invoice($invoice->company_id, 'INV-OTHER');
         $balance = CreditBalance::where('company_id', $invoice->company_id)->firstOrFail();
 
@@ -301,5 +302,14 @@ class InvoicePaymentLifecycleTest extends TestCase
             'payment_method' => 'transfer',
             'status' => $status,
         ];
+    }
+
+    private function confirmedPayment(Invoice $invoice, float $amount): Payment
+    {
+        return app(CreateConfirmedPayment::class)->execute($invoice, [
+            'payment_date' => '2026-07-21',
+            'amount' => (string) $amount,
+            'payment_method' => 'transfer',
+        ]);
     }
 }

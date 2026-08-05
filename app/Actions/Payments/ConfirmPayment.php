@@ -5,7 +5,6 @@ namespace App\Actions\Payments;
 use App\Exceptions\Payments\PaymentConfirmationException;
 use App\Models\Invoice;
 use App\Models\Payment;
-use App\Services\InvoicePaymentAllocationWriter;
 use App\Services\InvoicePaymentAvailabilityService;
 use Illuminate\Support\Facades\DB;
 use LogicException;
@@ -16,7 +15,7 @@ final class ConfirmPayment
 
     public function __construct(
         private readonly InvoicePaymentAvailabilityService $paymentAvailabilityService,
-        private readonly InvoicePaymentAllocationWriter $allocationWriter
+        private readonly ApplyConfirmedPaymentLifecycle $lifecycle
     ) {}
 
     public function execute(Payment $payment): Payment
@@ -64,11 +63,9 @@ final class ConfirmPayment
                 'status' => 'confirmed',
                 'cancelled_at' => null,
                 'cancel_reason' => null,
-            ])->save();
+            ])->saveQuietly();
 
-            $this->allocationWriter->synchronize($lockedInvoice);
-
-            return $lockedPayment;
+            return $this->lifecycle->execute($lockedInvoice, $lockedPayment);
         });
     }
 }

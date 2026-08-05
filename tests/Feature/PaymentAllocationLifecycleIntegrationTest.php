@@ -227,7 +227,7 @@ class PaymentAllocationLifecycleIntegrationTest extends TestCase
         $this->assertSame(100.0, (float) PaymentAllocation::query()->sum('amount'));
     }
 
-    public function test_lifecycle_event_backfills_old_confirmed_payments_for_same_invoice(): void
+    public function test_explicit_lifecycle_backfills_old_confirmed_payments_for_same_invoice(): void
     {
         [$invoice, [$oldLine, $newLine]] = $this->invoice([100, 100]);
         $oldPayment = Payment::withoutEvents(fn () => Payment::create([
