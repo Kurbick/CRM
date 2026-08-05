@@ -2,13 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Payments\CreatePendingPayment;
 use App\Http\Requests\StorePaymentRequest;
 use App\Http\Requests\UpdatePaymentRequest;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Services\InvoicePaymentAllocationWriter;
 use DateTimeInterface;
-use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -17,7 +17,8 @@ use LogicException;
 class PaymentController extends Controller
 {
     public function __construct(
-        private readonly InvoicePaymentAllocationWriter $allocationWriter
+        private readonly InvoicePaymentAllocationWriter $allocationWriter,
+        private readonly CreatePendingPayment $createPendingPayment
     ) {}
 
     /**
@@ -50,46 +51,11 @@ class PaymentController extends Controller
         );
     }
 
-    /**
-     * Создать платёж по инвойсу.
-     * company_id берём из инвойса — не доверяем клиенту.
-     * После сохранения модель Payment автоматически
-     * обновит статус инвойса через booted().
-     */
     public function store(StorePaymentRequest $request, Invoice $invoice): JsonResponse
     {
-        $payment = DB::transaction(function () use ($request, $invoice): Payment {
-            $lockedInvoice = Invoice::query()
-                ->whereKey($invoice->id)
-                ->lockForUpdate()
-                ->firstOrFail();
+        $payment = $this->createPendingPayment->execute($invoice, $request->validated());
 
-            if (in_array($lockedInvoice->status, ['paid', 'cancelled'])) {
-                throw new HttpResponseException(response()->json([
-                    'message' => 'Нельзя добавить платёж — инвойс уже закрыт или отменён',
-                ], 422));
-            }
-
-            $payment = $lockedInvoice->payments()->create([
-                ...$request->validated(),
-                'company_id' => $lockedInvoice->company_id,
-            ]);
-
-            if ($payment->status === 'confirmed') {
-                $this->allocationWriter->synchronize($lockedInvoice);
-            }
-
-            return $payment;
-        });
-
-        // Подгружаем инвойс с обновлённым статусом для ответа
-        $invoice->refresh();
-        $invoice->append(['paid_amount', 'remaining_amount', 'is_overdue']);
-
-        return response()->json([
-            'payment' => $payment,
-            'invoice' => $invoice,
-        ], 201);
+        return response()->json($this->paymentProjection($payment), 201);
     }
 
     /**

@@ -20,7 +20,7 @@ class InvoicePaymentAvailabilityService
             $pendingMinor = 0;
 
             foreach ($invoice->payments as $payment) {
-                if (!$payment instanceof Payment) {
+                if (! $payment instanceof Payment) {
                     throw new LogicException('Invoice payments relation must contain Payment models.');
                 }
 
@@ -50,10 +50,38 @@ class InvoicePaymentAvailabilityService
         ];
     }
 
+    /**
+     * API pending reservations ignore non-positive legacy rows so they can never
+     * increase or offset the capacity reserved by active payments.
+     *
+     * @return array{remaining_minor: int, pending_minor: int, available_minor: int, available_amount: string}
+     */
+    public function evaluatePendingCreation(Invoice $invoice): array
+    {
+        $reserved = $invoice->payments()
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'confirmed' AND amount > 0 THEN amount ELSE 0 END), 0) AS confirmed_amount")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'pending' AND amount > 0 THEN amount ELSE 0 END), 0) AS pending_amount")
+            ->toBase()
+            ->first();
+
+        $totalMinor = $this->toMinorUnits($invoice->total_amount);
+        $confirmedMinor = $this->toMinorUnits($reserved?->confirmed_amount ?? '0.00');
+        $pendingMinor = $this->toMinorUnits($reserved?->pending_amount ?? '0.00');
+        $remainingMinor = max($totalMinor - $confirmedMinor, 0);
+        $availableMinor = max($remainingMinor - $pendingMinor, 0);
+
+        return [
+            'remaining_minor' => $remainingMinor,
+            'pending_minor' => $pendingMinor,
+            'available_minor' => $availableMinor,
+            'available_amount' => $this->fromMinorUnits($availableMinor),
+        ];
+    }
+
     public function toMinorUnits(mixed $amount): int
     {
         $value = trim((string) $amount);
-        if (!preg_match('/^-?\d+(?:\.\d{1,2})?$/', $value)) {
+        if (! preg_match('/^-?\d+(?:\.\d{1,2})?$/', $value)) {
             throw new LogicException("Invalid monetary amount: {$value}");
         }
 
