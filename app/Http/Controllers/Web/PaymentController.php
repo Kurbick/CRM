@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Web;
 
+use App\Actions\Payments\ConfirmPayment;
+use App\Exceptions\Payments\PaymentConfirmationException;
 use App\Http\Controllers\Controller;
 use App\Models\CreditBalance;
 use App\Models\CreditBalanceEntry;
@@ -21,7 +23,8 @@ class PaymentController extends Controller
 {
     public function __construct(
         private readonly InvoicePaymentAllocationWriter $allocationWriter,
-        private readonly InvoicePaymentAvailabilityService $paymentAvailabilityService
+        private readonly InvoicePaymentAvailabilityService $paymentAvailabilityService,
+        private readonly ConfirmPayment $confirmPayment
     ) {}
 
     /**
@@ -175,82 +178,15 @@ class PaymentController extends Controller
     ): RedirectResponse {
         Gate::authorize('confirm', $payment);
 
-        $invoiceId = $payment->invoice_id;
+        try {
+            $confirmedPayment = $this->confirmPayment->execute($payment);
+        } catch (PaymentConfirmationException $exception) {
+            throw ValidationException::withMessages([
+                'payment_confirm' => $exception->getMessage(),
+            ]);
+        }
 
-        DB::transaction(function () use (
-            $payment,
-            &$invoiceId
-        ): void {
-            /*
-         * Блокируем связанный инвойс и проверяем,
-         * что он допускает подтверждение платежа.
-         *
-         * Статус paid разрешён: подтверждение может
-         * создать переплату и увеличить Credit Balance.
-         */
-            $invoice = Invoice::query()
-                ->whereKey($payment->invoice_id)
-                ->lockForUpdate()
-                ->firstOrFail();
-
-            /*
-             * Единый порядок блокировок lifecycle:
-             * Invoice, затем изменяемый Payment.
-             */
-            $lockedPayment = Payment::query()
-                ->whereKey($payment->id)
-                ->lockForUpdate()
-                ->firstOrFail();
-
-            $invoiceId = $lockedPayment->invoice_id;
-
-            if ((int) $lockedPayment->invoice_id !== (int) $invoice->id) {
-                throw ValidationException::withMessages([
-                    'payment_confirm' => 'Платёж не принадлежит заблокированному инвойсу.',
-                ]);
-            }
-
-            if ($lockedPayment->status !== 'pending') {
-                throw ValidationException::withMessages([
-                    'payment_confirm' => 'Подтвердить можно только платёж со статусом «Ожидает подтверждения».',
-                ]);
-            }
-
-            if (
-                ! in_array(
-                    $invoice->status,
-                    ['issued', 'partially_paid', 'paid'],
-                    true
-                )
-            ) {
-                throw ValidationException::withMessages([
-                    'payment_confirm' => 'Нельзя подтвердить платёж по черновику или отменённому инвойсу.',
-                ]);
-            }
-
-            if (
-                (int) $lockedPayment->company_id
-                !== (int) $invoice->company_id
-            ) {
-                throw ValidationException::withMessages([
-                    'payment_confirm' => 'Компания платежа не совпадает с компанией инвойса.',
-                ]);
-            }
-
-            /*
-         * Используем обычный save(), чтобы сработал
-         * saved-обработчик модели Payment.
-         */
-            $lockedPayment->forceFill([
-                'status' => 'confirmed',
-                'cancelled_at' => null,
-                'cancel_reason' => null,
-            ])->save();
-
-            $this->allocationWriter->synchronize($invoice);
-        });
-
-        return $this->mutationRedirect($invoiceId)
+        return $this->mutationRedirect($confirmedPayment->invoice_id)
             ->with(
                 'success',
                 'Платёж подтверждён. Сумма оплаты и статус инвойса пересчитаны.'
