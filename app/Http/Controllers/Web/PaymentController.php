@@ -2,15 +2,13 @@
 
 namespace App\Http\Controllers\Web;
 
+use App\Actions\Payments\CancelPayment;
 use App\Actions\Payments\ConfirmPayment;
 use App\Actions\Payments\CreateConfirmedPayment;
 use App\Exceptions\Payments\PaymentConfirmationException;
 use App\Http\Controllers\Controller;
-use App\Models\CreditBalance;
-use App\Models\CreditBalanceEntry;
 use App\Models\Invoice;
 use App\Models\Payment;
-use App\Services\InvoicePaymentAllocationWriter;
 use App\Services\InvoicePaymentAvailabilityService;
 use App\Support\Navigation\AuthorizedLandingPage;
 use Illuminate\Http\RedirectResponse;
@@ -23,10 +21,10 @@ use Illuminate\Validation\ValidationException;
 class PaymentController extends Controller
 {
     public function __construct(
-        private readonly InvoicePaymentAllocationWriter $allocationWriter,
         private readonly InvoicePaymentAvailabilityService $paymentAvailabilityService,
         private readonly ConfirmPayment $confirmPayment,
-        private readonly CreateConfirmedPayment $createConfirmedPayment
+        private readonly CreateConfirmedPayment $createConfirmedPayment,
+        private readonly CancelPayment $cancelPayment
     ) {}
 
     /**
@@ -225,134 +223,12 @@ class PaymentController extends Controller
             'cancel_reason.max' => 'Причина отмены не должна превышать 1000 символов.',
         ]);
 
-        $invoiceId = null;
-
-        DB::transaction(function () use (
+        $cancelledPayment = $this->cancelPayment->execute(
             $payment,
-            $validated,
-            &$invoiceId
-        ): void {
-            $invoice = Invoice::query()
-                ->whereKey($payment->invoice_id)
-                ->lockForUpdate()
-                ->firstOrFail();
+            $validated['cancel_reason']
+        );
 
-            /*
-             * Единый порядок блокировок lifecycle:
-             * Invoice, затем изменяемый Payment.
-             */
-            $lockedPayment = Payment::query()
-                ->whereKey($payment->id)
-                ->lockForUpdate()
-                ->firstOrFail();
-
-            if ((int) $lockedPayment->invoice_id !== (int) $invoice->id) {
-                throw ValidationException::withMessages([
-                    'cancel_reason' => 'Платёж не принадлежит заблокированному инвойсу.',
-                ]);
-            }
-
-            if (! in_array($lockedPayment->status, ['pending', 'confirmed'], true)) {
-                throw ValidationException::withMessages([
-                    'cancel_reason' => 'Отменить можно только ожидающий или подтверждённый платёж.',
-                ]);
-            }
-
-            /*
-             * Автоматическое применение Credit Balance
-             * должно отменяться отдельной обратной операцией.
-             */
-            if ($this->isCreditBalancePayment($lockedPayment)) {
-                throw ValidationException::withMessages([
-                    'cancel_reason' => 'Автоматическое применение Credit Balance нельзя отменить как обычный платёж.',
-                ]);
-            }
-
-            $invoiceId = $invoice->id;
-
-            if (
-                (int) $lockedPayment->company_id
-                !== (int) $invoice->company_id
-            ) {
-                throw ValidationException::withMessages([
-                    'cancel_reason' => 'Компания платежа не совпадает с компанией инвойса.',
-                ]);
-            }
-
-            if ($lockedPayment->status === 'pending') {
-                $lockedPayment->forceFill([
-                    'status' => 'cancelled',
-                    'cancelled_at' => now(),
-                    'cancel_reason' => $validated['cancel_reason'],
-                ])->saveQuietly();
-
-                return;
-            }
-
-            if (
-                ! in_array(
-                    $invoice->status,
-                    ['issued', 'partially_paid', 'paid'],
-                    true
-                )
-            ) {
-                throw ValidationException::withMessages([
-                    'cancel_reason' => 'Нельзя отменить платёж этого инвойса.',
-                ]);
-            }
-
-            /*
-             * Общая сумма подтверждённых платежей,
-             * которая останется после отмены.
-             */
-            $remainingConfirmedAmount = round(
-                (float) $invoice->payments()
-                    ->where('status', 'confirmed')
-                    ->where(
-                        'id',
-                        '!=',
-                        $lockedPayment->id
-                    )
-                    ->sum('amount'),
-                2
-            );
-
-            /*
-             * Убираем из Credit Balance ту переплату,
-             * которая после отмены больше не существует.
-             */
-            $this->reverseExcessCredit(
-                invoice: $invoice,
-                cancelledPayment: $lockedPayment,
-                remainingConfirmedAmount: $remainingConfirmedAmount
-            );
-
-            /*
-             * Сохраняем отменённый платёж в истории.
-             *
-             * saveQuietly() предотвращает повторный запуск
-             * событий модели Payment при отмене.
-             */
-            $lockedPayment->forceFill([
-                'status' => 'cancelled',
-                'cancelled_at' => now(),
-                'cancel_reason' => $validated['cancel_reason'],
-            ])->saveQuietly();
-
-            /*
-             * После отмены пересчитываем статус инвойса.
-             */
-            $invoice->forceFill([
-                'status' => $this->resolveInvoiceStatus(
-                    confirmedAmount: $remainingConfirmedAmount,
-                    invoiceTotal: (float) $invoice->total_amount
-                ),
-            ])->save();
-
-            $this->allocationWriter->synchronize($invoice);
-        });
-
-        return $this->mutationRedirect($invoiceId)
+        return $this->mutationRedirect($cancelledPayment->invoice_id)
             ->with(
                 'success',
                 'Платёж отменён. Статус инвойса и Credit Balance пересчитаны.'
@@ -376,189 +252,5 @@ class PaymentController extends Controller
         }
 
         return redirect()->to(app(AuthorizedLandingPage::class)->url(auth()->user()));
-    }
-
-    /**
-     * Проверяет, был ли платёж создан через Credit Balance.
-     */
-    private function isCreditBalancePayment(
-        Payment $payment
-    ): bool {
-        $hasAppliedCreditEntry = $payment->relationLoaded('creditBalanceEntries')
-            ? $payment->creditBalanceEntries->contains('type', 'applied')
-            : CreditBalanceEntry::query()
-                ->where('type', 'applied')
-                ->where('payment_id', $payment->id)
-                ->exists();
-
-        $hasCreditBalanceComment = str_starts_with(
-            (string) $payment->comment,
-            'Автоматически применён Credit Balance'
-        );
-
-        return $hasAppliedCreditEntry
-            || $hasCreditBalanceComment;
-    }
-
-    /**
-     * Отменяет часть Credit Balance, которая перестала
-     * быть переплатой после отмены платежа.
-     */
-    private function reverseExcessCredit(
-        Invoice $invoice,
-        Payment $cancelledPayment,
-        float $remainingConfirmedAmount
-    ): void {
-        $invoiceTotal = round(
-            (float) $invoice->total_amount,
-            2
-        );
-
-        /*
-         * Какая переплата должна остаться
-         * после отмены платежа.
-         */
-        $requiredOverpayment = round(
-            max(
-                0,
-                $remainingConfirmedAmount - $invoiceTotal
-            ),
-            2
-        );
-
-        $invoicePaymentIds = $invoice->payments()
-            ->pluck('id');
-
-        if ($invoicePaymentIds->isEmpty()) {
-            return;
-        }
-
-        /*
-         * Сколько переплаты ранее было начислено
-         * по платежам этого инвойса.
-         */
-        $creditedAmount = round(
-            (float) CreditBalanceEntry::query()
-                ->whereIn(
-                    'payment_id',
-                    $invoicePaymentIds
-                )
-                ->where('type', 'top_up')
-                ->sum('amount'),
-            2
-        );
-
-        /*
-         * Сколько начисленной переплаты уже было отменено.
-         */
-        $reversedAmount = round(
-            (float) CreditBalanceEntry::query()
-                ->whereIn(
-                    'payment_id',
-                    $invoicePaymentIds
-                )
-                ->where('type', 'top_up_reversal')
-                ->sum('amount'),
-            2
-        );
-
-        $currentInvoiceCredit = round(
-            max(
-                0,
-                $creditedAmount - $reversedAmount
-            ),
-            2
-        );
-
-        /*
-         * Разница, которую необходимо снять
-         * с Credit Balance компании.
-         */
-        $creditToReverse = round(
-            max(
-                0,
-                $currentInvoiceCredit
-                    - $requiredOverpayment
-            ),
-            2
-        );
-
-        if ($creditToReverse <= 0) {
-            return;
-        }
-
-        $creditBalance = CreditBalance::query()
-            ->where('company_id', $invoice->company_id)
-            ->lockForUpdate()
-            ->first();
-
-        if (! $creditBalance) {
-            throw ValidationException::withMessages([
-                'cancel_reason' => 'Не найден Credit Balance компании.',
-            ]);
-        }
-
-        $availableCredit = round(
-            (float) $creditBalance->amount,
-            2
-        );
-
-        /*
-         * Если доступного баланса недостаточно,
-         * значит часть переплаты уже была использована.
-         */
-        if ($availableCredit < $creditToReverse) {
-            throw ValidationException::withMessages([
-                'cancel_reason' => 'Нельзя отменить платёж: часть переплаты уже использована для оплаты другого инвойса.',
-            ]);
-        }
-
-        /*
-         * Создаём обратную запись.
-         * Старые записи не изменяем и не удаляем.
-         */
-        $creditBalance->entries()->create([
-            'type' => 'top_up_reversal',
-            'amount' => $creditToReverse,
-            'payment_id' => $cancelledPayment->id,
-            'invoice_id' => $invoice->id,
-            'description' => "Отмена переплаты по платежу #{$cancelledPayment->id}",
-        ]);
-
-        $creditBalance->forceFill([
-            'amount' => round(
-                $availableCredit - $creditToReverse,
-                2
-            ),
-        ])->save();
-    }
-
-    /**
-     * Определяет статус инвойса по сумме
-     * подтверждённых платежей.
-     */
-    private function resolveInvoiceStatus(
-        float $confirmedAmount,
-        float $invoiceTotal
-    ): string {
-        $confirmedAmount = round(
-            $confirmedAmount,
-            2
-        );
-
-        $invoiceTotal = round(
-            $invoiceTotal,
-            2
-        );
-
-        if ($confirmedAmount >= $invoiceTotal) {
-            return 'paid';
-        }
-
-        if ($confirmedAmount > 0) {
-            return 'partially_paid';
-        }
-
-        return 'issued';
     }
 }

@@ -66,8 +66,6 @@ final class ApiRouteAuthorizationRegistry
         'api.items.show',
         'api.items.update',
         'api.items.destroy',
-        'api.payments.update',
-        'api.payments.destroy',
     ];
 
     /** @return array<string, string> */

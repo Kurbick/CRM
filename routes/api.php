@@ -41,6 +41,7 @@ Route::middleware([
         ->name('payments.confirm');
 
     Route::apiResource('invoices.payments', PaymentController::class)
+        ->only(['index', 'store', 'show'])
         ->shallow();
 
     Route::apiResource('companies.contacts', CompanyContactController::class)
