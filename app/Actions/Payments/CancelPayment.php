@@ -86,11 +86,7 @@ final class CancelPayment
             if ($appliedEntry !== null) {
                 $this->reverseAppliedCredit($invoice, $lockedPayment, $appliedEntry);
             } else {
-                $this->reverseExcessCredit(
-                    invoice: $invoice,
-                    cancelledPayment: $lockedPayment,
-                    remainingConfirmedAmount: $remainingConfirmedAmount
-                );
+                $this->reverseExactUnusedTopUp($invoice, $lockedPayment);
             }
 
             $this->markCancelled($lockedPayment, $reason);
@@ -208,70 +204,109 @@ final class CancelPayment
         ])->saveQuietly();
     }
 
-    private function reverseExcessCredit(
+    private function reverseExactUnusedTopUp(
         Invoice $invoice,
         Payment $cancelledPayment,
-        float $remainingConfirmedAmount
     ): void {
-        $invoiceTotal = round((float) $invoice->total_amount, 2);
-        $requiredOverpayment = round(max(0, $remainingConfirmedAmount - $invoiceTotal), 2);
-        $invoicePaymentIds = $invoice->payments()->pluck('id');
+        $topUpEntry = $this->resolveExactTopUpEntry($invoice, $cancelledPayment);
 
-        if ($invoicePaymentIds->isEmpty()) {
-            return;
-        }
-
-        $creditedAmount = round(
-            (float) CreditBalanceEntry::query()
-                ->whereIn('payment_id', $invoicePaymentIds)
-                ->where('type', 'top_up')
-                ->sum('amount'),
-            2
-        );
-        $reversedAmount = round(
-            (float) CreditBalanceEntry::query()
-                ->whereIn('payment_id', $invoicePaymentIds)
-                ->where('type', 'top_up_reversal')
-                ->sum('amount'),
-            2
-        );
-        $currentInvoiceCredit = round(max(0, $creditedAmount - $reversedAmount), 2);
-        $creditToReverse = round(max(0, $currentInvoiceCredit - $requiredOverpayment), 2);
-
-        if ($creditToReverse <= 0) {
+        if ($topUpEntry === null) {
             return;
         }
 
         $creditBalance = CreditBalance::query()
-            ->where('company_id', $invoice->company_id)
+            ->whereKey($topUpEntry->credit_balance_id)
+            ->lockForUpdate()
+            ->firstOrFail();
+
+        if ((int) $creditBalance->company_id !== (int) $invoice->company_id
+            || (int) $cancelledPayment->company_id !== (int) $invoice->company_id) {
+            throw new LogicException('Top-up reversal company ownership is inconsistent.');
+        }
+
+        $existingReversal = CreditBalanceEntry::query()
+            ->where('type', 'top_up_reversal')
+            ->where('credit_balance_id', $creditBalance->getKey())
+            ->where('payment_id', $cancelledPayment->getKey())
+            ->where('invoice_id', $invoice->getKey())
             ->lockForUpdate()
             ->first();
 
-        if (! $creditBalance) {
+        if ($existingReversal !== null) {
+            throw new LogicException('Payment top-up has already been reversed.');
+        }
+
+        $hasPossibleDownstreamConsumption = CreditBalanceEntry::query()
+            ->where('credit_balance_id', $creditBalance->getKey())
+            ->where('type', 'applied')
+            ->where('id', '>', $topUpEntry->getKey())
+            ->lockForUpdate()
+            ->first() !== null;
+
+        if ($hasPossibleDownstreamConsumption) {
             throw ValidationException::withMessages([
-                'cancel_reason' => 'Не найден Credit Balance компании.',
+                'cancel_reason' => 'Нельзя отменить платёж: после переплаты Credit Balance использовался, поэтому источник средств нельзя однозначно определить.',
             ]);
         }
 
-        $availableCredit = round((float) $creditBalance->amount, 2);
+        $topUpMinor = $this->money->toMinorUnits($topUpEntry->getRawOriginal('amount'));
+        $paymentMinor = $this->money->toMinorUnits($cancelledPayment->getRawOriginal('amount'));
+        $balanceMinor = $this->money->toMinorUnits($creditBalance->getRawOriginal('amount'));
 
-        if ($availableCredit < $creditToReverse) {
-            throw ValidationException::withMessages([
-                'cancel_reason' => 'Нельзя отменить платёж: часть переплаты уже использована для оплаты другого инвойса.',
-            ]);
+        if ($topUpMinor < 1 || $topUpMinor > $paymentMinor) {
+            throw new LogicException('Payment top-up amount is inconsistent with its source Payment.');
+        }
+
+        if ($balanceMinor < $topUpMinor) {
+            throw new LogicException('Credit Balance cannot cover the exact top-up reversal.');
         }
 
         $creditBalance->entries()->create([
             'type' => 'top_up_reversal',
-            'amount' => $creditToReverse,
+            'amount' => $this->money->fromMinorUnits($topUpMinor),
             'payment_id' => $cancelledPayment->getKey(),
             'invoice_id' => $invoice->getKey(),
             'description' => "Отмена переплаты по платежу #{$cancelledPayment->getKey()}",
         ]);
 
         $creditBalance->forceFill([
-            'amount' => round($availableCredit - $creditToReverse, 2),
-        ])->save();
+            'amount' => $this->money->fromMinorUnits($balanceMinor - $topUpMinor),
+        ])->saveQuietly();
+    }
+
+    private function resolveExactTopUpEntry(
+        Invoice $invoice,
+        Payment $payment,
+    ): ?CreditBalanceEntry {
+        $entriesForPayment = CreditBalanceEntry::query()
+            ->where('type', 'top_up')
+            ->where('payment_id', $payment->getKey())
+            ->orderBy('id')
+            ->limit(2)
+            ->get();
+
+        $exactEntries = $entriesForPayment->filter(
+            fn (CreditBalanceEntry $entry): bool => (int) $entry->payment_id === (int) $payment->getKey()
+                && (int) $entry->invoice_id === (int) $invoice->getKey()
+        );
+        $hasAmbiguousEntry = $entriesForPayment->count() !== $exactEntries->count()
+            || CreditBalanceEntry::query()
+                ->where('type', 'top_up')
+                ->whereNull('payment_id')
+                ->where('invoice_id', $invoice->getKey())
+                ->exists();
+
+        if ($exactEntries->count() > 1 || ($exactEntries->isNotEmpty() && $hasAmbiguousEntry)) {
+            throw new LogicException('Payment has inconsistent top-up ledger ownership.');
+        }
+
+        if ($exactEntries->isEmpty() && $hasAmbiguousEntry) {
+            throw ValidationException::withMessages([
+                'cancel_reason' => 'Нельзя безопасно отменить legacy переплату без точной ledger-связи.',
+            ]);
+        }
+
+        return $exactEntries->first();
     }
 
     private function resolveInvoiceStatus(float $confirmedAmount, float $invoiceTotal): string
