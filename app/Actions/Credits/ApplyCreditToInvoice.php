@@ -87,6 +87,23 @@ final class ApplyCreditToInvoice
                 ->where('credit_balance_id', $creditBalance->getKey())
                 ->where('type', 'applied')
                 ->where('invoice_id', $lockedInvoice->getKey())
+                ->whereNotExists(function ($query): void {
+                    $query->selectRaw('1')
+                        ->from('credit_balance_entries as applied_reversals')
+                        ->whereColumn(
+                            'applied_reversals.credit_balance_id',
+                            'credit_balance_entries.credit_balance_id',
+                        )
+                        ->whereColumn(
+                            'applied_reversals.payment_id',
+                            'credit_balance_entries.payment_id',
+                        )
+                        ->whereColumn(
+                            'applied_reversals.invoice_id',
+                            'credit_balance_entries.invoice_id',
+                        )
+                        ->where('applied_reversals.type', 'applied_reversal');
+                })
                 ->exists();
 
             if ($alreadyApplied) {

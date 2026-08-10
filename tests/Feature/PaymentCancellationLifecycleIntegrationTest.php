@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Actions\Payments\CancelPayment;
 use App\Actions\Payments\CreateConfirmedPayment;
-use App\Models\CreditBalance;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\PaymentAllocation;
@@ -98,23 +97,13 @@ class PaymentCancellationLifecycleIntegrationTest extends FinancialTestCase
         $this->assertDatabaseCount('credit_balance_entries', 0);
     }
 
-    public function test_credit_funded_payment_remains_blocked_without_mutation(): void
+    public function test_legacy_comment_only_credit_payment_remains_blocked_without_mutation(): void
     {
         $invoice = $this->invoice([100]);
         $payment = $this->payment($invoice, 'confirmed', 30, '2026-07-01', [
-            'comment' => 'Credit-funded payment',
+            'comment' => 'Автоматически применён Credit Balance — legacy',
         ]);
         app(InvoicePaymentAllocationWriter::class)->synchronize($invoice);
-        $balance = CreditBalance::query()->create([
-            'company_id' => $invoice->company_id,
-            'amount' => '70.00',
-        ]);
-        $entry = $balance->entries()->create([
-            'type' => 'applied',
-            'amount' => '30.00',
-            'payment_id' => $payment->id,
-            'invoice_id' => $invoice->id,
-        ]);
         $beforeAllocations = PaymentAllocation::query()->get()->map->getRawOriginal()->all();
 
         try {
@@ -122,14 +111,12 @@ class PaymentCancellationLifecycleIntegrationTest extends FinancialTestCase
             $this->fail('Credit-funded cancellation must fail in Stage 5D1.');
         } catch (ValidationException $exception) {
             $this->assertSame(
-                ['Автоматическое применение Credit Balance нельзя отменить как обычный платёж.'],
+                ['Нельзя безопасно отменить legacy Credit Balance платёж без точной ledger-связи.'],
                 $exception->errors()['cancel_reason']
             );
         }
 
         $this->assertSame('confirmed', $payment->fresh()->status);
-        $this->assertSame('70.00', $balance->fresh()->amount);
-        $this->assertSame('applied', $entry->fresh()->type);
         $this->assertSame($beforeAllocations, PaymentAllocation::query()->get()->map->getRawOriginal()->all());
         $this->assertDatabaseMissing('credit_balance_entries', ['type' => 'applied_reversal']);
     }

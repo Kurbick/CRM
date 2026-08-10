@@ -679,14 +679,19 @@ class InvoiceController extends Controller
                 ['Автоматически применён Credit Balance%']
             )
             ->withExists([
-                'creditBalanceEntries as has_applied_credit_entry' => fn ($query) => $query
-                    ->where('type', 'applied'),
+                'creditBalanceEntries as has_exact_applied_credit_entry' => fn ($query) => $query
+                    ->where('type', 'applied')
+                    ->whereColumn('credit_balance_entries.invoice_id', 'payments.invoice_id'),
+                'creditBalanceEntries as has_legacy_applied_credit_entry' => fn ($query) => $query
+                    ->where('type', 'applied')
+                    ->whereNull('invoice_id'),
             ])
             ->orderBy('id')
             ->get()
             ->map(function (Payment $payment) use ($canConfirm, $canCancel): array {
-                $isCreditBalancePayment = $payment->has_applied_credit_entry
-                    || $payment->is_legacy_credit_balance_payment;
+                $isAmbiguousLegacyCreditPayment = ! $payment->has_exact_applied_credit_entry
+                    && ($payment->has_legacy_applied_credit_entry
+                        || $payment->is_legacy_credit_balance_payment);
 
                 return [
                     'id' => (int) $payment->id,
@@ -696,7 +701,7 @@ class InvoiceController extends Controller
                         && Gate::allows('confirm', $payment),
                     'can_cancel' => $canCancel
                         && in_array($payment->status, ['pending', 'confirmed'], true)
-                        && ! $isCreditBalancePayment
+                        && ! $isAmbiguousLegacyCreditPayment
                         && Gate::allows('cancel', $payment),
                 ];
             })

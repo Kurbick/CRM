@@ -7,13 +7,16 @@ use App\Models\CreditBalanceEntry;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Services\InvoicePaymentAllocationWriter;
+use App\Services\InvoicePaymentAvailabilityService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use LogicException;
 
 final class CancelPayment
 {
     public function __construct(
-        private readonly InvoicePaymentAllocationWriter $allocationWriter
+        private readonly InvoicePaymentAllocationWriter $allocationWriter,
+        private readonly InvoicePaymentAvailabilityService $money,
     ) {}
 
     public function execute(Payment $payment, string $reason): Payment
@@ -44,19 +47,25 @@ final class CancelPayment
                 ]);
             }
 
-            if ($this->isCreditBalancePayment($lockedPayment)) {
-                throw ValidationException::withMessages([
-                    'cancel_reason' => 'Автоматическое применение Credit Balance нельзя отменить как обычный платёж.',
-                ]);
-            }
-
             if ((int) $lockedPayment->company_id !== (int) $invoice->company_id) {
                 throw ValidationException::withMessages([
                     'cancel_reason' => 'Компания платежа не совпадает с компанией инвойса.',
                 ]);
             }
 
+            $appliedEntry = $this->resolveExactAppliedEntry($lockedPayment);
+
+            if ($appliedEntry === null && $this->hasAmbiguousCreditSource($lockedPayment)) {
+                throw ValidationException::withMessages([
+                    'cancel_reason' => 'Нельзя безопасно отменить legacy Credit Balance платёж без точной ledger-связи.',
+                ]);
+            }
+
             if ($lockedPayment->status === 'pending') {
+                if ($appliedEntry !== null) {
+                    throw new LogicException('Credit-funded Payment must be confirmed before cancellation.');
+                }
+
                 return $this->markCancelled($lockedPayment, $reason);
             }
 
@@ -74,11 +83,15 @@ final class CancelPayment
                 2
             );
 
-            $this->reverseExcessCredit(
-                invoice: $invoice,
-                cancelledPayment: $lockedPayment,
-                remainingConfirmedAmount: $remainingConfirmedAmount
-            );
+            if ($appliedEntry !== null) {
+                $this->reverseAppliedCredit($invoice, $lockedPayment, $appliedEntry);
+            } else {
+                $this->reverseExcessCredit(
+                    invoice: $invoice,
+                    cancelledPayment: $lockedPayment,
+                    remainingConfirmedAmount: $remainingConfirmedAmount
+                );
+            }
 
             $this->markCancelled($lockedPayment, $reason);
 
@@ -106,21 +119,93 @@ final class CancelPayment
         return $payment;
     }
 
-    private function isCreditBalancePayment(Payment $payment): bool
+    private function resolveExactAppliedEntry(Payment $payment): ?CreditBalanceEntry
     {
-        $hasAppliedCreditEntry = CreditBalanceEntry::query()
+        $entries = CreditBalanceEntry::query()
             ->where('type', 'applied')
             ->where('payment_id', $payment->getKey())
-            ->where(function ($query) use ($payment): void {
-                $query->where('invoice_id', $payment->invoice_id)
-                    ->orWhereNull('invoice_id');
-            })
+            ->where('invoice_id', $payment->invoice_id)
+            ->orderBy('id')
+            ->limit(2)
+            ->get();
+
+        if ($entries->count() > 1) {
+            throw new LogicException('Credit-funded Payment has multiple exact applied ledger entries.');
+        }
+
+        return $entries->first();
+    }
+
+    private function hasAmbiguousCreditSource(Payment $payment): bool
+    {
+        $hasLegacyAppliedEntry = CreditBalanceEntry::query()
+            ->where('type', 'applied')
+            ->where('payment_id', $payment->getKey())
+            ->whereNull('invoice_id')
             ->exists();
 
-        return $hasAppliedCreditEntry || str_starts_with(
+        return $hasLegacyAppliedEntry || str_starts_with(
             (string) $payment->comment,
             'Автоматически применён Credit Balance'
         );
+    }
+
+    private function reverseAppliedCredit(
+        Invoice $invoice,
+        Payment $payment,
+        CreditBalanceEntry $appliedEntry,
+    ): void {
+        if ((int) $appliedEntry->invoice_id !== (int) $invoice->getKey()
+            || (int) $appliedEntry->payment_id !== (int) $payment->getKey()) {
+            throw new LogicException('Applied Credit entry does not belong to the cancelled Payment and Invoice.');
+        }
+
+        $creditBalance = CreditBalance::query()
+            ->whereKey($appliedEntry->credit_balance_id)
+            ->lockForUpdate()
+            ->firstOrFail();
+
+        if ((int) $creditBalance->company_id !== (int) $invoice->company_id
+            || (int) $payment->company_id !== (int) $invoice->company_id) {
+            throw new LogicException('Credit reversal company ownership is inconsistent.');
+        }
+
+        $existingReversal = CreditBalanceEntry::query()
+            ->where('type', 'applied_reversal')
+            ->where('credit_balance_id', $creditBalance->getKey())
+            ->where('payment_id', $payment->getKey())
+            ->where('invoice_id', $invoice->getKey())
+            ->lockForUpdate()
+            ->first();
+
+        if ($existingReversal !== null) {
+            throw new LogicException('Credit-funded Payment has already been reversed.');
+        }
+
+        $appliedMinor = $this->money->toMinorUnits($appliedEntry->getRawOriginal('amount'));
+        $paymentMinor = $this->money->toMinorUnits($payment->getRawOriginal('amount'));
+        $balanceMinor = $this->money->toMinorUnits($creditBalance->getRawOriginal('amount'));
+
+        if ($appliedMinor < 1 || $appliedMinor !== $paymentMinor) {
+            throw new LogicException('Applied Credit amount does not match the Credit-funded Payment.');
+        }
+
+        $restoredBalanceMinor = $balanceMinor + $appliedMinor;
+        if ($balanceMinor < 0 || $restoredBalanceMinor > 9_999_999_999) {
+            throw new LogicException('Credit Balance amount is outside the supported reversal range.');
+        }
+
+        $creditBalance->entries()->create([
+            'type' => 'applied_reversal',
+            'amount' => $this->money->fromMinorUnits($appliedMinor),
+            'payment_id' => $payment->getKey(),
+            'invoice_id' => $invoice->getKey(),
+            'description' => "Отмена применения Credit Balance по платежу #{$payment->getKey()}",
+        ]);
+
+        $creditBalance->forceFill([
+            'amount' => $this->money->fromMinorUnits($restoredBalanceMinor),
+        ])->saveQuietly();
     }
 
     private function reverseExcessCredit(

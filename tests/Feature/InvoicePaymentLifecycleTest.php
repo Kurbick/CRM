@@ -211,7 +211,7 @@ class InvoicePaymentLifecycleTest extends TestCase
         ]);
     }
 
-    public function test_credit_balance_payment_cannot_be_cancelled_normally(): void
+    public function test_credit_balance_payment_cancellation_restores_credit(): void
     {
         $invoice = $this->invoice();
         $payment = Payment::create($this->paymentAttributes($invoice, 'confirmed', 50));
@@ -229,10 +229,21 @@ class InvoicePaymentLifecycleTest extends TestCase
 
         $this->patch(route('payments.cancel', $payment), [
             'cancel_payment_id' => $payment->id,
-            'cancel_reason' => 'Обычная отмена запрещена',
-        ])->assertSessionHasErrors('cancel_reason');
+            'cancel_reason' => 'Возврат Credit Balance',
+        ])->assertSessionDoesntHaveErrors();
 
-        $this->assertSame('confirmed', $payment->fresh()->status);
+        $this->assertSame('cancelled', $payment->fresh()->status);
+        $this->assertDatabaseHas('credit_balances', [
+            'id' => $balance->id,
+            'amount' => 50,
+        ]);
+        $this->assertDatabaseHas('credit_balance_entries', [
+            'credit_balance_id' => $balance->id,
+            'type' => 'applied_reversal',
+            'amount' => 50,
+            'payment_id' => $payment->id,
+            'invoice_id' => $invoice->id,
+        ]);
     }
 
     public function test_cancelled_payment_cannot_be_cancelled_again(): void
