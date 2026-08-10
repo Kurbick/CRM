@@ -83,6 +83,15 @@ class ApiAuthorizationInfrastructureTest extends AuthorizationTestCase
 
         $capture['result']->assertForbidden();
         $this->assertSame([], $capture['records']);
+
+        $confirmCapture = (new DomainQueryRecorder)->capture(
+            fn () => $this->postJson(route('api.payments.confirm', ['payment' => 1000000]), [
+                'status' => 'confirmed',
+            ]),
+        );
+
+        $confirmCapture['result']->assertForbidden();
+        $this->assertSame([], $confirmCapture['records']);
     }
 
     public function test_exact_permission_reaches_substitute_bindings_after_authorization(): void

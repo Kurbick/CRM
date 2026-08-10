@@ -37,6 +37,9 @@ Route::middleware([
     Route::apiResource('companies.invoices', InvoiceController::class)
         ->shallow();
 
+    Route::post('payments/{payment}/confirm', [PaymentController::class, 'confirm'])
+        ->name('payments.confirm');
+
     Route::apiResource('invoices.payments', PaymentController::class)
         ->shallow();
 

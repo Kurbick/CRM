@@ -151,6 +151,7 @@ class ApiRouteInventoryTest extends TestCase
             'api.contracts.orders.index',
             'api.dashboard.company',
             'api.payments.show',
+            'api.payments.confirm',
         ] as $routeName) {
             $route = Route::getRoutes()->getByName($routeName);
             $middleware = app('router')->gatherRouteMiddleware($route);
@@ -244,6 +245,7 @@ class ApiRouteInventoryTest extends TestCase
             'api.orders.update' => ['method' => 'PUT|PATCH', 'uri' => 'api/orders/{order}', 'name' => 'api.orders.update', 'controller' => $root.'OrderController@update', 'classification' => 'permission-protected domain route', 'permission' => 'contract_subjects.update'],
             'api.orders.destroy' => ['method' => 'DELETE', 'uri' => 'api/orders/{order}', 'name' => 'api.orders.destroy', 'controller' => $root.'OrderController@destroy', 'classification' => 'permission-protected domain route', 'permission' => 'contract_subjects.delete'],
             'api.payments.show' => ['method' => 'GET|HEAD', 'uri' => 'api/payments/{payment}', 'name' => 'api.payments.show', 'controller' => $root.'PaymentController@show', 'classification' => 'permission-protected domain route', 'permission' => 'payments.view'],
+            'api.payments.confirm' => ['method' => 'POST', 'uri' => 'api/payments/{payment}/confirm', 'name' => 'api.payments.confirm', 'controller' => $root.'PaymentController@confirm', 'classification' => 'permission-protected domain route', 'permission' => 'payments.confirm'],
             'api.payments.update' => ['method' => 'PUT|PATCH', 'uri' => 'api/payments/{payment}', 'name' => 'api.payments.update', 'controller' => $root.'PaymentController@update', 'classification' => 'unresolved product-decision route', 'permission' => null],
             'api.payments.destroy' => ['method' => 'DELETE', 'uri' => 'api/payments/{payment}', 'name' => 'api.payments.destroy', 'controller' => $root.'PaymentController@destroy', 'classification' => 'unresolved product-decision route', 'permission' => null],
             'api.service-types.index' => ['method' => 'GET|HEAD', 'uri' => 'api/service-types', 'name' => 'api.service-types.index', 'controller' => $root.'ServiceTypeController@index', 'classification' => 'unresolved product-decision route', 'permission' => null],

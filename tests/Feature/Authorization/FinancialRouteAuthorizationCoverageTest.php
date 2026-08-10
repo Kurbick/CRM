@@ -2,10 +2,12 @@
 
 namespace Tests\Feature\Authorization;
 
+use App\Http\Controllers\PaymentController as ApiPaymentController;
 use App\Http\Controllers\Web\InvoiceController;
 use App\Http\Controllers\Web\PaymentController;
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Support\Access\ApiRouteAuthorizationRegistry;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -89,6 +91,17 @@ class FinancialRouteAuthorizationCoverageTest extends AuthorizationTestCase
             $this->assertNotSame('', $definition['ability']);
             $this->assertContains($definition['target'], [Invoice::class, Payment::class]);
         }
+    }
+
+    public function test_api_payment_confirmation_is_a_separate_permission_protected_command(): void
+    {
+        $route = Route::getRoutes()->getByName('api.payments.confirm');
+
+        $this->assertNotNull($route);
+        $this->assertSame(['POST'], $route->methods());
+        $this->assertSame('api/payments/{payment}/confirm', $route->uri());
+        $this->assertSame(ApiPaymentController::class, $route->getControllerClass());
+        $this->assertSame('payments.confirm', ApiRouteAuthorizationRegistry::permissionFor('api.payments.confirm'));
     }
 
     /**

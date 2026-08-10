@@ -47,6 +47,7 @@ final class ApiRouteAuthorizationRegistry
         'api.invoices.payments.index' => PermissionName::PaymentsView,
         'api.invoices.payments.store' => PermissionName::PaymentsCreate,
         'api.payments.show' => PermissionName::PaymentsView,
+        'api.payments.confirm' => PermissionName::PaymentsConfirm,
 
         'api.dashboard' => PermissionName::DashboardView,
         'api.dashboard.companies' => PermissionName::DashboardView,

@@ -2,7 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Payments\ConfirmPayment;
 use App\Actions\Payments\CreatePendingPayment;
+use App\Exceptions\Payments\PaymentConfirmationException;
+use App\Http\Requests\ConfirmPaymentRequest;
 use App\Http\Requests\StorePaymentRequest;
 use App\Http\Requests\UpdatePaymentRequest;
 use App\Models\Invoice;
@@ -12,6 +15,7 @@ use DateTimeInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 use LogicException;
 
 class PaymentController extends Controller
@@ -66,6 +70,22 @@ class PaymentController extends Controller
         Gate::authorize('view', $payment);
 
         return response()->json($this->paymentProjection($payment));
+    }
+
+    public function confirm(
+        ConfirmPaymentRequest $request,
+        Payment $payment,
+        ConfirmPayment $confirmPayment
+    ): JsonResponse {
+        try {
+            $confirmedPayment = $confirmPayment->execute($payment);
+        } catch (PaymentConfirmationException $exception) {
+            throw ValidationException::withMessages([
+                'payment' => $exception->getMessage(),
+            ]);
+        }
+
+        return response()->json($this->paymentProjection($confirmedPayment));
     }
 
     /**
