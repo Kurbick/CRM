@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Credits\ApplyCreditToInvoice;
 use App\Models\CreditBalance;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
@@ -185,10 +186,11 @@ class PaymentAllocationLifecycleIntegrationTest extends TestCase
         [$invoice] = $this->invoice([100]);
         $this->storePayment($invoice, 'confirmed', 125);
         $payment = $invoice->payments()->firstOrFail();
-        $before = PaymentAllocation::query()->get()->map->getRawOriginal()->all();
         [$otherInvoice] = $this->invoice([100], $invoice->company_id);
-        $balance = CreditBalance::query()->where('company_id', $invoice->company_id)->firstOrFail();
-        $balance->apply(25, $otherInvoice);
+        $result = app(ApplyCreditToInvoice::class)->execute($otherInvoice);
+        $this->assertTrue($result->applied);
+        $this->assertSame(2500, $result->appliedAmountMinor);
+        $before = PaymentAllocation::query()->get()->map->getRawOriginal()->all();
 
         $this->cancelPayment($payment)->assertSessionHasErrors('cancel_reason');
 

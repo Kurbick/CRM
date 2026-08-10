@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Credits\ApplyCreditToInvoice;
 use App\Actions\Payments\CreateConfirmedPayment;
 use App\Models\CreditBalance;
 use App\Models\Invoice;
@@ -193,9 +194,10 @@ class InvoicePaymentLifecycleTest extends TestCase
         $invoice = $this->invoice();
         $payment = $this->confirmedPayment($invoice, 125);
         $otherInvoice = $this->invoice($invoice->company_id, 'INV-OTHER');
-        $balance = CreditBalance::where('company_id', $invoice->company_id)->firstOrFail();
+        $result = app(ApplyCreditToInvoice::class)->execute($otherInvoice);
 
-        $this->assertSame(25.0, $balance->apply(25, $otherInvoice));
+        $this->assertTrue($result->applied);
+        $this->assertSame(2500, $result->appliedAmountMinor);
 
         $this->patch(route('payments.cancel', $payment), [
             'cancel_payment_id' => $payment->id,
