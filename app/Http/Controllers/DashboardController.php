@@ -5,9 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\Company;
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Models\ServiceType;
 use App\Models\Subscription;
+use DateTimeInterface;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
@@ -23,8 +24,8 @@ class DashboardController extends Controller
             ->sum('total_amount');
 
         $totalPaid = Payment::where('status', 'confirmed')
-        ->where('comment', 'not like', '%Credit Balance%')
-        ->sum('amount');
+            ->where('comment', 'not like', '%Credit Balance%')
+            ->sum('amount');
 
         $totalDebt = $totalInvoiced - $totalPaid;
 
@@ -38,11 +39,11 @@ class DashboardController extends Controller
             ->sum('total_amount');
 
         return response()->json([
-            'total_invoiced'   => $totalInvoiced,
-            'total_paid'       => $totalPaid,
-            'total_debt'       => $totalDebt,
-            'overdue_count'    => $overdueCount,
-            'overdue_amount'   => $overdueAmount,
+            'total_invoiced' => $totalInvoiced,
+            'total_paid' => $totalPaid,
+            'total_debt' => $totalDebt,
+            'overdue_count' => $overdueCount,
+            'overdue_amount' => $overdueAmount,
             'active_companies' => Company::where('status', 'active')->count(),
             'active_subscriptions' => Subscription::where('status', 'active')->count(),
         ]);
@@ -71,14 +72,14 @@ class DashboardController extends Controller
                 // Последний платёж по каждой компании
                 'payments' => function ($q) {
                     $q->where('status', 'confirmed')
-                      ->orderBy('payment_date', 'desc')
-                      ->limit(1);
+                        ->orderBy('payment_date', 'desc')
+                        ->limit(1);
                 },
                 // Ближайший инвойс к оплате
                 'invoices' => function ($q) {
                     $q->whereNotIn('status', ['paid', 'cancelled'])
-                      ->orderBy('due_date', 'asc')
-                      ->limit(1);
+                        ->orderBy('due_date', 'asc')
+                        ->limit(1);
                 },
             ])
             ->get()
@@ -102,16 +103,16 @@ class DashboardController extends Controller
                     ->exists();
 
                 return [
-                    'id'                       => $company->id,
-                    'name'                     => $company->name,
-                    'status'                   => $company->status,
-                    'invoice_mode'             => $company->invoice_mode,
-                    'total_debt'               => $debt,
-                    'has_overdue'              => $hasOverdue,
-                    'active_contracts_count'   => $company->active_contracts_count,
-                    'last_payment_date'        => $company->payments->first()?->payment_date,
-                    'next_due_date'            => $company->invoices->first()?->due_date,
-                    'next_due_amount'          => $company->invoices->first()?->total_amount,
+                    'id' => $company->id,
+                    'name' => $company->name,
+                    'status' => $company->status,
+                    'invoice_mode' => $company->invoice_mode,
+                    'total_debt' => $debt,
+                    'has_overdue' => $hasOverdue,
+                    'active_contracts_count' => $company->active_contracts_count,
+                    'last_payment_date' => $company->payments->first()?->payment_date,
+                    'next_due_date' => $company->invoices->first()?->due_date,
+                    'next_due_amount' => $company->invoices->first()?->total_amount,
                 ];
             });
 
@@ -123,47 +124,116 @@ class DashboardController extends Controller
      */
     public function company(Company $company): JsonResponse
     {
-        // Все инвойсы компании с платежами
-        $invoices = Invoice::where('company_id', $company->id)
-            ->with('payments')
+        $invoices = Invoice::query()
+            ->where('company_id', $company->id)
+            ->select([
+                'id',
+                'company_id',
+                'invoice_number',
+                'issue_date',
+                'due_date',
+                'total_amount',
+                'status',
+            ])
+            ->withSum([
+                'payments as confirmed_paid_amount' => fn ($query) => $query
+                    ->where('status', 'confirmed'),
+            ], 'amount')
             ->orderBy('issue_date', 'desc')
             ->get()
-            ->map(function ($invoice) {
-                $paidAmount = $invoice->payments
-                    ->where('status', 'confirmed')
-                    ->sum('amount');
+            ->map(function (Invoice $invoice): array {
+                $paidAmount = (float) ($invoice->getAttribute('confirmed_paid_amount') ?? 0);
 
                 return [
-                    'id'             => $invoice->id,
+                    'id' => (int) $invoice->id,
                     'invoice_number' => $invoice->invoice_number,
-                    'issue_date'     => $invoice->issue_date,
-                    'due_date'       => $invoice->due_date,
-                    'total_amount'   => $invoice->total_amount,
-                    'paid_amount'    => $paidAmount,
-                    'remaining'      => $invoice->total_amount - $paidAmount,
-                    'status'         => $invoice->status,
-                    'is_overdue'     => $invoice->status !== 'paid'
+                    'issue_date' => $this->dateValue($invoice->issue_date),
+                    'due_date' => $this->dateValue($invoice->due_date),
+                    'total_amount' => $invoice->total_amount,
+                    'paid_amount' => $paidAmount,
+                    'remaining' => (float) $invoice->total_amount - $paidAmount,
+                    'status' => $invoice->status,
+                    'is_overdue' => $invoice->status !== 'paid'
                                         && $invoice->status !== 'cancelled'
-                                        && $invoice->due_date < now()->toDateString(),
+                                        && $this->dateValue($invoice->due_date) < now()->toDateString(),
                 ];
             });
 
-        // Активные подписки
-        $subscriptions = Subscription::whereHas('contract', function ($q) use ($company) {
-            $q->where('company_id', $company->id);
-        })
-        ->where('status', 'active')
-        ->with('serviceType')
-        ->get();
+        $subscriptions = Subscription::query()
+            ->whereHas('contract', function ($query) use ($company): void {
+                $query->where('company_id', $company->id);
+            })
+            ->where('status', 'active')
+            ->select([
+                'id',
+                'service_type_id',
+                'title',
+                'status',
+                'amount',
+                'billing_period',
+                'next_billing_date',
+            ])
+            ->with('serviceType:id,name')
+            ->orderBy('id')
+            ->get()
+            ->map(fn (Subscription $subscription): array => $this->subscriptionProjection($subscription));
 
-        // Итоговый долг
         $totalDebt = $invoices->sum('remaining');
 
         return response()->json([
-            'company'       => $company,
-            'total_debt'    => $totalDebt,
-            'invoices'      => $invoices,
+            'company' => $this->companyProjection($company),
+            'total_debt' => $totalDebt,
+            'invoices' => $invoices,
             'subscriptions' => $subscriptions,
         ]);
+    }
+
+    /** @return array{id: int, name: string, status: string, invoice_mode: string} */
+    private function companyProjection(Company $company): array
+    {
+        return [
+            'id' => (int) $company->id,
+            'name' => $company->name,
+            'status' => $company->status,
+            'invoice_mode' => $company->invoice_mode,
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function subscriptionProjection(Subscription $subscription): array
+    {
+        return [
+            'id' => (int) $subscription->id,
+            'title' => $subscription->title,
+            'status' => $subscription->status,
+            'amount' => $subscription->getRawOriginal('amount'),
+            'billing_period' => $subscription->billing_period,
+            'next_billing_date' => $this->dateValue($subscription->next_billing_date),
+            'service_type' => $this->serviceTypeProjection($subscription->serviceType),
+        ];
+    }
+
+    /** @return array{id: int, name: string}|null */
+    private function serviceTypeProjection(?ServiceType $serviceType): ?array
+    {
+        if ($serviceType === null) {
+            return null;
+        }
+
+        return [
+            'id' => (int) $serviceType->id,
+            'name' => $serviceType->name,
+        ];
+    }
+
+    private function dateValue(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        return $value instanceof DateTimeInterface
+            ? $value->format('Y-m-d')
+            : substr((string) $value, 0, 10);
     }
 }
