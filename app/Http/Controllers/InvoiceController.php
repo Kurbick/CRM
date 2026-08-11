@@ -15,11 +15,13 @@ use App\Models\Subscription;
 use App\Services\InvoiceDueDateCalculator;
 use App\Services\InvoiceEditabilityService;
 use App\Services\SubscriptionBillingSchedule;
+use App\Support\ApiPagination;
 use App\Support\Invoices\InvoiceSellerSnapshot;
 use Carbon\CarbonImmutable;
 use DateTimeInterface;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -35,35 +37,43 @@ class InvoiceController extends Controller
         private readonly InvoiceSellerSnapshot $sellerSnapshot,
     ) {}
 
-    public function index(Company $company): JsonResponse
+    public function index(Request $request, Company $company): JsonResponse
     {
         Gate::authorize('viewAny', Invoice::class);
 
+        $fields = [
+            'id',
+            'company_id',
+            'contract_id',
+            'invoice_number',
+            'issue_date',
+            'due_date',
+            'status',
+            'total_amount',
+            'created_at',
+            'updated_at',
+        ];
         $invoices = $company->invoices()
-            ->select([
-                'id',
-                'company_id',
-                'contract_id',
-                'invoice_number',
-                'issue_date',
-                'due_date',
-                'status',
-                'total_amount',
-                'created_at',
-                'updated_at',
-            ])
+            ->select($fields)
             ->withSum([
                 'payments as confirmed_paid_amount' => fn ($query) => $query
                     ->where('status', 'confirmed'),
             ], 'amount')
             ->orderBy('id')
-            ->get()
-            ->map(fn (Invoice $invoice): array => $this->compactProjection(
+            ->paginate(
+                ApiPagination::perPage($request),
+                $fields,
+                'page',
+                ApiPagination::page($request),
+            );
+
+        return response()->json(ApiPagination::envelope(
+            $invoices,
+            fn (Invoice $invoice): array => $this->compactProjection(
                 $invoice,
                 $invoice->getAttribute('confirmed_paid_amount')
-            ));
-
-        return response()->json($invoices);
+            ),
+        ));
     }
 
     public function store(StoreInvoiceRequest $request, Company $company): JsonResponse

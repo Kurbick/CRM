@@ -182,7 +182,7 @@ class ApiInvoiceAuthorizationTest extends AuthorizationTestCase
 
         $response = $this->getJson(route('api.companies.invoices.index', $company))->assertOk();
 
-        $this->assertSame([$invoice->id], array_column($response->json(), 'id'));
+        $this->assertSame([$invoice->id], array_column($response->json('data'), 'id'));
         $response->assertDontSee($other->invoice_number);
     }
 

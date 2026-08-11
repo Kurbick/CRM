@@ -86,7 +86,8 @@ class ApiInvoiceIntegrityTest extends AuthorizationTestCase
         );
 
         $capture['result']->assertOk();
-        $payload = $capture['result']->json();
+        $payload = $capture['result']->json('data');
+        $this->assertSame(2, $capture['result']->json('meta.total'));
         $this->assertSame([$first->id, $second->id], array_column($payload, 'id'));
         $this->assertSame(self::COMPACT_KEYS, array_keys($payload[0]));
         $this->assertSame(self::COMPACT_KEYS, array_keys($payload[1]));
@@ -103,7 +104,7 @@ class ApiInvoiceIntegrityTest extends AuthorizationTestCase
             ['companies', 'invoices', 'payments'],
             DomainQueryRecorder::tables($capture['records'])
         );
-        $this->assertSame(2, DomainQueryRecorder::count($capture['records']));
+        $this->assertSame(3, DomainQueryRecorder::count($capture['records']));
 
         foreach ([
             'API-INVOICE-INDEX-PENDING-PAYMENT',
@@ -138,8 +139,33 @@ class ApiInvoiceIntegrityTest extends AuthorizationTestCase
 
         $single['result']->assertOk();
         $many['result']->assertOk();
-        $this->assertSame(2, DomainQueryRecorder::count($single['records']));
-        $this->assertSame(2, DomainQueryRecorder::count($many['records']));
+        $this->assertSame(3, DomainQueryRecorder::count($single['records']));
+        $this->assertSame(3, DomainQueryRecorder::count($many['records']));
+    }
+
+    public function test_index_paginates_with_parent_scoped_totals_and_normalized_size(): void
+    {
+        $company = $this->company('API-INVOICE-PAGED-COMPANY');
+        $otherCompany = $this->company('API-INVOICE-PAGED-OTHER');
+        foreach (range(1, 26) as $index) {
+            $this->invoiceFixture($company, "API-INVOICE-PAGED-{$index}");
+        }
+        $this->invoiceFixture($otherCompany, 'API-INVOICE-PAGED-FOREIGN');
+        $this->actingAsPermissions([PermissionName::InvoicesView->value]);
+
+        $response = $this->getJson(route('api.companies.invoices.index', $company).'?page=2&per_page=10');
+        $response->assertOk()->assertJsonPath('meta.current_page', 2)
+            ->assertJsonPath('meta.per_page', 10)
+            ->assertJsonPath('meta.total', 26)
+            ->assertJsonPath('meta.last_page', 3)
+            ->assertJsonCount(10, 'data');
+        $this->assertSame('API-INVOICE-PAGED-11', $response->json('data.0.invoice_number'));
+        $this->assertSame('API-INVOICE-PAGED-20', $response->json('data.9.invoice_number'));
+
+        $normalized = $this->getJson(route('api.companies.invoices.index', $company).'?page=abc&per_page=-1');
+        $normalized->assertOk()->assertJsonPath('meta.current_page', 1)
+            ->assertJsonPath('meta.per_page', 25)
+            ->assertJsonPath('meta.total', 26);
     }
 
     public function test_show_has_closed_projection_safe_summaries_lines_and_payment_aggregate(): void

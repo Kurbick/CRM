@@ -235,7 +235,7 @@ class ApiPaymentAuthorizationTest extends AuthorizationTestCase
 
         $this->getJson(route('api.invoices.payments.index', $invoice))
             ->assertOk()
-            ->assertJsonPath('0.id', $payment->id);
+            ->assertJsonPath('data.0.id', $payment->id);
         $this->getJson(route('api.payments.show', $payment))
             ->assertOk()
             ->assertJsonPath('id', $payment->id);

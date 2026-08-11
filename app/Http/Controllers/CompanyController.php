@@ -7,7 +7,9 @@ use App\Exceptions\CompanyDeletionException;
 use App\Http\Requests\StoreCompanyRequest;
 use App\Http\Requests\UpdateCompanyRequest;
 use App\Models\Company;
+use App\Support\ApiPagination;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
 class CompanyController extends Controller
@@ -38,17 +40,24 @@ class CompanyController extends Controller
         'comment',
     ];
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         Gate::authorize('viewAny', Company::class);
 
         $companies = Company::query()
             ->select(self::COMPACT_FIELDS)
             ->orderBy('id')
-            ->get()
-            ->map(fn (Company $company): array => $this->compactProjection($company));
+            ->paginate(
+                ApiPagination::perPage($request),
+                self::COMPACT_FIELDS,
+                'page',
+                ApiPagination::page($request),
+            );
 
-        return response()->json($companies);
+        return response()->json(ApiPagination::envelope(
+            $companies,
+            fn (Company $company): array => $this->compactProjection($company),
+        ));
     }
 
     public function store(StoreCompanyRequest $request): JsonResponse

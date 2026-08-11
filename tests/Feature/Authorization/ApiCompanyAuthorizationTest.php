@@ -137,13 +137,14 @@ class ApiCompanyAuthorizationTest extends AuthorizationTestCase
         );
 
         $capture['result']->assertOk();
-        $payload = $capture['result']->json();
+        $payload = $capture['result']->json('data');
+        $this->assertSame(2, $capture['result']->json('meta.total'));
         $this->assertIsArray($payload);
         $this->assertSame([$first->id, $second->id], array_column($payload, 'id'));
         $this->assertSame(self::COMPACT_KEYS, array_keys($payload[0]));
         $this->assertContains('viewAny', $abilities);
         $this->assertSame(['companies'], DomainQueryRecorder::tables($capture['records']));
-        $this->assertSame(1, DomainQueryRecorder::count($capture['records']));
+        $this->assertSame(2, DomainQueryRecorder::count($capture['records']));
 
         foreach ([
             $first->bank_name,
@@ -158,6 +159,30 @@ class ApiCompanyAuthorizationTest extends AuthorizationTestCase
         ] as $marker) {
             $capture['result']->assertDontSee((string) $marker);
         }
+    }
+
+    public function test_company_index_has_bounded_pagination_and_normalizes_page_size(): void
+    {
+        $companies = [];
+        foreach (range(1, 26) as $index) {
+            $companies[] = Company::query()->create($this->companyPayload("PAGED-COMPANY-{$index}"));
+        }
+        $this->actingAsPermissions([PermissionName::CompaniesView->value]);
+
+        $response = $this->getJson(route('api.companies.index').'?page=2&per_page=10');
+        $response->assertOk()->assertJsonPath('meta.current_page', 2)
+            ->assertJsonPath('meta.per_page', 10)
+            ->assertJsonPath('meta.total', 26)
+            ->assertJsonPath('meta.last_page', 3)
+            ->assertJsonCount(10, 'data');
+        $this->assertSame($companies[10]->id, $response->json('data.0.id'));
+        $this->assertSame($companies[19]->id, $response->json('data.9.id'));
+        $this->assertStringContainsString('per_page=10', $response->json('links.next'));
+
+        $normalized = $this->getJson(route('api.companies.index').'?page=0&per_page=1000');
+        $normalized->assertOk()->assertJsonPath('meta.current_page', 1)
+            ->assertJsonPath('meta.per_page', 100)
+            ->assertJsonCount(26, 'data');
     }
 
     public function test_company_show_has_detail_projection_without_relation_queries(): void

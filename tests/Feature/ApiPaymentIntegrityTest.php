@@ -43,7 +43,8 @@ class ApiPaymentIntegrityTest extends AuthorizationTestCase
         );
 
         $capture['result']->assertOk();
-        $payload = $capture['result']->json();
+        $payload = $capture['result']->json('data');
+        $this->assertSame(2, $capture['result']->json('meta.total'));
         $this->assertSame(
             [$fixture['payment']->id, $fixture['other_payment']->id],
             array_column($payload, 'id')
@@ -57,14 +58,14 @@ class ApiPaymentIntegrityTest extends AuthorizationTestCase
             $this->assertIsString($payment['updated_at']);
         }
         $capture['result']
-            ->assertJsonPath('0.amount', '0.01')
-            ->assertJsonPath('0.payment_date', '2026-08-01')
-            ->assertJsonPath('0.status', 'cancelled')
-            ->assertJsonPath('0.comment', $fixture['payment']->comment)
-            ->assertJsonPath('1.amount', '-25.00')
+            ->assertJsonPath('data.0.amount', '0.01')
+            ->assertJsonPath('data.0.payment_date', '2026-08-01')
+            ->assertJsonPath('data.0.status', 'cancelled')
+            ->assertJsonPath('data.0.comment', $fixture['payment']->comment)
+            ->assertJsonPath('data.1.amount', '-25.00')
             ->assertDontSee($foreign->comment);
         $this->assertSame(['invoices', 'payments'], DomainQueryRecorder::tables($capture['records']));
-        $this->assertSame(2, DomainQueryRecorder::count($capture['records']));
+        $this->assertSame(3, DomainQueryRecorder::count($capture['records']));
 
         foreach ($fixture['forbidden_markers'] as $marker) {
             $capture['result']->assertDontSee((string) $marker);
@@ -91,12 +92,37 @@ class ApiPaymentIntegrityTest extends AuthorizationTestCase
             fn () => $this->getJson(route('api.invoices.payments.index', $many)),
         );
 
-        $singleCapture['result']->assertOk()->assertJsonCount(1);
-        $manyCapture['result']->assertOk()->assertJsonCount(6);
-        $this->assertSame(2, DomainQueryRecorder::count($singleCapture['records']));
-        $this->assertSame(2, DomainQueryRecorder::count($manyCapture['records']));
+        $singleCapture['result']->assertOk()->assertJsonCount(1, 'data');
+        $manyCapture['result']->assertOk()->assertJsonCount(6, 'data');
+        $this->assertSame(3, DomainQueryRecorder::count($singleCapture['records']));
+        $this->assertSame(3, DomainQueryRecorder::count($manyCapture['records']));
         $this->assertSame(['invoices', 'payments'], DomainQueryRecorder::tables($singleCapture['records']));
         $this->assertSame(['invoices', 'payments'], DomainQueryRecorder::tables($manyCapture['records']));
+    }
+
+    public function test_index_paginates_and_keeps_total_scoped_to_invoice(): void
+    {
+        $invoice = $this->invoiceFor($this->company('API-PAYMENT-PAGED-COMPANY'), 'API-PAYMENT-PAGED');
+        $foreignInvoice = $this->invoiceFor($this->company('API-PAYMENT-PAGED-OTHER'), 'API-PAYMENT-PAGED-OTHER');
+        foreach (range(1, 26) as $index) {
+            $this->paymentRecord($invoice, "{$index}.00", "API-PAYMENT-PAGED-{$index}");
+        }
+        $this->paymentRecord($foreignInvoice, '99.00', 'API-PAYMENT-PAGED-FOREIGN');
+        $this->actingAsPermissions([PermissionName::PaymentsView->value]);
+
+        $response = $this->getJson(route('api.invoices.payments.index', $invoice).'?page=2&per_page=10');
+        $response->assertOk()->assertJsonPath('meta.current_page', 2)
+            ->assertJsonPath('meta.per_page', 10)
+            ->assertJsonPath('meta.total', 26)
+            ->assertJsonPath('meta.last_page', 3)
+            ->assertJsonCount(10, 'data');
+        $this->assertSame('11.00', $response->json('data.0.amount'));
+        $this->assertSame('20.00', $response->json('data.9.amount'));
+
+        $normalized = $this->getJson(route('api.invoices.payments.index', $invoice).'?page=0&per_page=1000');
+        $normalized->assertOk()->assertJsonPath('meta.current_page', 1)
+            ->assertJsonPath('meta.per_page', 100)
+            ->assertJsonPath('meta.total', 26);
     }
 
     public function test_show_has_exact_projection_and_only_binding_query(): void

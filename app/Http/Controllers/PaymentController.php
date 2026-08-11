@@ -9,8 +9,10 @@ use App\Http\Requests\ConfirmPaymentRequest;
 use App\Http\Requests\StorePaymentRequest;
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Support\ApiPagination;
 use DateTimeInterface;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 use LogicException;
@@ -24,31 +26,35 @@ class PaymentController extends Controller
     /**
      * Все платежи по конкретному инвойсу.
      */
-    public function index(Invoice $invoice): JsonResponse
+    public function index(Request $request, Invoice $invoice): JsonResponse
     {
         Gate::authorize('viewAny', [Payment::class, $invoice]);
 
+        $fields = [
+            'id',
+            'invoice_id',
+            'amount',
+            'payment_date',
+            'payment_method',
+            'status',
+            'comment',
+            'created_at',
+            'updated_at',
+        ];
         $payments = $invoice->payments()
-            ->select([
-                'id',
-                'invoice_id',
-                'amount',
-                'payment_date',
-                'payment_method',
-                'status',
-                'comment',
-                'created_at',
-                'updated_at',
-            ])
+            ->select($fields)
             ->orderBy('id')
-            ->get()
-            ->map(fn (Payment $payment): array => $this->paymentProjection($payment))
-            ->values()
-            ->all();
+            ->paginate(
+                ApiPagination::perPage($request),
+                $fields,
+                'page',
+                ApiPagination::page($request),
+            );
 
-        return response()->json(
-            $payments
-        );
+        return response()->json(ApiPagination::envelope(
+            $payments,
+            fn (Payment $payment): array => $this->paymentProjection($payment),
+        ));
     }
 
     public function store(StorePaymentRequest $request, Invoice $invoice): JsonResponse
