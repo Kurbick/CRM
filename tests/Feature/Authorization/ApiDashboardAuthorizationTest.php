@@ -93,9 +93,9 @@ class ApiDashboardAuthorizationTest extends AuthorizationTestCase
         $response
             ->assertJsonPath('company.id', $company->id)
             ->assertJsonPath('company.name', $company->name)
-            ->assertJsonPath('invoices.0.paid_amount', 25)
+            ->assertJsonPath('invoices.0.paid_amount', '25.00')
             ->assertJsonPath('invoices.0.remaining', 75)
-            ->assertJsonPath('total_debt', 75)
+            ->assertJsonPath('total_debt', '75.00')
             ->assertJsonPath('subscriptions.0.id', $subscription->id)
             ->assertJsonPath('subscriptions.0.amount', '125.00')
             ->assertJsonPath('subscriptions.0.next_billing_date', '2026-09-01')
@@ -136,7 +136,7 @@ class ApiDashboardAuthorizationTest extends AuthorizationTestCase
         );
 
         $capture['result']->assertOk()->assertJsonCount(2, 'subscriptions')->assertJsonCount(2, 'invoices');
-        $this->assertSame(4, DomainQueryRecorder::count($capture['records']));
+        $this->assertSame(6, DomainQueryRecorder::count($capture['records']));
         $this->assertSame(
             ['companies', 'payments', 'invoices', 'subscriptions', 'contracts', 'service_types'],
             DomainQueryRecorder::tables($capture['records']),

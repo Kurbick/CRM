@@ -9,12 +9,13 @@ use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\Subscription;
 use App\Support\Access\PermissionName;
+use App\Support\DashboardFinancials;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 
 final class DashboardController extends Controller
 {
-    public function index(): View
+    public function index(DashboardFinancials $financials): View
     {
         Gate::authorize(PermissionName::DashboardView->value);
 
@@ -35,40 +36,22 @@ final class DashboardController extends Controller
 
         $overview = [];
 
-        if ($abilities['invoices']) {
-            $today = now()->toDateString();
-            $invoiceOverview = Invoice::query()
-                ->selectRaw(
-                    'COALESCE(SUM(CASE WHEN status NOT IN (?) THEN total_amount ELSE 0 END), 0) as total_invoiced',
-                    ['cancelled']
-                )
-                ->selectRaw(
-                    'SUM(CASE WHEN status NOT IN (?, ?) AND due_date < ? THEN 1 ELSE 0 END) as overdue_count',
-                    ['paid', 'cancelled', $today]
-                )
-                ->selectRaw(
-                    'COALESCE(SUM(CASE WHEN status NOT IN (?, ?) AND due_date < ? THEN total_amount ELSE 0 END), 0) as overdue_amount',
-                    ['paid', 'cancelled', $today]
-                )
-                ->firstOrFail();
+        if ($abilities['invoices'] || $abilities['payments']) {
+            $financialOverview = $financials->overview(now()->toDateString());
 
-            $overview['total_invoiced'] = $invoiceOverview->total_invoiced;
-            $overview['overdue_count'] = (int) $invoiceOverview->overdue_count;
-            $overview['overdue_amount'] = $invoiceOverview->overdue_amount;
-        }
+            if ($abilities['invoices']) {
+                $overview['total_invoiced'] = $financialOverview['total_invoiced'];
+                $overview['overdue_count'] = $financialOverview['overdue_count'];
+                $overview['overdue_amount'] = $financialOverview['overdue_amount'];
+            }
 
-        if ($abilities['payments']) {
-            $overview['total_paid'] = Payment::query()
-                ->where('status', 'confirmed')
-                ->where('comment', 'not like', '%Credit Balance%')
-                ->sum('amount');
-        }
+            if ($abilities['payments']) {
+                $overview['total_paid'] = $financialOverview['total_paid'];
+            }
 
-        if ($abilities['global_debt']) {
-            $overview['total_debt'] = max(
-                0,
-                $overview['total_invoiced'] - $overview['total_paid']
-            );
+            if ($abilities['global_debt']) {
+                $overview['total_debt'] = $financialOverview['total_debt'];
+            }
         }
 
         if ($abilities['companies']) {
@@ -90,32 +73,17 @@ final class DashboardController extends Controller
                 ->select(['id', 'name', 'status'])
                 ->where('status', '!=', 'archived');
 
-            if ($abilities['company_debt']) {
-                $companyQuery
-                    ->withSum([
-                        'invoices as dashboard_invoiced' => fn ($query) => $query
-                            ->whereNotIn('status', ['cancelled']),
-                    ], 'total_amount')
-                    ->withSum([
-                        'payments as dashboard_paid' => fn ($query) => $query
-                            ->where('status', 'confirmed')
-                            ->where('comment', 'not like', '%Credit Balance%'),
-                    ], 'amount');
-            }
-
             if ($abilities['company_invoices']) {
                 $companyQuery
-                    ->withExists([
-                        'invoices as dashboard_has_overdue' => fn ($query) => $query
-                            ->whereNotIn('status', ['paid', 'cancelled'])
-                            ->where('due_date', '<', now()->toDateString()),
-                    ])
                     ->with([
-                        'invoices' => fn ($query) => $query
-                            ->select(['id', 'company_id', 'due_date', 'total_amount'])
-                            ->whereNotIn('status', ['paid', 'cancelled'])
-                            ->orderBy('due_date')
-                            ->limit(1),
+                        'invoices' => function ($query) use ($financials): void {
+                            $financials->constrainOutstanding($query)
+                                ->select(['id', 'company_id', 'due_date', 'total_amount'])
+                                ->orderBy('due_date')
+                                ->orderBy('id')
+                                ->limit(1);
+                            $financials->addRemainingAmount($query);
+                        },
                     ]);
             }
 
@@ -129,7 +97,12 @@ final class DashboardController extends Controller
                 ]);
             }
 
-            $companies = $companyQuery->get()->map(function (Company $company) use ($abilities): array {
+            $companyModels = $companyQuery->get();
+            $companyFinancials = ($abilities['company_debt'] || $abilities['company_invoices'])
+                ? $financials->byCompany($companyModels->pluck('id'), now()->toDateString())
+                : collect();
+
+            $companies = $companyModels->map(function (Company $company) use ($abilities, $companyFinancials): array {
                 $row = [
                     'model' => $company,
                     'name' => $company->name,
@@ -137,17 +110,14 @@ final class DashboardController extends Controller
                 ];
 
                 if ($abilities['company_debt']) {
-                    $row['total_debt'] = max(
-                        0,
-                        $company->dashboard_invoiced - $company->dashboard_paid
-                    );
+                    $row['total_debt'] = $companyFinancials->get($company->id)?->total_debt ?? '0.00';
                 }
 
                 if ($abilities['company_invoices']) {
                     $nextInvoice = $company->invoices->first();
-                    $row['has_overdue'] = (bool) $company->dashboard_has_overdue;
+                    $row['has_overdue'] = (int) ($companyFinancials->get($company->id)?->overdue_count ?? 0) > 0;
                     $row['next_due_date'] = $nextInvoice?->due_date;
-                    $row['next_due_amount'] = $nextInvoice?->total_amount;
+                    $row['next_due_amount'] = $nextInvoice?->dashboard_remaining_amount;
                 }
 
                 if ($abilities['company_payments']) {

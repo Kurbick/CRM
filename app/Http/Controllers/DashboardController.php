@@ -4,9 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Company;
 use App\Models\Invoice;
-use App\Models\Payment;
 use App\Models\ServiceType;
 use App\Models\Subscription;
+use App\Support\DashboardFinancials;
 use DateTimeInterface;
 use Illuminate\Http\JsonResponse;
 
@@ -16,34 +16,12 @@ class DashboardController extends Controller
      * Общая статистика по всей системе.
      * Один запрос к каждой таблице — быстро и эффективно.
      */
-    public function overview(): JsonResponse
+    public function overview(DashboardFinancials $financials): JsonResponse
     {
-        // Общий долг = сумма всех неоплаченных инвойсов
-        // минус сумма всех подтверждённых платежей
-        $totalInvoiced = Invoice::whereNotIn('status', ['cancelled'])
-            ->sum('total_amount');
-
-        $totalPaid = Payment::where('status', 'confirmed')
-            ->where('comment', 'not like', '%Credit Balance%')
-            ->sum('amount');
-
-        $totalDebt = $totalInvoiced - $totalPaid;
-
-        // Просроченные инвойсы — due_date прошёл, не оплачены
-        $overdueCount = Invoice::whereNotIn('status', ['paid', 'cancelled'])
-            ->where('due_date', '<', now()->toDateString())
-            ->count();
-
-        $overdueAmount = Invoice::whereNotIn('status', ['paid', 'cancelled'])
-            ->where('due_date', '<', now()->toDateString())
-            ->sum('total_amount');
+        $overview = $financials->overview(now()->toDateString());
 
         return response()->json([
-            'total_invoiced' => $totalInvoiced,
-            'total_paid' => $totalPaid,
-            'total_debt' => $totalDebt,
-            'overdue_count' => $overdueCount,
-            'overdue_amount' => $overdueAmount,
+            ...$overview,
             'active_companies' => Company::where('status', 'active')->count(),
             'active_subscriptions' => Subscription::where('status', 'active')->count(),
         ]);
@@ -53,7 +31,7 @@ class DashboardController extends Controller
      * Список всех компаний с долгами и статистикой.
      * withCount и withSum делают всё в одном SQL запросе.
      */
-    public function companies(): JsonResponse
+    public function companies(DashboardFinancials $financials): JsonResponse
     {
         $companies = Company::where('status', '!=', 'archived')
             ->withCount([
@@ -76,45 +54,33 @@ class DashboardController extends Controller
                         ->limit(1);
                 },
                 // Ближайший инвойс к оплате
-                'invoices' => function ($q) {
-                    $q->whereNotIn('status', ['paid', 'cancelled'])
+                'invoices' => function ($q) use ($financials) {
+                    $financials->constrainOutstanding($q)
                         ->orderBy('due_date', 'asc')
+                        ->orderBy('id')
                         ->limit(1);
+                    $financials->addRemainingAmount($q);
                 },
             ])
-            ->get()
-            ->map(function ($company) {
-                // Считаем долг по каждой компании
-                $invoiced = Invoice::where('company_id', $company->id)
-                    ->whereNotIn('status', ['cancelled'])
-                    ->sum('total_amount');
+            ->get();
+        $companyFinancials = $financials->byCompany($companies->pluck('id'), now()->toDateString());
 
-                $paid = Payment::where('company_id', $company->id)
-                    ->where('status', 'confirmed')
-                    ->where('comment', 'not like', '%Credit Balance%')
-                    ->sum('amount');
+        $companies = $companies->map(function ($company) use ($companyFinancials) {
+            $summary = $companyFinancials->get($company->id);
 
-                $debt = max(0, $invoiced - $paid);
-
-                // Есть ли просроченные инвойсы
-                $hasOverdue = Invoice::where('company_id', $company->id)
-                    ->whereNotIn('status', ['paid', 'cancelled'])
-                    ->where('due_date', '<', now()->toDateString())
-                    ->exists();
-
-                return [
-                    'id' => $company->id,
-                    'name' => $company->name,
-                    'status' => $company->status,
-                    'invoice_mode' => $company->invoice_mode,
-                    'total_debt' => $debt,
-                    'has_overdue' => $hasOverdue,
-                    'active_contracts_count' => $company->active_contracts_count,
-                    'last_payment_date' => $company->payments->first()?->payment_date,
-                    'next_due_date' => $company->invoices->first()?->due_date,
-                    'next_due_amount' => $company->invoices->first()?->total_amount,
-                ];
-            });
+            return [
+                'id' => $company->id,
+                'name' => $company->name,
+                'status' => $company->status,
+                'invoice_mode' => $company->invoice_mode,
+                'total_debt' => $summary?->total_debt ?? '0.00',
+                'has_overdue' => (int) ($summary?->overdue_count ?? 0) > 0,
+                'active_contracts_count' => $company->active_contracts_count,
+                'last_payment_date' => $company->payments->first()?->payment_date,
+                'next_due_date' => $company->invoices->first()?->due_date,
+                'next_due_amount' => $company->invoices->first()?->dashboard_remaining_amount,
+            ];
+        });
 
         return response()->json($companies);
     }
@@ -122,7 +88,7 @@ class DashboardController extends Controller
     /**
      * Детальная статистика по одной компании.
      */
-    public function company(Company $company): JsonResponse
+    public function company(Company $company, DashboardFinancials $financials): JsonResponse
     {
         $invoices = Invoice::query()
             ->where('company_id', $company->id)
@@ -135,27 +101,20 @@ class DashboardController extends Controller
                 'total_amount',
                 'status',
             ])
-            ->withSum([
-                'payments as confirmed_paid_amount' => fn ($query) => $query
-                    ->where('status', 'confirmed'),
-            ], 'amount')
             ->orderBy('issue_date', 'desc')
+            ->tap(fn ($query) => $financials->addEffectiveAmounts($query, now()->toDateString()))
             ->get()
             ->map(function (Invoice $invoice): array {
-                $paidAmount = (float) ($invoice->getAttribute('confirmed_paid_amount') ?? 0);
-
                 return [
                     'id' => (int) $invoice->id,
                     'invoice_number' => $invoice->invoice_number,
                     'issue_date' => $this->dateValue($invoice->issue_date),
                     'due_date' => $this->dateValue($invoice->due_date),
                     'total_amount' => $invoice->total_amount,
-                    'paid_amount' => $paidAmount,
-                    'remaining' => (float) $invoice->total_amount - $paidAmount,
+                    'paid_amount' => $invoice->getAttribute('effective_paid_amount'),
+                    'remaining' => $invoice->getAttribute('remaining_amount'),
                     'status' => $invoice->status,
-                    'is_overdue' => $invoice->status !== 'paid'
-                                        && $invoice->status !== 'cancelled'
-                                        && $this->dateValue($invoice->due_date) < now()->toDateString(),
+                    'is_overdue' => (bool) $invoice->getAttribute('dashboard_is_overdue'),
                 ];
             });
 
@@ -178,7 +137,7 @@ class DashboardController extends Controller
             ->get()
             ->map(fn (Subscription $subscription): array => $this->subscriptionProjection($subscription));
 
-        $totalDebt = $invoices->sum('remaining');
+        $totalDebt = $financials->sumDecimals($invoices->pluck('remaining'));
 
         return response()->json([
             'company' => $this->companyProjection($company),

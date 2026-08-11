@@ -144,7 +144,7 @@ class DashboardAuthorizationTest extends AuthorizationTestCase
             ->assertDontSee('Оплачено')
             ->assertDontSee('Общий долг')
             ->assertDontSee(self::COMPANY_NAME);
-        $this->assertNotContains('payments', DomainQueryRecorder::tables($invoiceCapture['records']));
+        $this->assertContains('payments', DomainQueryRecorder::tables($invoiceCapture['records']));
 
         auth()->logout();
         $paymentUser = User::factory()->create();
@@ -160,7 +160,7 @@ class DashboardAuthorizationTest extends AuthorizationTestCase
             ->assertDontSee('Просрочено')
             ->assertDontSee('Общий долг')
             ->assertDontSee(self::COMPANY_NAME);
-        $this->assertNotContains('invoices', DomainQueryRecorder::tables($paymentCapture['records']));
+        $this->assertContains('invoices', DomainQueryRecorder::tables($paymentCapture['records']));
         $this->assertNotSame($invoiceUser->id, $paymentUser->id);
     }
 
@@ -227,7 +227,7 @@ class DashboardAuthorizationTest extends AuthorizationTestCase
         $this->assertSame(7, $tenCompanyCount);
     }
 
-    public function test_legacy_global_status_payment_and_due_date_semantics_are_preserved(): void
+    public function test_global_financial_values_follow_canonical_invoice_settlement_semantics(): void
     {
         Payment::query()->delete();
         Invoice::query()->get()->each->delete();
@@ -250,17 +250,18 @@ class DashboardAuthorizationTest extends AuthorizationTestCase
         $this->dashboardPayment($invoices[1], 'pending', '900.00', $today, 'pending ignored');
         $this->dashboardPayment($invoices[1], 'confirmed', '700.00', $today, 'Legacy Credit Balance transfer');
         $this->dashboardPayment($invoices[1], 'confirmed', '25.00', $today, 'Credit reserve is included');
+        $this->dashboardPayment($invoices[3], 'confirmed', '400.00', $today, 'paid invoice settlement');
 
         $administrator = User::factory()->create();
         $administrator->assignRole(SystemRole::Administrator->value);
         $response = $this->actingAs($administrator)->get(route('dashboard'))->assertOk();
         $overview = $response->viewData('overview');
 
-        $this->assertSame('1600.00', number_format((float) $overview['total_invoiced'], 2, '.', ''));
-        $this->assertSame('175.00', number_format((float) $overview['total_paid'], 2, '.', ''));
-        $this->assertSame('1425.00', number_format((float) $overview['total_debt'], 2, '.', ''));
-        $this->assertSame(2, $overview['overdue_count']);
-        $this->assertSame('300.00', number_format((float) $overview['overdue_amount'], 2, '.', ''));
+        $this->assertSame('1500.00', number_format((float) $overview['total_invoiced'], 2, '.', ''));
+        $this->assertSame('600.00', number_format((float) $overview['total_paid'], 2, '.', ''));
+        $this->assertSame('900.00', number_format((float) $overview['total_debt'], 2, '.', ''));
+        $this->assertSame(0, $overview['overdue_count']);
+        $this->assertSame('0.00', number_format((float) $overview['overdue_amount'], 2, '.', ''));
         $this->assertSame(1, $overview['active_companies']);
         $this->assertSame(1, $overview['active_subscriptions']);
     }
@@ -275,12 +276,13 @@ class DashboardAuthorizationTest extends AuthorizationTestCase
         $first = $this->dashboardInvoice($populated, $contract->id, 'ROW-FIRST', 'issued', $due, '100.00');
         $this->dashboardInvoice($populated, $contract->id, 'ROW-TIED', 'issued', $due, '110.00');
         $this->dashboardInvoice($populated, $contract->id, 'ROW-LATER', 'partially_paid', $later, '90.00');
-        $this->dashboardInvoice($populated, $contract->id, 'ROW-PAID', 'paid', now()->subDays(2)->toDateString(), '200.00');
+        $paid = $this->dashboardInvoice($populated, $contract->id, 'ROW-PAID', 'paid', now()->subDays(2)->toDateString(), '200.00');
         $this->dashboardInvoice($populated, $contract->id, 'ROW-CANCELLED', 'cancelled', $due, '999.00');
         $this->dashboardPayment($first, 'confirmed', '40.00', now()->subDay()->toDateString(), 'row payment one');
         $this->dashboardPayment($first, 'confirmed', '60.00', now()->toDateString(), 'row payment two');
         $this->dashboardPayment($first, 'confirmed', '5.00', now()->toDateString(), 'row payment tied');
         $this->dashboardPayment($first, 'pending', '500.00', now()->addDay()->toDateString(), 'row pending');
+        $this->dashboardPayment($paid, 'confirmed', '200.00', now()->subDays(2)->toDateString(), 'paid settlement');
 
         $user = $this->actingAsPermissions([
             PermissionName::DashboardView->value,
@@ -298,14 +300,11 @@ class DashboardAuthorizationTest extends AuthorizationTestCase
         $this->assertFalse($emptyRow['has_overdue']);
         $this->assertNull($emptyRow['last_payment_date']);
         $this->assertNull($emptyRow['next_due_date']);
-        $this->assertSame('395.00', number_format((float) $populatedRow['total_debt'], 2, '.', ''));
+        $this->assertSame('200.00', number_format((float) $populatedRow['total_debt'], 2, '.', ''));
         $this->assertTrue($populatedRow['has_overdue']);
         $this->assertSame(now()->toDateString(), $populatedRow['last_payment_date']->toDateString());
         $this->assertSame($due, (string) $populatedRow['next_due_date']);
-        $this->assertContains(
-            number_format((float) $populatedRow['next_due_amount'], 2, '.', ''),
-            ['100.00', '110.00']
-        );
+        $this->assertSame('110.00', number_format((float) $populatedRow['next_due_amount'], 2, '.', ''));
     }
 
     private function createDisclosureFixture(): void
