@@ -11,7 +11,7 @@
         $currentDirection = in_array(request('direction'), ['asc', 'desc'], true)
             ? request('direction')
             : 'desc';
-        $preservedFilters = request()->only(['search', 'company_id', 'status', 'overdue']);
+        $preservedFilters = request()->only(['search', 'company_id', 'contract_id', 'status', 'overdue']);
         if ($activeStatusFilter === '') {
             unset($preservedFilters['status']);
         }
@@ -84,7 +84,7 @@
                     </svg>
                 </span>
 
-                <input type="text" name="search" value="{{ request('search') }}"
+                <input type="text" name="search" value="{{ $search }}"
                     placeholder="Номер, компания, плательщик или договор..."
                     class="w-full pl-10 pr-4 py-2 border border-gray-200
                            rounded-lg text-sm focus:border-blue-500
@@ -95,8 +95,8 @@
             {{-- Фильтр по компании с поиском --}}
             <div class="relative w-full md:w-64" x-data="{
                 open: false,
-                selectedId: @js((string) request('company_id', '')),
-                query: @js($companies->firstWhere('id', (int) request('company_id'))?->name ?? ''),
+                selectedId: @js((string) ($activeCompanyId ?? '')),
+                query: @js($companies->firstWhere('id', $activeCompanyId)?->name ?? ''),
                 companies: @js($companies->map(fn($company) => ['id' => $company->id, 'name' => $company->name])->values()->all()),
                 get filteredCompanies() {
                     const search = this.query.trim().toLowerCase();
@@ -157,6 +157,19 @@
                 </div>
             </div>
 
+            {{-- Фильтр по договору --}}
+            <div class="w-full md:w-56">
+                <select name="contract_id"
+                    class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition">
+                    <option value="">Все договоры</option>
+                    @foreach ($contracts as $contract)
+                        <option value="{{ $contract->id }}" @selected($activeContractId === (int) $contract->id)>
+                            {{ $contract->contract_number }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+
             {{-- Фильтр по статусу --}}
             <div class="relative w-full md:w-44" x-data="{
                 open: false,
@@ -205,7 +218,7 @@
             {{-- Просроченные --}}
             <div class="flex items-center gap-2">
                 <input type="checkbox" name="overdue" id="overdue" value="1" onchange="this.form.submit()"
-                    {{ request('overdue') ? 'checked' : '' }}
+                    {{ $activeOverdue ? 'checked' : '' }}
                     class="h-4 w-4 rounded border-gray-300
                            text-blue-600 focus:ring-blue-500">
 
@@ -226,7 +239,7 @@
                     Найти
                 </button>
 
-                @if (request('search') || request('status') || request('company_id') || request('overdue') || request('sort') || request('direction'))
+                @if ($search !== '' || $activeStatusFilter !== '' || $activeCompanyId !== null || $activeContractId !== null || $activeOverdue || $currentSort !== 'issue_date' || $currentDirection !== 'desc')
                     <a href="{{ route('invoices.index') }}"
                         class="px-4 py-2 border border-gray-200 hover:bg-gray-50
                                text-gray-500 text-sm font-medium rounded-lg
@@ -430,7 +443,7 @@
 
                                 Счетов не найдено.
 
-                                @if (request('search') || request('status') || request('company_id') || request('overdue') || request('sort') || request('direction'))
+                                @if ($search !== '' || $activeStatusFilter !== '' || $activeCompanyId !== null || $activeContractId !== null || $activeOverdue || $currentSort !== 'issue_date' || $currentDirection !== 'desc')
                                     <a href="{{ route('invoices.index') }}" class="text-blue-600 hover:underline ml-1">
 
                                         Сбросить фильтры

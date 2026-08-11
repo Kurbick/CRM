@@ -51,6 +51,10 @@ class InvoiceController extends Controller
     {
         Gate::authorize('viewAny', Invoice::class);
 
+        $search = trim((string) $request->input('search', ''));
+        $activeCompanyId = $this->validFilterId($request->input('company_id'), Company::class);
+        $activeContractId = $this->validFilterId($request->input('contract_id'), Contract::class);
+
         $query = Invoice::query()
             ->with('company')
             ->withSum([
@@ -78,9 +82,7 @@ class InvoiceController extends Controller
             'desc',
         ];
 
-        if ($request->filled('search')) {
-            $search = trim($request->input('search'));
-
+        if ($search !== '') {
             $query->where(function ($query) use ($search) {
                 $query
                     ->where('invoices.invoice_number', 'like', "%{$search}%")
@@ -101,15 +103,17 @@ class InvoiceController extends Controller
             $query->where('status', $request->input('status'));
         }
 
-        if (
-            $request->filled('company_id')
-            && Company::query()->whereKey($request->integer('company_id'))->exists()
-        ) {
-            $query->where('invoices.company_id', $request->integer('company_id'));
+        if ($activeCompanyId !== null) {
+            $query->where('invoices.company_id', $activeCompanyId);
         }
 
-        if ($request->boolean('overdue')) {
-            $query->whereNotIn('status', ['paid', 'cancelled'])
+        if ($activeContractId !== null) {
+            $query->where('invoices.contract_id', $activeContractId);
+        }
+
+        $activeOverdue = $request->boolean('overdue');
+        if ($activeOverdue) {
+            $query->whereIn('status', ['issued'.'', 'partially_paid'])
                 ->where('due_date', '<', now()->toDateString());
         }
 
@@ -124,10 +128,27 @@ class InvoiceController extends Controller
             $direction = 'desc';
         }
 
-        $paginationParameters = $request->query();
+        $paginationParameters = [];
+        if ($search !== '') {
+            $paginationParameters['search'] = $search;
+        }
+        if ($activeCompanyId !== null) {
+            $paginationParameters['company_id'] = $activeCompanyId;
+        }
+        if ($activeContractId !== null) {
+            $paginationParameters['contract_id'] = $activeContractId;
+        }
+        if ($hasAllowedStatusFilter) {
+            $paginationParameters['status'] = $activeStatusFilter;
+        }
+        if ($activeOverdue) {
+            $paginationParameters['overdue'] = 1;
+        }
         if (! $hasAllowedStatusFilter) {
             unset($paginationParameters['status']);
         }
+        $paginationParameters['sort'] = $sort;
+        $paginationParameters['direction'] = $direction;
 
         $invoices = $query
             ->orderBy("invoices.{$sort}", $direction)
@@ -142,6 +163,14 @@ class InvoiceController extends Controller
                 'name',
             ]);
 
+        $contracts = Contract::query()
+            ->orderBy('contract_number')
+            ->get([
+                'id',
+                'company_id',
+                'contract_number',
+            ]);
+
         $invoicePaymentSources = $invoices->getCollection()
             ->mapWithKeys(fn (Invoice $invoice): array => [
                 $invoice->id => $this->paymentSourceResolver->fromAggregates($invoice),
@@ -150,9 +179,30 @@ class InvoiceController extends Controller
         return view('invoices.index', compact(
             'invoices',
             'companies',
+            'contracts',
             'invoicePaymentSources',
-            'activeStatusFilter'
+            'activeStatusFilter',
+            'search',
+            'activeCompanyId',
+            'activeContractId',
+            'activeOverdue'
         ));
+    }
+
+    private function validFilterId(mixed $value, string $modelClass): ?int
+    {
+        if (! is_string($value) && ! is_int($value)) {
+            return null;
+        }
+
+        $value = (string) $value;
+        if ($value === '' || ! ctype_digit($value) || (int) $value < 1) {
+            return null;
+        }
+
+        $id = (int) $value;
+
+        return $modelClass::query()->whereKey($id)->exists() ? $id : null;
     }
 
     /**

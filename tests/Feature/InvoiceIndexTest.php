@@ -6,6 +6,7 @@ use App\Models\Invoice;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\Feature\FinancialTestCase as TestCase;
+use Tests\Support\DomainQueryRecorder;
 
 class InvoiceIndexTest extends TestCase
 {
@@ -42,6 +43,104 @@ class InvoiceIndexTest extends TestCase
             ->assertOk()
             ->assertSee($match->invoice_number)
             ->assertDontSee($other->invoice_number);
+    }
+
+    public function test_filters_by_contract_id(): void
+    {
+        $match = $this->invoice(['invoice_number' => 'INV-CONTRACT-MATCH']);
+        $other = $this->invoice(['invoice_number' => 'INV-CONTRACT-OTHER']);
+
+        $this->get(route('invoices.index', ['contract_id' => $match->contract_id]))
+            ->assertOk()
+            ->assertSee($match->invoice_number)
+            ->assertDontSee($other->invoice_number);
+    }
+
+    public function test_invalid_company_and_contract_filters_are_removed_from_pagination_state(): void
+    {
+        $this->invoice(['invoice_number' => 'INV-NORMALIZED']);
+
+        $response = $this->get(route('invoices.index', [
+            'company_id' => 'abc',
+            'contract_id' => '999999',
+            'status' => 'garbage',
+            'sort' => 'drop_table',
+            'direction' => 'sideways',
+            'overdue' => 'garbage',
+        ]))->assertOk();
+
+        $response->assertSee('INV-NORMALIZED');
+        $invoices = $response->viewData('invoices');
+        $nextPage = $invoices->url(2);
+
+        $this->assertStringNotContainsString('company_id', $nextPage);
+        $this->assertStringNotContainsString('contract_id', $nextPage);
+        $this->assertStringNotContainsString('status=', $nextPage);
+        $this->assertStringNotContainsString('drop_table', $nextPage);
+        $this->assertStringNotContainsString('sideways', $nextPage);
+        $this->assertStringNotContainsString('overdue=', $nextPage);
+    }
+
+    public function test_company_and_contract_filters_compose_literally(): void
+    {
+        $match = $this->invoice([], 'Filter Company');
+        $otherCompany = $this->invoice([], 'Other Filter Company');
+
+        $this->get(route('invoices.index', [
+            'company_id' => $match->company_id,
+            'contract_id' => $otherCompany->contract_id,
+        ]))->assertOk()
+            ->assertDontSee($match->invoice_number)
+            ->assertDontSee($otherCompany->invoice_number)
+            ->assertSee('Счетов не найдено.');
+    }
+
+    public function test_equal_dates_use_id_tie_break_for_pagination(): void
+    {
+        $invoices = [];
+        for ($index = 1; $index <= 21; $index++) {
+            $invoices[] = $this->invoice([
+                'invoice_number' => sprintf('INV-TIE-%02d', $index),
+                'issue_date' => '2026-03-01',
+            ]);
+        }
+
+        $pageOne = $this->get(route('invoices.index', [
+            'sort' => 'issue_date',
+            'direction' => 'desc',
+        ]))->assertOk()->viewData('invoices')->getCollection()->pluck('id');
+        $pageTwo = $this->get(route('invoices.index', [
+            'sort' => 'issue_date',
+            'direction' => 'desc',
+            'page' => 2,
+        ]))->assertOk()->viewData('invoices')->getCollection()->pluck('id');
+
+        $this->assertCount(10, $pageOne);
+        $this->assertCount(10, $pageTwo);
+        $this->assertSame([], array_values(array_intersect($pageOne->all(), $pageTwo->all())));
+        $this->assertSame($invoices[20]->id, $pageOne->first());
+        $this->assertSame($invoices[10]->id, $pageTwo->first());
+    }
+
+    public function test_index_query_count_is_bounded_as_invoice_rows_grow(): void
+    {
+        $this->invoice(['invoice_number' => 'INV-BOUND-ONE']);
+        $one = (new DomainQueryRecorder)->capture(
+            fn () => $this->get(route('invoices.index'))->assertOk(),
+        );
+
+        for ($index = 2; $index <= 10; $index++) {
+            $this->invoice(['invoice_number' => 'INV-BOUND-'.$index]);
+        }
+
+        $ten = (new DomainQueryRecorder)->capture(
+            fn () => $this->get(route('invoices.index'))->assertOk(),
+        );
+
+        $this->assertSame(
+            DomainQueryRecorder::count($one['records']),
+            DomainQueryRecorder::count($ten['records']),
+        );
     }
 
     public function test_each_allowed_status_is_applied(): void
