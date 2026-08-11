@@ -70,32 +70,17 @@ class InvoiceEditabilityStructureTest extends TestCase
         );
     }
 
-    public function test_new_payment_recalculates_availability_after_invoice_lock_for_both_store_paths(): void
+    public function test_web_pending_payment_store_delegates_to_canonical_action(): void
     {
         $source = file_get_contents(app_path('Http/Controllers/Web/PaymentController.php'));
-        $confirmedSource = file_get_contents(app_path('Actions/Payments/CreateConfirmedPayment.php'));
         $store = $this->methodSource($source, 'public function store(', 'public function confirm(');
         $confirm = $this->methodSource($source, 'public function confirm(', 'public function cancel(');
 
-        $lockPosition = strpos($store, '->lockForUpdate()');
-        $availabilityPosition = strpos(
-            $store,
-            '$this->paymentAvailabilityService->evaluate($lockedInvoice)'
-        );
-        $createPosition = strpos($store, 'Payment::query()->create(');
-
-        $this->assertLessThan($availabilityPosition, $lockPosition);
-        $this->assertLessThan($createPosition, $availabilityPosition);
-        $this->assertStringContainsString("\$paymentAvailability['pending_minor'] > 0", $store);
-        $this->assertStringContainsString('Сумма платежа не может превышать остаток', $store);
-        $this->assertLessThan(
-            strpos($confirmedSource, 'evaluatePendingCreation($lockedInvoice)'),
-            strpos($confirmedSource, '->lockForUpdate()')
-        );
-        $this->assertLessThan(
-            strpos($confirmedSource, 'Payment::withoutEvents('),
-            strpos($confirmedSource, 'evaluatePendingCreation($lockedInvoice)')
-        );
+        $this->assertStringContainsString('CreatePendingPayment', $source);
+        $this->assertStringContainsString('$this->createPendingPayment->execute($invoice', $store);
+        $this->assertStringNotContainsString('paymentAvailabilityService', $store);
+        $this->assertStringNotContainsString('lockForUpdate()', $store);
+        $this->assertStringNotContainsString('Payment::query()->create(', $store);
         $this->assertStringNotContainsString('paymentAvailabilityService', $confirm);
     }
 

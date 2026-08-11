@@ -210,6 +210,19 @@ class ApiPaymentCreationIntegrityTest extends AuthorizationTestCase
         $this->assertDatabaseCount('payments', 3);
     }
 
+    public function test_amount_above_available_is_rejected_without_existing_pending_rows(): void
+    {
+        $this->actingAsPermissions([PermissionName::PaymentsCreate->value]);
+        $invoice = $this->invoice('issued', 'API-PAYMENT-ABOVE-WITHOUT-PENDING');
+
+        $this->postJson(route('api.invoices.payments.store', $invoice), $this->payload('100.01'))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('payment');
+
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertSame('issued', $invoice->fresh()->status);
+    }
+
     public function test_action_requeries_stale_invoice_and_structurally_locks_it_inside_one_transaction(): void
     {
         $invoice = $this->invoice('issued', 'API-PAYMENT-STALE');

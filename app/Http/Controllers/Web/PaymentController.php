@@ -5,15 +5,14 @@ namespace App\Http\Controllers\Web;
 use App\Actions\Payments\CancelPayment;
 use App\Actions\Payments\ConfirmPayment;
 use App\Actions\Payments\CreateConfirmedPayment;
+use App\Actions\Payments\CreatePendingPayment;
 use App\Exceptions\Payments\PaymentConfirmationException;
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
 use App\Models\Payment;
-use App\Services\InvoicePaymentAvailabilityService;
 use App\Support\Navigation\AuthorizedLandingPage;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -21,9 +20,9 @@ use Illuminate\Validation\ValidationException;
 class PaymentController extends Controller
 {
     public function __construct(
-        private readonly InvoicePaymentAvailabilityService $paymentAvailabilityService,
         private readonly ConfirmPayment $confirmPayment,
         private readonly CreateConfirmedPayment $createConfirmedPayment,
+        private readonly CreatePendingPayment $createPendingPayment,
         private readonly CancelPayment $cancelPayment
     ) {}
 
@@ -42,11 +41,6 @@ class PaymentController extends Controller
                 'date',
             ],
 
-            /*
-             * Без ожидающих платежей максимального ограничения нет:
-             * переплата по-прежнему зачисляется в Credit Balance.
-             * При наличии pending верхняя граница проверяется под lock ниже.
-             */
             'amount' => [
                 'required',
                 'numeric',
@@ -96,61 +90,22 @@ class PaymentController extends Controller
         if ($validated['status'] === 'confirmed') {
             $this->createConfirmedPayment->execute($invoice, $validated);
         } else {
-            DB::transaction(function () use (
-                $validated,
-                $invoice
-            ): void {
-                /*
-                 * Блокируем инвойс на время регистрации платежа,
-                 * чтобы два одновременных платежа не нарушили
-                 * расчёт статуса и переплаты.
-                 */
-                $lockedInvoice = Invoice::query()
-                    ->whereKey($invoice->id)
-                    ->lockForUpdate()
-                    ->firstOrFail();
-
-                /*
-                 * Платежи разрешены только по выставленному
-                 * или частично оплаченному инвойсу.
-                 */
-                if (
-                    ! in_array(
-                        $lockedInvoice->status,
-                        ['issued', 'partially_paid'],
-                        true
-                    )
-                ) {
-                    throw ValidationException::withMessages([
-                        'amount' => 'Платёж можно добавить только по выставленному или частично оплаченному инвойсу.',
-                    ]);
-                }
-
-                $paymentAvailability = $this->paymentAvailabilityService->evaluate($lockedInvoice);
-                $paymentAmountMinor = $this->paymentAvailabilityService->toMinorUnits($validated['amount']);
-
-                if (
-                    $paymentAvailability['pending_minor'] > 0
-                    && $paymentAmountMinor > $paymentAvailability['available_minor']
-                ) {
-                    throw ValidationException::withMessages([
-                        'amount' => 'Сумма платежа не может превышать остаток '
-                            .$this->paymentAvailabilityService->formatMinorUnits(
-                                $paymentAvailability['available_minor']
-                            ).'.',
-                    ]);
-                }
-
-                Payment::query()->create([
-                    'company_id' => $lockedInvoice->company_id,
-                    'invoice_id' => $lockedInvoice->id,
+            try {
+                $this->createPendingPayment->execute($invoice, [
                     'payment_date' => $validated['payment_date'],
-                    'amount' => $this->paymentAvailabilityService->fromMinorUnits($paymentAmountMinor),
+                    'amount' => $validated['amount'],
                     'payment_method' => $validated['payment_method'],
-                    'status' => 'pending',
                     'comment' => $validated['comment'] ?? null,
                 ]);
-            });
+            } catch (ValidationException $exception) {
+                $errors = $exception->errors();
+                if (isset($errors['payment']) && ! isset($errors['amount'])) {
+                    $errors['amount'] = $errors['payment'];
+                    unset($errors['payment']);
+                }
+
+                throw ValidationException::withMessages($errors);
+            }
         }
 
         return $this->mutationRedirect($invoice)

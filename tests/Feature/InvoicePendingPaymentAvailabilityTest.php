@@ -104,6 +104,19 @@ class InvoicePendingPaymentAvailabilityTest extends TestCase
         $this->assertDatabaseCount('payments', 2);
     }
 
+    public function test_pending_payment_above_available_is_rejected_without_existing_pending_rows(): void
+    {
+        $invoice = $this->invoice('100.00');
+
+        $this->from(route('invoices.show', $invoice))
+            ->post(route('payments.store', $invoice), $this->paymentPayload('101.00', 'pending'))
+            ->assertRedirect(route('invoices.show', $invoice))
+            ->assertSessionHasErrors('amount');
+
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertSame('issued', $invoice->fresh()->status);
+    }
+
     public function test_existing_pending_can_be_confirmed_without_availability_checking_it_against_itself(): void
     {
         $invoice = $this->invoice('600.00');
