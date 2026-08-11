@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Invoices\CreateInvoice;
 use App\Models\Contract;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
@@ -9,6 +10,7 @@ use App\Models\Order;
 use App\Models\Subscription;
 use App\Support\Access\PermissionName;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Validation\ValidationException;
 use RuntimeException;
 use Tests\Feature\Authorization\AuthorizationTestCase;
 use Tests\Support\DomainQueryRecorder;
@@ -220,6 +222,62 @@ class ApiInvoiceCreationIntegrityTest extends AuthorizationTestCase
         $this->assertDatabaseCount('invoice_lines', 0);
         $this->assertDatabaseHas('contracts', ['id' => $contract->id, 'company_id' => $company->id]);
         $this->assertDatabaseHas('contracts', ['id' => $otherContract->id, 'company_id' => $otherCompany->id]);
+    }
+
+    public function test_create_invoice_action_rejects_foreign_contract_without_writes(): void
+    {
+        $company = $this->company('ACTION CREATE COMPANY');
+        $foreignContract = $this->contract($this->company('ACTION CREATE FOREIGN COMPANY'));
+
+        try {
+            app(CreateInvoice::class)->execute(
+                $company,
+                $foreignContract,
+                [
+                    'invoice_number' => 'ACTION-CREATE-FOREIGN-CONTRACT',
+                    'issue_date' => '2026-08-01',
+                    'due_date' => '2026-08-31',
+                    'comment' => null,
+                ],
+                [[
+                    'description' => 'Manual line',
+                    'amount' => '10.00',
+                ]],
+            );
+            $this->fail('A foreign contract was accepted by CreateInvoice.');
+        } catch (ValidationException) {
+            $this->assertDatabaseCount('invoices', 0);
+            $this->assertDatabaseCount('invoice_lines', 0);
+        }
+    }
+
+    public function test_create_invoice_action_rejects_foreign_source_without_writes(): void
+    {
+        $company = $this->company('ACTION SOURCE COMPANY');
+        $contract = $this->contract($company);
+        $foreignOrder = $this->subjectOrder($this->contract($this->company('ACTION SOURCE FOREIGN')));
+
+        try {
+            app(CreateInvoice::class)->execute(
+                $company,
+                $contract,
+                [
+                    'invoice_number' => 'ACTION-CREATE-FOREIGN-SOURCE',
+                    'issue_date' => '2026-08-01',
+                    'due_date' => '2026-08-31',
+                    'comment' => null,
+                ],
+                [[
+                    'description' => 'Foreign order',
+                    'amount' => '10.00',
+                    'order_id' => $foreignOrder->id,
+                ]],
+            );
+            $this->fail('A foreign source was accepted by CreateInvoice.');
+        } catch (ValidationException) {
+            $this->assertDatabaseCount('invoices', 0);
+            $this->assertDatabaseCount('invoice_lines', 0);
+        }
     }
 
     public function test_order_source_is_scoped_and_controls_sourced_due_date(): void

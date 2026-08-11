@@ -3,14 +3,15 @@
 namespace App\Http\Controllers\Web;
 
 use App\Actions\Credits\ApplyCreditToInvoice;
+use App\Actions\Invoices\CreateInvoice;
 use App\Actions\Invoices\DeleteInvoice;
+use App\Actions\Invoices\UpdateInvoice;
 use App\Exceptions\Invoices\InvoiceDeletionException;
 use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\Contract;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
-use App\Models\Order;
 use App\Models\Payment;
 use App\Models\Subscription;
 use App\Services\InvoiceDueDateCalculator;
@@ -24,7 +25,6 @@ use App\Support\CompanyPageContext;
 use App\Support\Invoices\InvoiceSellerSnapshot;
 use App\Support\Navigation\AuthorizedLandingPage;
 use Carbon\CarbonImmutable;
-use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -35,6 +35,7 @@ use Illuminate\Validation\ValidationException;
 class InvoiceController extends Controller
 {
     public function __construct(
+        private readonly CreateInvoice $createInvoice,
         private readonly InvoiceDueDateCalculator $dueDateCalculator,
         private readonly InvoiceEditabilityService $editabilityService,
         private readonly InvoicePaymentAvailabilityService $paymentAvailabilityService,
@@ -42,6 +43,7 @@ class InvoiceController extends Controller
         private readonly InvoicePaymentSourceResolver $paymentSourceResolver,
         private readonly SubscriptionBillingSchedule $billingSchedule,
         private readonly InvoiceSellerSnapshot $sellerSnapshot,
+        private readonly UpdateInvoice $updateInvoice,
     ) {}
 
     /**
@@ -232,11 +234,9 @@ class InvoiceController extends Controller
         $validated = $request->validate([
             'company_id' => 'required|exists:companies,id',
             'contract_id' => 'required|exists:contracts,id',
-
             'invoice_number' => 'required|string|max:50|unique:invoices,invoice_number',
             'issue_date' => 'required|date',
             'due_date' => 'nullable|date',
-
             'seller_name' => 'prohibited',
             'seller_voen' => 'prohibited',
             'seller_bank_name' => 'prohibited',
@@ -244,46 +244,17 @@ class InvoiceController extends Controller
             'seller_bank_code' => 'prohibited',
             'seller_bank_voen' => 'prohibited',
             'seller_swift' => 'prohibited',
-
             'comment' => 'nullable|string',
-
             'lines' => ['required', 'array', 'min:1'],
-
-            'lines.*.description' => [
-                'required',
-                'string',
-                'max:255',
-            ],
-
-            'lines.*.amount' => [
-                'required',
-                'numeric',
-                'min:0.01',
-            ],
-
-            'lines.*.subscription_id' => [
-                'nullable',
-                'exists:subscriptions,id',
-            ],
-
-            'lines.*.order_id' => [
-                'nullable',
-                'exists:orders,id',
-            ],
-
-            'lines.*.period_start' => [
-                'nullable',
-                'date',
-            ],
-
-            'lines.*.period_end' => [
-                'nullable',
-                'date',
-            ],
+            'lines.*.description' => ['required', 'string', 'max:255'],
+            'lines.*.amount' => ['required', 'numeric', 'min:0.01'],
+            'lines.*.subscription_id' => ['nullable', 'exists:subscriptions,id'],
+            'lines.*.order_id' => ['nullable', 'exists:orders,id'],
+            'lines.*.period_start' => ['nullable', 'date'],
+            'lines.*.period_end' => ['nullable', 'date'],
         ]);
 
         $company = Company::findOrFail($validated['company_id']);
-
         $contract = Contract::query()
             ->whereKey($validated['contract_id'])
             ->where('company_id', $company->id)
@@ -297,337 +268,12 @@ class InvoiceController extends Controller
                 ->withInput();
         }
 
-        $lineErrors = [];
-        $requestPeriodKeys = [];
-        $requestOrderIds = [];
-        $requestSubscriptionIds = [];
-
-        foreach ($validated['lines'] as $index => $line) {
-            $fieldPrefix = "lines.{$index}";
-
-            $orderId = $line['order_id'] ?? null;
-            $subscriptionId = $line['subscription_id'] ?? null;
-
-            $periodStartValue = $line['period_start'] ?? null;
-            $periodEndValue = $line['period_end'] ?? null;
-
-            /*
-     * Одна строка не может одновременно ссылаться
-     * и на заказ, и на подписку.
-     */
-            if ($orderId && $subscriptionId) {
-                $lineErrors["{$fieldPrefix}.description"] =
-                    'Позиция не может одновременно быть заказом и подпиской.';
-
-                continue;
-            }
-
-            /*
-     * Разовые услуги и ручные строки
-     * не должны иметь расчётного периода.
-     */
-            if (! $subscriptionId && ($periodStartValue || $periodEndValue)) {
-                $lineErrors["{$fieldPrefix}.period_start"] =
-                    'Расчётный период разрешён только для подписок.';
-            }
-
-            /*
-     * Проверяем разовую услугу.
-     */
-            if ($orderId) {
-                $orderExists = Order::query()
-                    ->whereKey($orderId)
-                    ->where('contract_id', $contract->id)
-                    ->where('status', '!=', 'cancelled')
-                    ->exists();
-
-                if (! $orderExists) {
-                    $lineErrors["{$fieldPrefix}.order_id"] =
-                        'Выбранная разовая услуга не принадлежит этому договору или отменена.';
-                }
-
-                if (isset($requestOrderIds[(string) $orderId])) {
-                    $lineErrors["{$fieldPrefix}.order_id"] =
-                        'Эта разовая услуга уже добавлена в счёт.';
-                }
-
-                $requestOrderIds[(string) $orderId] = true;
-
-                continue;
-            }
-
-            /*
-     * Ручная строка без order_id и subscription_id разрешена.
-     */
-            if (! $subscriptionId) {
-                continue;
-            }
-
-            /*
-     * Подписка должна принадлежать выбранному договору
-     * и быть активной.
-     */
-            $subscription = Subscription::query()
-                ->whereKey($subscriptionId)
-                ->where('contract_id', $contract->id)
-                ->first();
-
-            if (! $subscription) {
-                $lineErrors["{$fieldPrefix}.subscription_id"] =
-                    'Выбранная подписка не принадлежит этому договору.';
-
-                continue;
-            }
-
-            if ($subscription->status !== 'active') {
-                $lineErrors["{$fieldPrefix}.subscription_id"] =
-                    'Счёт можно выставить только по активной подписке.';
-
-                continue;
-            }
-
-            if (isset($requestSubscriptionIds[(string) $subscriptionId])) {
-                $lineErrors["{$fieldPrefix}.subscription_id"] =
-                    'Эта подписка уже добавлена в счёт.';
-            }
-
-            $requestSubscriptionIds[(string) $subscriptionId] = true;
-
-            try {
-                $periodStart = CarbonImmutable::parse($subscription->next_billing_date)->startOfDay();
-                $periodEnd = $this->billingSchedule->periodEnd(
-                    $periodStart,
-                    CarbonImmutable::parse($subscription->start_date)->startOfDay(),
-                    $this->billingSchedule->intervalFor($subscription),
-                );
-            } catch (\InvalidArgumentException) {
-                $lineErrors["{$fieldPrefix}.subscription_id"] =
-                    'У подписки не заполнен корректный интервал биллинга.';
-
-                continue;
-            }
-
-            $validated['lines'][$index]['period_start'] = $periodStart->toDateString();
-            $validated['lines'][$index]['period_end'] = $periodEnd->toDateString();
-
-            $subscriptionStart = Carbon::parse(
-                $subscription->start_date
-            )->startOfDay();
-
-            $contractStart = Carbon::parse(
-                $contract->start_date
-            )->startOfDay();
-
-            $contractEnd = $contract->end_date
-                ? Carbon::parse($contract->end_date)->startOfDay()
-                : null;
-
-            /*
-     * Период не может начаться раньше подписки.
-     */
-            if ($periodStart->lt($subscriptionStart)) {
-                $lineErrors["{$fieldPrefix}.period_start"] =
-                    'Расчётный период не может начинаться раньше подписки.';
-            }
-
-            /*
-     * Период должен находиться внутри договора.
-     */
-            if ($periodStart->lt($contractStart)) {
-                $lineErrors["{$fieldPrefix}.period_start"] =
-                    'Расчётный период не может начинаться раньше договора.';
-            }
-
-            if ($contractEnd && $periodEnd->gt($contractEnd)) {
-                $lineErrors["{$fieldPrefix}.period_end"] =
-                    'Расчётный период не может выходить за дату окончания договора.';
-            }
-
-            /*
-     * Не допускаем одинаковую подписку с одинаковым
-     * периодом дважды в одной форме.
-     */
-            $requestPeriodKey = implode(':', [
-                $subscription->id,
-                $periodStart->toDateString(),
-                $periodEnd->toDateString(),
-            ]);
-
-            if (isset($requestPeriodKeys[$requestPeriodKey])) {
-                $lineErrors["{$fieldPrefix}.subscription_id"] =
-                    'Эта подписка уже добавлена за указанный период.';
-            }
-
-            $requestPeriodKeys[$requestPeriodKey] = true;
-
-            /*
-     * Не допускаем повторную reservation подписки
-     * за тот же период в любом non-cancelled инвойсе.
-     */
-            $periodAlreadyInvoiced = InvoiceLine::query()
-                ->where('subscription_id', $subscription->id)
-                ->whereDate(
-                    'period_start',
-                    $periodStart->toDateString()
-                )
-                ->whereDate(
-                    'period_end',
-                    $periodEnd->toDateString()
-                )
-                ->whereHas('invoice', fn ($query) => $query->where('status', '!=', 'cancelled'))
-                ->exists();
-
-            if ($periodAlreadyInvoiced) {
-                $lineErrors["{$fieldPrefix}.period_start"] =
-                    'По этой подписке уже существует инвойс за указанный период.';
-            }
-        }
-
-        if (! empty($lineErrors)) {
-            $firstError = array_values($lineErrors)[0];
-
-            throw ValidationException::withMessages(
-                array_merge(
-                    [
-                        'lines' => $firstError,
-                    ],
-                    $lineErrors
-                )
-            );
-        }
-
-        $validated['due_date'] = $this->dueDateCalculator->calculate(
-            issueDate: $validated['issue_date'],
-            manualDueDate: $validated['due_date'] ?? null,
-            contractId: $contract->id,
-            orderIds: array_keys($requestOrderIds),
-            subscriptionIds: array_keys($requestSubscriptionIds)
+        $invoice = $this->createInvoice->execute(
+            $company,
+            $contract,
+            $validated,
+            array_values($validated['lines']),
         );
-
-        try {
-            $invoice = DB::transaction(function () use (
-                $validated,
-                $company,
-                $contract
-            ) {
-                $lines = $validated['lines'];
-
-                $subscriptionIds = collect($lines)
-                    ->pluck('subscription_id')
-                    ->filter()
-                    ->map(fn ($id): int => (int) $id)
-                    ->unique()
-                    ->sort()
-                    ->values();
-                $lockedSubscriptions = Subscription::query()
-                    ->whereIn('id', $subscriptionIds)
-                    ->orderBy('id')
-                    ->lockForUpdate()
-                    ->get()
-                    ->keyBy('id');
-
-                foreach ($lines as $index => &$line) {
-                    if (empty($line['subscription_id'])) {
-                        continue;
-                    }
-
-                    $subscription = $lockedSubscriptions->get((int) $line['subscription_id']);
-                    if (! $subscription
-                        || (int) $subscription->contract_id !== (int) $contract->id
-                        || $subscription->status !== 'active') {
-                        throw ValidationException::withMessages([
-                            "lines.{$index}.subscription_id" => 'Подписка больше не активна или не принадлежит договору.',
-                        ]);
-                    }
-
-                    try {
-                        $periodStart = CarbonImmutable::parse($subscription->next_billing_date)->startOfDay();
-                        $periodEnd = $this->billingSchedule->periodEnd(
-                            $periodStart,
-                            CarbonImmutable::parse($subscription->start_date)->startOfDay(),
-                            $this->billingSchedule->intervalFor($subscription),
-                        );
-                    } catch (\InvalidArgumentException) {
-                        throw ValidationException::withMessages([
-                            "lines.{$index}.subscription_id" => 'У подписки не заполнен корректный интервал биллинга.',
-                        ]);
-                    }
-
-                    $duplicateExists = InvoiceLine::query()
-                        ->where('subscription_id', $subscription->id)
-                        ->whereDate('period_start', $periodStart->toDateString())
-                        ->whereDate('period_end', $periodEnd->toDateString())
-                        ->whereHas('invoice', fn ($query) => $query->where('status', '!=', 'cancelled'))
-                        ->exists();
-                    if ($duplicateExists) {
-                        throw ValidationException::withMessages([
-                            "lines.{$index}.subscription_id" => 'Эта billing occurrence уже зарезервирована другим инвойсом.',
-                        ]);
-                    }
-
-                    $line['period_start'] = $periodStart->toDateString();
-                    $line['period_end'] = $periodEnd->toDateString();
-                    $line['billing_occurrence_key'] = $this->billingSchedule->occurrenceKey(
-                        (int) $subscription->id,
-                        $periodStart,
-                        $periodEnd,
-                    );
-                }
-                unset($line);
-
-                $totalAmount = collect($lines)->sum('amount');
-
-                $invoiceData = collect($validated)
-                    ->except('lines')
-                    ->toArray();
-
-                $invoiceData['total_amount'] = $totalAmount;
-                $invoiceData['status'] = 'draft';
-                $invoiceData['period_start'] = null;
-                $invoiceData['period_end'] = null;
-
-                /*
-         * Сохраняем снимок реквизитов на момент выставления.
-         * Даже если компания или номер договора позже изменятся,
-         * старый инвойс сохранит первоначальные данные.
-         */
-                $invoiceData['payer_name'] = $company->name;
-                $invoiceData['payer_voen'] = $company->voen;
-                $invoiceData['contract_reference'] = $contract->contract_number;
-                $invoiceData = array_merge(
-                    $invoiceData,
-                    $this->sellerSnapshot->toArray()
-                );
-
-                $invoice = Invoice::create($invoiceData);
-
-                foreach ($lines as $line) {
-                    $invoice->lines()->create([
-                        'description' => $line['description'],
-                        'amount' => $line['amount'],
-
-                        'subscription_id' => $line['subscription_id'] ?? null,
-
-                        'order_id' => $line['order_id'] ?? null,
-
-                        'period_start' => $line['period_start'] ?? null,
-
-                        'period_end' => $line['period_end'] ?? null,
-                        'billing_occurrence_key' => $line['billing_occurrence_key'] ?? null,
-                    ]);
-                }
-
-                return $invoice;
-            });
-        } catch (UniqueConstraintViolationException $exception) {
-            if (! str_contains($exception->getMessage(), 'billing_occurrence_key')) {
-                throw $exception;
-            }
-
-            throw ValidationException::withMessages([
-                'lines' => 'Эта billing occurrence уже зарезервирована другим инвойсом.',
-            ]);
-        }
 
         return $this->mutationRedirect($invoice)
             ->with('success', 'Черновик инвойса успешно сохранён.');
@@ -815,206 +461,23 @@ class InvoiceController extends Controller
             'lines.*.period_start' => ['nullable', 'date'],
             'lines.*.period_end' => ['nullable', 'date'],
         ]);
+        $lines = array_values($validated['lines']);
+        unset($validated['lines']);
 
-        $blockingMessage = DB::transaction(function () use (
-            $invoice,
-            $validated
-        ): ?string {
-            $lockedInvoice = Invoice::query()
-                ->whereKey($invoice->id)
-                ->lockForUpdate()
-                ->firstOrFail();
-
-            $editability = $this->editabilityService->evaluate($lockedInvoice);
-            if (! $editability['editable']) {
-                return $this->editabilityMessage($editability['reason']);
+        try {
+            $this->updateInvoice->execute($invoice, $validated, $lines);
+        } catch (ValidationException $exception) {
+            $errors = $exception->errors();
+            if (array_key_exists('invoice', $errors)) {
+                return $this->mutationRedirect($invoice, $companyContext['query'])
+                    ->with('error', (string) ($errors['invoice'][0] ?? 'Инвойс нельзя изменить.'));
             }
 
-            $paymentAvailability = $this->paymentAvailabilityService->evaluate($lockedInvoice);
-            $newTotalMinor = $this->paymentAvailabilityService->sumToMinorUnits(
-                collect($validated['lines'])->pluck('amount')
-            );
-
-            if ($newTotalMinor < $paymentAvailability['pending_minor']) {
-                throw ValidationException::withMessages([
-                    'lines' => 'Сумма инвойса не может быть меньше суммы ожидающих платежей: '
-                        .$this->paymentAvailabilityService->formatMinorUnits($paymentAvailability['pending_minor']).'.',
-                ]);
-            }
-
-            $originalLines = $lockedInvoice->lines()
-                ->lockForUpdate()
-                ->get()
-                ->keyBy('id');
-
-            $submittedExistingIds = collect($validated['lines'])
-                ->pluck('id')
-                ->filter()
-                ->map(fn ($lineId): int => (int) $lineId)
-                ->values();
-
-            $lineIdsToDelete = $originalLines
-                ->keys()
-                ->diff($submittedExistingIds);
-
-            if (
-                $lockedInvoice->status === 'issued'
-                && $originalLines->only($lineIdsToDelete->all())->contains(
-                    fn (InvoiceLine $line): bool => $line->subscription_id !== null || $line->order_id !== null
-                )
-            ) {
-                throw ValidationException::withMessages([
-                    'lines' => 'Нельзя удалить связанную позицию из уже выставленного инвойса.',
-                ]);
-            }
-
-            $processedExistingIds = [];
-
-            foreach ($validated['lines'] as $index => $line) {
-                $lineId = ! empty($line['id'])
-                    ? (int) $line['id']
-                    : null;
-
-                /*
-             * Существующая строка:
-             * меняем только описание и сумму.
-             *
-             * subscription_id, order_id и периоды
-             * остаются прежними.
-             */
-                if ($lineId) {
-                    $existingLine = $originalLines->get($lineId);
-
-                    if (! $existingLine) {
-                        throw ValidationException::withMessages([
-                            "lines.{$index}.id" => 'Позиция не принадлежит этому инвойсу.',
-                        ]);
-                    }
-
-                    $submittedMetadata = [
-                        'subscription_id' => $line['subscription_id'] ?? null,
-                        'order_id' => $line['order_id'] ?? null,
-                        'period_start' => $line['period_start'] ?? null,
-                        'period_end' => $line['period_end'] ?? null,
-                    ];
-                    $storedMetadata = [
-                        'subscription_id' => $existingLine->subscription_id,
-                        'order_id' => $existingLine->order_id,
-                        'period_start' => $existingLine->period_start?->toDateString(),
-                        'period_end' => $existingLine->period_end?->toDateString(),
-                    ];
-
-                    if ($submittedMetadata != $storedMetadata) {
-                        throw ValidationException::withMessages([
-                            "lines.{$index}.id" => 'Нельзя изменить служебную связь или расчётный период позиции.',
-                        ]);
-                    }
-
-                    $linkedContractId = $existingLine->subscription_id
-                        ? $existingLine->subscription()->value('contract_id')
-                        : $existingLine->order()->value('contract_id');
-
-                    if (
-                        $linkedContractId !== null
-                        && (int) $linkedContractId !== (int) $lockedInvoice->contract_id
-                    ) {
-                        throw ValidationException::withMessages([
-                            "lines.{$index}.id" => 'Связанная позиция не принадлежит договору инвойса.',
-                        ]);
-                    }
-
-                    $existingLine->update([
-                        'description' => $line['description'],
-                        'amount' => $line['amount'],
-                    ]);
-
-                    $processedExistingIds[] = $lineId;
-
-                    continue;
-                }
-
-                if (
-                    ! empty($line['subscription_id'])
-                    || ! empty($line['order_id'])
-                    || ! empty($line['period_start'])
-                    || ! empty($line['period_end'])
-                ) {
-                    throw ValidationException::withMessages([
-                        "lines.{$index}.id" => 'Новая позиция может быть только ручной.',
-                    ]);
-                }
-
-                /*
-             * Новая строка из формы редактирования
-             * создаётся как ручная позиция.
-             */
-                $lockedInvoice->lines()->create([
-                    'description' => $line['description'],
-                    'amount' => $line['amount'],
-                    'subscription_id' => null,
-                    'order_id' => null,
-                    'period_start' => null,
-                    'period_end' => null,
-                ]);
-            }
-
-            /*
-         * Удаляем только старые строки,
-         * которые пользователь убрал из формы.
-         */
-            if ($lineIdsToDelete->isNotEmpty()) {
-                $lockedInvoice->lines()
-                    ->whereIn(
-                        'id',
-                        $lineIdsToDelete->all()
-                    )
-                    ->delete();
-            }
-
-            $remainingLinkedLines = $originalLines
-                ->only($processedExistingIds);
-
-            $validated['due_date'] = $this->dueDateCalculator->calculate(
-                issueDate: $validated['issue_date'],
-                manualDueDate: $validated['due_date'] ?? null,
-                contractId: (int) $lockedInvoice->contract_id,
-                orderIds: $remainingLinkedLines->pluck('order_id')->filter()->all(),
-                subscriptionIds: $remainingLinkedLines->pluck('subscription_id')->filter()->all()
-            );
-
-            /*
-         * Снимок компании и договора не изменяем.
-         */
-            $invoiceData = collect($validated)
-                ->except([
-                    'lines',
-                    'company_id',
-                    'status',
-                    'payer_name',
-                    'payer_voen',
-                    'contract_reference',
-                    'period_start',
-                    'period_end',
-                ])
-                ->toArray();
-
-            $invoiceData['total_amount'] = $this->paymentAvailabilityService->fromMinorUnits($newTotalMinor);
-
-            $lockedInvoice->update($invoiceData);
-
-            return null;
-        });
-
-        if ($blockingMessage !== null) {
-            return $this->mutationRedirect($invoice, $companyContext['query'])
-                ->with('error', $blockingMessage);
+            throw $exception;
         }
 
         return $this->mutationRedirect($invoice, $companyContext['query'])
-            ->with(
-                'success',
-                'Инвойс успешно обновлён.'
-            );
+            ->with('success', 'Инвойс успешно обновлён.');
     }
 
     public function issue(

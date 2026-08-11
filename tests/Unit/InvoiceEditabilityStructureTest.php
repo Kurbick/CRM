@@ -6,10 +6,24 @@ use Tests\TestCase;
 
 class InvoiceEditabilityStructureTest extends TestCase
 {
+    public function test_invoice_creation_is_delegated_to_shared_action(): void
+    {
+        $web = file_get_contents(app_path('Http/Controllers/Web/InvoiceController.php'));
+        $api = file_get_contents(app_path('Http/Controllers/InvoiceController.php'));
+        $action = file_get_contents(app_path('Actions/Invoices/CreateInvoice.php'));
+
+        $this->assertStringContainsString('$this->createInvoice->execute(', $web);
+        $this->assertStringContainsString('$this->createInvoice->execute(', $api);
+        $this->assertStringContainsString('DB::transaction(', $action);
+        $this->assertStringContainsString('->lockForUpdate()', $action);
+        $this->assertStringContainsString('billing_occurrence_key', $action);
+        $this->assertStringContainsString('$this->sellerSnapshot->toArray()', $action);
+    }
+
     public function test_web_update_locks_invoice_then_rechecks_shared_editability(): void
     {
-        $source = file_get_contents(app_path('Http/Controllers/Web/InvoiceController.php'));
-        $update = $this->methodSource($source, 'public function update(', 'public function issue(');
+        $controller = file_get_contents(app_path('Http/Controllers/Web/InvoiceController.php'));
+        $update = file_get_contents(app_path('Actions/Invoices/UpdateInvoice.php'));
 
         $this->assertStringContainsString('DB::transaction(', $update);
         $this->assertStringContainsString('->lockForUpdate()', $update);
@@ -20,6 +34,7 @@ class InvoiceEditabilityStructureTest extends TestCase
         );
         $this->assertStringNotContainsString("\$invoiceData['status']", $update);
         $this->assertStringContainsString('Нельзя удалить связанную позицию из уже выставленного инвойса.', $update);
+        $this->assertStringContainsString('$this->updateInvoice->execute($invoice', $controller);
     }
 
     public function test_api_update_uses_same_lock_and_explicitly_prohibits_protected_fields(): void
@@ -27,9 +42,8 @@ class InvoiceEditabilityStructureTest extends TestCase
         $controller = file_get_contents(app_path('Http/Controllers/InvoiceController.php'));
         $request = file_get_contents(app_path('Http/Requests/UpdateInvoiceRequest.php'));
 
-        $this->assertStringContainsString('InvoiceEditabilityService', $controller);
-        $this->assertStringContainsString('->lockForUpdate()', $controller);
-        $this->assertStringContainsString('$this->editabilityService->evaluate($lockedInvoice)', $controller);
+        $this->assertStringContainsString('UpdateInvoice', $controller);
+        $this->assertStringContainsString('$this->updateInvoice->execute($invoice', $controller);
 
         foreach (['status', 'total_amount', 'seller_name', 'payer_name', 'lines'] as $protectedField) {
             $this->assertStringContainsString("'{$protectedField}' => 'prohibited'", $request);
@@ -48,8 +62,8 @@ class InvoiceEditabilityStructureTest extends TestCase
 
     public function test_invoice_update_checks_pending_total_under_invoice_lock_before_line_mutations(): void
     {
-        $source = file_get_contents(app_path('Http/Controllers/Web/InvoiceController.php'));
-        $update = $this->methodSource($source, 'public function update(', 'public function issue(');
+        $controller = file_get_contents(app_path('Http/Controllers/Web/InvoiceController.php'));
+        $update = file_get_contents(app_path('Actions/Invoices/UpdateInvoice.php'));
 
         $lockPosition = strpos($update, '->lockForUpdate()');
         $availabilityPosition = strpos(
@@ -66,7 +80,7 @@ class InvoiceEditabilityStructureTest extends TestCase
         );
         $this->assertStringContainsString(
             "'lines.*.amount' => ['required', 'numeric', 'decimal:0,2', 'min:0.01']",
-            $update
+            $controller
         );
     }
 

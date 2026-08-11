@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Invoices\UpdateInvoice;
 use App\Models\Company;
 use App\Models\Contract;
 use App\Models\Invoice;
@@ -236,6 +237,19 @@ class ApiInvoiceUpdateIntegrityTest extends AuthorizationTestCase
         $this->assertSame($originalPayment, $payment->fresh()->getAttributes());
         $this->assertDatabaseCount('payment_allocations', 0);
         $this->assertDatabaseCount('credit_balance_entries', 0);
+    }
+
+    public function test_update_invoice_action_defaults_to_metadata_only_and_preserves_lines(): void
+    {
+        $invoice = $this->manualInvoice('ACTION-UPDATE-METADATA');
+        $line = $invoice->lines()->sole();
+
+        $updated = app(UpdateInvoice::class)->execute($invoice, [
+            'comment' => 'Direct action metadata update',
+        ]);
+
+        $this->assertSame('Direct action metadata update', $updated->comment);
+        $this->assertSame($line->getAttributes(), $line->fresh()->getAttributes());
     }
 
     public function test_prohibited_ownership_lifecycle_and_line_fields_fail_without_side_effects(): void
