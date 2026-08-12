@@ -9,6 +9,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     @include('components.forms.styles')
+    @include('components.tables.styles')
     {{-- Alpine.js — для интерактивности (модалки, дропдауны) без написания JS --}}
     <style>
         [x-cloak] {

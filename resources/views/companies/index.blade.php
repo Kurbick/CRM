@@ -25,11 +25,6 @@
             'direction' => $direction,
             'page' => $companies->currentPage() > 1 ? $companies->currentPage() : null,
         ], fn ($value) => $value !== null && $value !== '');
-        $statusBadges = [
-            'active' => ['label' => 'Активна', 'class' => 'bg-green-100 text-green-700'],
-            'suspended' => ['label' => 'Приостановлена', 'class' => 'bg-yellow-100 text-yellow-700'],
-            'archived' => ['label' => 'В архиве', 'class' => 'bg-gray-100 text-gray-600'],
-        ];
     @endphp
 
     <div class="mb-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
@@ -39,8 +34,8 @@
         </div>
         @can('create', \App\Models\Company::class)
             <a href="{{ route('companies.create') }}"
-                class="inline-flex items-center text-sm bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg transition shadow-sm font-medium">
-                <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                class="crm-light-action">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
                 </svg>
                 Добавить компанию
@@ -201,67 +196,77 @@
         </form>
     </div>
 
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <div class="overflow-x-auto">
-            <table class="w-full text-sm">
+    <div class="crm-table-shell">
+        <div class="crm-table-heading">
+            <span class="crm-table-heading-title">Компании</span>
+            <span class="crm-table-heading-count">{{ $companies->total() }}</span>
+        </div>
+        <div class="crm-table-scroll">
+            <table class="crm-table">
                 <thead>
-                    <tr class="border-b border-gray-200 text-left bg-gray-50 text-gray-500">
-                        <th class="px-6 py-3.5 text-xs font-semibold uppercase tracking-wider">
-                            <a href="{{ $sortUrl('name') }}" class="inline-flex items-center gap-1 hover:text-blue-600">
+                    <tr>
+                        <th>
+                            <a href="{{ $sortUrl('name') }}" class="crm-table-sort">
                                 Компания / тип
-                                <span class="{{ $sort === 'name' ? 'text-blue-600' : 'text-gray-300' }}">{{ $sort === 'name' ? ($direction === 'asc' ? '↑' : '↓') : '↕' }}</span>
+                                <span class="crm-table-sort-indicator {{ $sort === 'name' ? 'crm-table-sort-indicator-active' : '' }}">{{ $sort === 'name' ? ($direction === 'asc' ? '↑' : '↓') : '↕' }}</span>
                             </a>
                         </th>
-                        <th class="px-6 py-3.5 text-xs font-semibold uppercase tracking-wider">VÖEN</th>
-                        <th class="px-6 py-3.5 text-xs font-semibold uppercase tracking-wider">Контакты</th>
+                        <th>VÖEN</th>
+                        <th>Контакты</th>
                         @if ($canViewFinancials)
-                            <th data-testid="company-debt-column" class="px-6 py-3.5 text-xs font-semibold uppercase tracking-wider">
-                                <a href="{{ $sortUrl('debt') }}" class="inline-flex items-center gap-1 hover:text-blue-600">
+                            <th data-testid="company-debt-column">
+                                <a href="{{ $sortUrl('debt') }}" class="crm-table-sort">
                                     Долг
-                                    <span class="{{ $sort === 'debt' ? 'text-blue-600' : 'text-gray-300' }}">{{ $sort === 'debt' ? ($direction === 'asc' ? '↑' : '↓') : '↕' }}</span>
+                                    <span class="crm-table-sort-indicator {{ $sort === 'debt' ? 'crm-table-sort-indicator-active' : '' }}">{{ $sort === 'debt' ? ($direction === 'asc' ? '↑' : '↓') : '↕' }}</span>
                                 </a>
                             </th>
                         @endif
-                        <th class="px-6 py-3.5 text-xs font-semibold uppercase tracking-wider">Статус</th>
-                        <th class="px-6 py-3.5 text-xs font-semibold uppercase tracking-wider"></th>
+                        <th>Статус</th>
+                        <th class="crm-table-actions"></th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-100 text-gray-700">
+                <tbody>
                     @forelse ($companies as $company)
-                        <tr class="hover:bg-gray-50/50 transition">
-                            <td class="px-6 py-4">
+                        <tr>
+                            <td>
                                 <a href="{{ route('companies.show', $company) }}"
-                                    class="font-semibold text-gray-900 hover:text-blue-600 transition">
+                                    class="crm-table-primary-link">
                                     {{ $company->name }}
                                 </a>
-                                <div class="text-xs text-gray-400 mt-0.5">
+                                <div class="crm-table-secondary mt-0.5">
                                     {{ $company->type === 'company' ? 'Юридическое лицо' : 'Индивидуальный предприниматель' }}
                                     @if ($company->short_name)
-                                        <span class="text-gray-300 mx-1">|</span>{{ $company->short_name }}
+                                        <span class="text-slate-300 mx-1">|</span>{{ $company->short_name }}
                                     @endif
                                 </div>
                             </td>
-                            <td class="px-6 py-4 font-mono text-xs text-gray-600">{{ $company->voen ?? '—' }}</td>
-                            <td class="px-6 py-4">
-                                <div class="text-gray-900 text-xs">{{ $company->email ?? '—' }}</div>
-                                <div class="text-gray-400 text-xs mt-0.5">{{ $company->phone ?? '—' }}</div>
+                            <td class="crm-table-number">{{ $company->voen ?? '—' }}</td>
+                            <td>
+                                <div class="text-slate-700 text-xs">{{ $company->email ?? '—' }}</div>
+                                <div class="crm-table-secondary mt-0.5">{{ $company->phone ?? '—' }}</div>
                             </td>
                             @if ($canViewFinancials)
-                                <td data-testid="company-debt-value" class="px-6 py-4">
-                                    <span class="{{ $company->total_debt > 0 ? 'text-red-600 font-semibold' : 'text-gray-400 font-medium' }}">
+                                <td data-testid="company-debt-value" class="crm-table-numeric">
+                                    <span class="{{ $company->total_debt > 0 ? 'text-red-600 font-semibold' : 'text-slate-400 font-medium' }}">
                                         {{ number_format($company->total_debt, 2) }} ₼
                                     </span>
                                 </td>
                             @endif
-                            <td class="px-6 py-4">
-                                <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ $statusBadges[$company->status]['class'] }}">
-                                    {{ $statusBadges[$company->status]['label'] }}
-                                </span>
+                            <td>
+                                @include('partials.badge', [
+                                    'status' => $company->status,
+                                    'label' => match ($company->status) {
+                                        'active' => 'Активна',
+                                        'suspended' => 'Приостановлена',
+                                        'archived' => 'В архиве',
+                                        default => $company->status,
+                                    },
+                                ])
                             </td>
-                            <td class="px-6 py-4 text-right">
+                            <td class="crm-table-actions">
                                 <div class="flex items-center justify-end gap-3">
                                     <a href="{{ route('companies.show', ['company' => $company, 'return_url' => $companyIndexReturnUrl]) }}"
-                                        class="text-blue-600 hover:text-blue-800 text-sm font-semibold transition">Открыть →</a>
+                                        class="crm-table-action-link">Открыть →</a>
                                     @can('update', $company)
                                         <a href="{{ route('companies.edit', ['company' => $company, ...$editContext]) }}"
                                             class="text-gray-400 hover:text-gray-600 transition" title="Редактировать">
@@ -275,13 +280,13 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="{{ $canViewFinancials ? 6 : 5 }}" class="px-6 py-12 text-center text-gray-400">
-                                Компаний не найдено.
+                            <td colspan="{{ $canViewFinancials ? 6 : 5 }}" class="crm-table-empty">
+                                <span class="crm-table-empty-message">Компаний не найдено.</span>
                                 @if ($search !== '' || $status !== '')
-                                    <a href="{{ route('companies.index') }}" class="text-blue-600 hover:underline ml-1">Сбросить фильтры</a>
+                                    <a href="{{ route('companies.index') }}" class="crm-table-empty-action">Сбросить фильтры</a>
                                 @else
                                     @can('create', \App\Models\Company::class)
-                                        <a href="{{ route('companies.create') }}" class="text-blue-600 hover:underline ml-1">Добавить первую компанию</a>
+                                        <a href="{{ route('companies.create') }}" class="crm-table-empty-action">Добавить первую компанию</a>
                                     @endcan
                                 @endif
                             </td>
@@ -292,7 +297,7 @@
         </div>
 
         @if ($companies->hasPages())
-            <div class="px-6 py-4 border-t border-gray-100 bg-gray-50/50">
+            <div class="crm-table-footer">
                 {{ $companies->links() }}
             </div>
         @endif

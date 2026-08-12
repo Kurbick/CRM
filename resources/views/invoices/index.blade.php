@@ -50,10 +50,9 @@
         @can('create', \App\Models\Invoice::class)
             <div>
                 <a href="{{ route('invoices.create') }}"
-                class="inline-flex items-center text-sm bg-blue-600 hover:bg-blue-700
-                       text-white px-4 py-2.5 rounded-lg transition shadow-sm font-medium">
+                class="crm-light-action">
 
-                <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
                 </svg>
@@ -255,75 +254,64 @@
     </div>
 
     {{-- Список инвойсов --}}
-    <div class="bg-white rounded-xl border border-gray-200
-                shadow-sm overflow-hidden">
-
-        <div class="overflow-x-auto">
-            <table class="w-full text-sm">
+    <div class="crm-table-shell">
+        <div class="crm-table-heading">
+            <span class="crm-table-heading-title">Инвойсы</span>
+            <span class="crm-table-heading-count">{{ $invoices->total() }}</span>
+        </div>
+        <div class="crm-table-scroll">
+            <table class="crm-table">
                 <thead>
-                    <tr class="border-b border-gray-200 text-left
-                               bg-gray-50 text-gray-500">
+                    <tr>
 
-                        <th
-                            class="px-6 py-3.5 text-xs font-semibold
-                                   uppercase tracking-wider">
+                        <th>
                             Номер счета
                         </th>
 
-                        <th
-                            class="px-6 py-3.5 text-xs font-semibold
-                                   uppercase tracking-wider">
+                        <th>
                             Компания
                         </th>
 
-                        <th class="px-6 py-3.5 text-xs font-semibold uppercase tracking-wider">
+                        <th>
                             <a href="{{ $sortUrl('issue_date') }}"
-                                class="inline-flex items-center gap-1.5 hover:text-blue-600 transition"
+                                class="crm-table-sort"
                                 title="{{ $currentSort === 'issue_date' && $currentDirection === 'desc' ? 'Показать сначала старые даты' : 'Показать сначала новые даты' }}">
                                 <span>Дата выставления</span>
-                                <span class="{{ $currentSort === 'issue_date' ? 'text-blue-600' : 'text-gray-300' }}">
+                                <span class="crm-table-sort-indicator {{ $currentSort === 'issue_date' ? 'crm-table-sort-indicator-active' : '' }}">
                                     {{ $currentSort === 'issue_date' ? ($currentDirection === 'asc' ? '↑' : '↓') : '↕' }}
                                 </span>
                             </a>
                         </th>
 
-                        <th class="px-6 py-3.5 text-xs font-semibold uppercase tracking-wider">
+                        <th>
                             <a href="{{ $sortUrl('due_date') }}"
-                                class="inline-flex items-center gap-1.5 hover:text-blue-600 transition"
+                                class="crm-table-sort"
                                 title="{{ $currentSort === 'due_date' && $currentDirection === 'desc' ? 'Показать сначала ранние сроки' : 'Показать сначала поздние сроки' }}">
                                 <span>Срок оплаты</span>
-                                <span class="{{ $currentSort === 'due_date' ? 'text-blue-600' : 'text-gray-300' }}">
+                                <span class="crm-table-sort-indicator {{ $currentSort === 'due_date' ? 'crm-table-sort-indicator-active' : '' }}">
                                     {{ $currentSort === 'due_date' ? ($currentDirection === 'asc' ? '↑' : '↓') : '↕' }}
                                 </span>
                             </a>
                         </th>
 
-                        <th
-                            class="px-6 py-3.5 text-xs font-semibold
-                                   uppercase tracking-wider">
+                        <th>
                             Сумма счета
                         </th>
 
-                        <th
-                            class="px-6 py-3.5 text-xs font-semibold
-                                   uppercase tracking-wider">
+                        <th>
                             Оплачено / Остаток
                         </th>
 
-                        <th
-                            class="px-6 py-3.5 text-xs font-semibold
-                                   uppercase tracking-wider">
+                        <th>
                             Статус
                         </th>
 
-                        <th
-                            class="w-12 px-2 py-3.5 text-xs font-semibold
-                                   uppercase tracking-wider">
+                        <th class="crm-table-actions">
                         </th>
                     </tr>
                 </thead>
 
-                <tbody class="divide-y divide-gray-100 text-gray-700">
+                <tbody>
                     @forelse ($invoices as $invoice)
                         @php
                             $appliedAmount = $invoice->applied_amount;
@@ -331,39 +319,39 @@
                             $remainingAmount = $invoice->remaining_amount;
                             $paymentSource = $invoicePaymentSources->get($invoice->id);
                         @endphp
-                        <tr class="hover:bg-gray-50/50 transition">
+                        <tr>
 
                             {{-- Номер --}}
-                            <td class="px-6 py-4">
+                            <td>
                                 <a href="{{ route('invoices.show', $invoice) }}"
-                                    class="font-mono font-semibold text-gray-900 transition hover:text-blue-600 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                                    class="crm-table-primary-link crm-table-number focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
                                     {{ $invoice->invoice_number }}
                                 </a>
                             </td>
 
                             {{-- Связанная компания с fallback на snapshot --}}
-                            <td class="px-6 py-4">
+                            <td>
                                 @if ($invoice->company)
                                     @can('view', $invoice->company)
                                         <a href="{{ route('companies.show', ['company' => $invoice->company, 'return_url' => request()->fullUrl()]) }}"
-                                            class="font-medium text-gray-900 transition hover:text-blue-600 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                                            class="crm-table-primary-link focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
                                             {{ $invoice->company->name }}
                                         </a>
                                     @else
-                                        <span class="font-medium text-gray-900">{{ $invoice->company->name }}</span>
+                                    <span class="font-medium text-slate-700">{{ $invoice->company->name }}</span>
                                     @endcan
                                 @else
-                                    <span class="font-medium text-gray-900">{{ $invoice->payer_name }}</span>
+                                    <span class="font-medium text-slate-700">{{ $invoice->payer_name }}</span>
                                 @endif
                             </td>
 
                             {{-- Дата выставления --}}
-                            <td class="px-6 py-4 text-gray-600">
+                            <td class="crm-table-date">
                                 {{ \Illuminate\Support\Carbon::parse($invoice->issue_date)->format('d/m/Y') }}
                             </td>
 
                             {{-- Срок оплаты --}}
-                            <td class="px-6 py-4">
+                            <td class="crm-table-date">
                                 <div
                                     class="{{ $invoice->is_overdue ? 'text-red-600 font-semibold' : 'text-gray-600' }}">
 
@@ -381,12 +369,12 @@
                             </td>
 
                             {{-- Сумма --}}
-                            <td class="px-6 py-4 font-semibold text-gray-900">
+                            <td class="crm-table-numeric font-semibold text-slate-900">
                                 {{ $formatMoney($invoice->total_amount) }}
                             </td>
 
                             {{-- Оплата, переплата и долг --}}
-                            <td class="px-6 py-4 text-xs">
+                            <td class="crm-table-numeric text-xs">
                                 @if ($invoice->status === 'cancelled')
                                     <div class="font-medium text-gray-500">
                                         Счёт отменён
@@ -420,14 +408,14 @@
                             </td>
 
                             {{-- Статус --}}
-                            <td class="px-6 py-4">
+                            <td>
                                 @include('partials.badge', [
                                     'status' => $invoice->status,
                                 ])
                             </td>
 
                             {{-- Действия --}}
-                            <td class="w-12 px-2 py-4 text-center">
+                            <td class="crm-table-actions">
                                 <div class="flex items-center justify-center gap-1">
                                     <a href="{{ route('invoices.show', $invoice) }}"
                                         class="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-400 transition hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
@@ -441,18 +429,17 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" class="px-6 py-12 text-center text-gray-400">
-
-                                Счетов не найдено.
+                            <td colspan="8" class="crm-table-empty">
+                                <span class="crm-table-empty-message">Счетов не найдено.</span>
 
                                 @if ($search !== '' || $activeStatusFilter !== '' || $activeCompanyId !== null || $activeContractId !== null || $activeOverdue || $currentSort !== 'issue_date' || $currentDirection !== 'desc')
-                                    <a href="{{ route('invoices.index') }}" class="text-blue-600 hover:underline ml-1">
+                                    <a href="{{ route('invoices.index') }}" class="crm-table-empty-action">
 
                                         Сбросить фильтры
                                     </a>
                                 @else
                                     @can('create', \App\Models\Invoice::class)
-                                        <a href="{{ route('invoices.create') }}" class="text-blue-600 hover:underline ml-1">
+                                        <a href="{{ route('invoices.create') }}" class="crm-table-empty-action">
 
                                             Выставить первый счет
                                         </a>
@@ -467,7 +454,7 @@
 
         {{-- Пагинация --}}
         @if ($invoices->hasPages())
-            <div class="px-6 py-4 border-t border-gray-100 bg-gray-50/50">
+            <div class="crm-table-footer">
                 {{ $invoices->links() }}
             </div>
         @endif

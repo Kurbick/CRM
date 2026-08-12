@@ -198,10 +198,8 @@
 
             @can('create', [\App\Models\ContractDocument::class, $contract])
                 <button type="button" @click="uploadOpen = !uploadOpen"
-                class="inline-flex items-center justify-center text-sm font-medium
-                       border border-gray-200 hover:bg-gray-50 text-gray-700
-                       px-4 py-2.5 rounded-lg transition">
-                <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                class="crm-light-action">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                 </svg>
 
@@ -438,9 +436,7 @@
 
             @if (\Illuminate\Support\Facades\Gate::allows('create', [\App\Models\Order::class, $contract]) || \Illuminate\Support\Facades\Gate::allows('create', [\App\Models\Subscription::class, $contract]))
                 <a href="{{ route('contracts.subjects.create', $contract) }}"
-                    class="inline-flex items-center justify-center text-sm font-medium
-                          bg-blue-600 hover:bg-blue-700 text-white
-                          px-4 py-2.5 rounded-lg transition">
+                    class="crm-light-action">
                     + Добавить
                 </a>
             @endif

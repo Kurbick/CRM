@@ -384,19 +384,19 @@
                 <div class="pb-3 sm:pb-0 sm:pl-4 shrink-0">
                     @can('create', [\App\Models\CompanyContact::class, $company])
                         <a x-show="tab === 'contacts'" href="{{ route('companies.contacts.create', ['company' => $company, 'origin' => 'company', 'tab' => 'contacts']) }}"
-                            class="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 transition">
+                            class="crm-light-action">
                             <span aria-hidden="true">+</span> Контакт
                         </a>
                     @endcan
                     @can('create', \App\Models\Contract::class)
                         @can('viewAny', \App\Models\Contract::class)
                             <a x-show="tab === 'contracts'" x-cloak href="{{ route('companies.contracts.create', ['company' => $company, 'origin' => 'company', 'tab' => 'contracts']) }}"
-                                class="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 transition">
+                                class="crm-light-action">
                                 <span aria-hidden="true">+</span> Договор
                             </a>
                         @else
                             <a href="{{ route('companies.contracts.create', ['company' => $company]) }}"
-                                class="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 transition">
+                                class="crm-light-action">
                                 <span aria-hidden="true">+</span> Договор
                             </a>
                         @endcan

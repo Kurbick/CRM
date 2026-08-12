@@ -69,84 +69,88 @@
                 + 1;
         @endphp
 
-        <div class="rounded-xl border border-gray-200 bg-white shadow-sm">
-            <div class="flex items-center justify-between border-b border-gray-100 px-6 py-4">
-                <h2 class="font-semibold text-gray-800">Компании</h2>
+        <div class="crm-table-shell">
+            <div class="crm-table-heading">
+                <span class="crm-table-heading-title">Компании</span>
                 @if ($abilities['create_companies'])
                     <a href="{{ route('companies.create') }}"
-                        class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white transition hover:bg-blue-700">
+                        class="crm-light-action">
                         + Добавить
                     </a>
                 @endif
             </div>
 
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
+            <div class="crm-table-scroll">
+                <table class="crm-table">
                     <thead>
-                        <tr class="border-b border-gray-100 text-left">
-                            <th class="px-6 py-3 text-xs font-medium uppercase text-gray-500">Компания</th>
-                            <th class="px-6 py-3 text-xs font-medium uppercase text-gray-500">Статус</th>
+                        <tr>
+                            <th>Компания</th>
+                            <th>Статус</th>
                             @if ($abilities['company_debt'])
-                                <th class="px-6 py-3 text-xs font-medium uppercase text-gray-500">Долг</th>
+                                <th>Долг</th>
                             @endif
                             @if ($abilities['company_payments'])
-                                <th class="px-6 py-3 text-xs font-medium uppercase text-gray-500">Последний платёж</th>
+                                <th>Последний платёж</th>
                             @endif
                             @if ($abilities['company_invoices'])
-                                <th class="px-6 py-3 text-xs font-medium uppercase text-gray-500">След. оплата</th>
+                                <th>След. оплата</th>
                             @endif
-                            <th class="px-6 py-3 text-xs font-medium uppercase text-gray-500"></th>
+                            <th class="crm-table-actions"></th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-gray-50">
+                    <tbody>
                         @forelse ($companies as $company)
-                            <tr class="transition hover:bg-gray-50">
-                                <td class="px-6 py-4">
-                                    <div class="font-medium text-gray-900">{{ $company['name'] }}</div>
+                            <tr>
+                                <td>
+                                    @can('view', $company['model'])
+                                        <a href="{{ route('companies.show', $company['model']) }}"
+                                            class="crm-table-primary-link">
+                                            {{ $company['name'] }}
+                                        </a>
+                                    @else
+                                        <span class="crm-table-primary">{{ $company['name'] }}</span>
+                                    @endcan
                                     @if ($abilities['company_invoices'] && $company['has_overdue'])
-                                        <div class="mt-0.5 text-xs text-red-500">⚠ Есть просрочка</div>
+                                        <div class="crm-table-secondary mt-0.5 text-red-500">⚠ Есть просрочка</div>
                                     @endif
                                 </td>
-                                <td class="px-6 py-4">
+                                <td>
                                     @include('partials.badge', ['status' => $company['status']])
                                 </td>
                                 @if ($abilities['company_debt'])
-                                    <td class="px-6 py-4">
-                                        <span class="{{ $company['total_debt'] > 0 ? 'font-semibold text-red-600' : 'text-gray-400' }}">
+                                    <td class="crm-table-numeric">
+                                        <span class="{{ $company['total_debt'] > 0 ? 'font-semibold text-red-600' : 'text-slate-400' }}">
                                             {{ number_format($company['total_debt'], 2) }} ₼
                                         </span>
                                     </td>
                                 @endif
                                 @if ($abilities['company_payments'])
-                                    <td class="px-6 py-4 text-gray-500">
+                                    <td class="crm-table-date">
                                         {{ $company['last_payment_date'] ? \Illuminate\Support\Carbon::parse($company['last_payment_date'])->format('d/m/Y') : '—' }}
                                     </td>
                                 @endif
                                 @if ($abilities['company_invoices'])
-                                    <td class="px-6 py-4 text-gray-500">
+                                    <td class="crm-table-date">
                                         @if ($company['next_due_date'])
                                             {{ \Illuminate\Support\Carbon::parse($company['next_due_date'])->format('d/m/Y') }}
-                                            <span class="text-gray-400">({{ number_format($company['next_due_amount'], 2) }} ₼)</span>
+                                            <span class="crm-table-secondary">({{ number_format($company['next_due_amount'], 2) }} ₼)</span>
                                         @else
                                             —
                                         @endif
                                     </td>
                                 @endif
-                                <td class="px-6 py-4 text-right">
+                                <td class="crm-table-actions">
                                     @can('view', $company['model'])
-                                        <a href="{{ route('companies.show', $company['model']) }}"
-                                            class="text-sm font-medium text-blue-600 hover:text-blue-800">
-                                            Открыть →
-                                        </a>
+                                        <a href="{{ route('companies.show', $company['model']) }}" class="crm-table-action-link">Открыть →</a>
                                     @endcan
                                 </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="{{ $companyColumnCount }}" class="px-6 py-12 text-center text-gray-400">
-                                    Компаний пока нет.
+                                <td colspan="{{ $companyColumnCount }}" class="crm-table-empty">
+                                    <span class="crm-table-empty-message">Компаний пока нет.</span>
                                     @if ($abilities['create_companies'])
-                                        <a href="{{ route('companies.create') }}" class="text-blue-600 hover:underline">Добавить первую</a>
+                                        <a href="{{ route('companies.create') }}" class="crm-table-empty-action">Добавить первую</a>
                                     @endif
                                 </td>
                             </tr>

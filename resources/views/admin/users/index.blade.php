@@ -18,7 +18,7 @@
         </div>
         @can('users.create')
             @can('users.assign_role')
-                <a href="{{ route('admin.users.create') }}" class="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700">+ Добавить пользователя</a>
+                <a href="{{ route('admin.users.create') }}" class="crm-light-action">+ Добавить пользователя</a>
             @endcan
         @endcan
     </div>
@@ -47,35 +47,56 @@
         <input type="hidden" name="direction" value="{{ $direction }}">
     </form>
 
-    <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200 text-sm">
-                <thead class="bg-gray-50 text-left text-xs font-semibold uppercase text-gray-500">
+    <div class="crm-table-shell">
+        <div class="crm-table-heading">
+            <span class="crm-table-heading-title">Пользователи</span>
+            <span class="crm-table-heading-count">{{ $users->total() }}</span>
+        </div>
+        <div class="crm-table-scroll">
+            <table class="crm-table">
+                <thead>
                     <tr>
-                        <th class="px-4 py-3"><a href="{{ $sortUrl('name') }}">Пользователь</a></th>
-                        <th class="px-4 py-3">Группа</th>
-                        <th class="px-4 py-3">Статус</th>
-                        <th class="px-4 py-3"><a href="{{ $sortUrl('last_login_at') }}">Последний вход</a></th>
-                        <th class="px-4 py-3 text-right">Действия</th>
+                        <th>
+                            <a href="{{ $sortUrl('name') }}" class="crm-table-sort">
+                                Пользователь
+                                <span class="crm-table-sort-indicator {{ $sort === 'name' ? 'crm-table-sort-indicator-active' : '' }}">{{ $sort === 'name' ? ($direction === 'asc' ? '↑' : '↓') : '↕' }}</span>
+                            </a>
+                        </th>
+                        <th>Группа</th>
+                        <th>Статус</th>
+                        <th>
+                            <a href="{{ $sortUrl('last_login_at') }}" class="crm-table-sort">
+                                Последний вход
+                                <span class="crm-table-sort-indicator {{ $sort === 'last_login_at' ? 'crm-table-sort-indicator-active' : '' }}">{{ $sort === 'last_login_at' ? ($direction === 'asc' ? '↑' : '↓') : '↕' }}</span>
+                            </a>
+                        </th>
+                        <th class="crm-table-actions">Действия</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-100">
+                <tbody>
                     @forelse ($users as $user)
                         <tr>
-                            <td class="px-4 py-3"><div class="font-medium text-gray-900">{{ $user->name }}</div><div class="text-xs text-gray-500">{{ $user->email }}</div></td>
-                            <td class="px-4 py-3"><x-admin.users.role-badge :role="$user->roles->first()" /></td>
-                            <td class="px-4 py-3"><x-admin.users.status-badge :active="$user->is_active" /></td>
-                            <td class="px-4 py-3 text-gray-600">{{ $user->last_login_at?->translatedFormat('d.m.Y H:i') ?? 'Никогда' }}</td>
-                            <td class="px-4 py-3 text-right"><a href="{{ route('admin.users.edit', $user) }}" class="font-medium text-blue-600 hover:text-blue-800">Открыть</a></td>
+                            <td><div class="crm-table-primary">{{ $user->name }}</div><div class="crm-table-secondary">{{ $user->email }}</div></td>
+                            <td><x-admin.users.role-badge :role="$user->roles->first()" /></td>
+                            <td><x-admin.users.status-badge :active="$user->is_active" /></td>
+                            <td class="crm-table-date">{{ $user->last_login_at?->translatedFormat('d.m.Y H:i') ?? 'Никогда' }}</td>
+                            <td class="crm-table-actions"><a href="{{ route('admin.users.edit', $user) }}" class="crm-table-action-link">Открыть</a></td>
                         </tr>
                     @empty
-                        <tr><td colspan="5" class="px-4 py-10 text-center text-gray-500">Пользователи не найдены.</td></tr>
+                        <tr>
+                            <td colspan="5" class="crm-table-empty">
+                                <span class="crm-table-empty-message">Пользователи не найдены.</span>
+                                @if ($filtersActive)
+                                    <a href="{{ route('admin.users.index') }}" class="crm-table-empty-action">Сбросить фильтры</a>
+                                @endif
+                            </td>
+                        </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
         @if ($users->hasPages())
-            <div class="border-t border-gray-100 px-4 py-3">{{ $users->links() }}</div>
+            <div class="crm-table-footer">{{ $users->links() }}</div>
         @endif
     </div>
 @endsection

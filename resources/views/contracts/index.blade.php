@@ -46,10 +46,9 @@
         @can('create', \App\Models\Contract::class)
             <div>
                 <a href="{{ route('contracts.create') }}"
-                class="inline-flex items-center text-sm bg-blue-600 hover:bg-blue-700
-                      text-white px-4 py-2.5 rounded-lg transition shadow-sm font-medium">
+                class="crm-light-action">
 
-                <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
                 </svg>
@@ -360,38 +359,35 @@
     </div>
 
     {{-- Список договоров --}}
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-
-        <div class="overflow-x-auto">
-
-            <table class="w-full text-sm">
+    <div class="crm-table-shell">
+        <div class="crm-table-heading">
+            <span class="crm-table-heading-title">Договоры</span>
+            <span class="crm-table-heading-count">{{ $contracts->total() }}</span>
+        </div>
+        <div class="crm-table-scroll">
+            <table class="crm-table">
 
                 <thead>
-                    <tr class="border-b border-gray-200 text-left
-                               bg-gray-50 text-gray-500">
+                    <tr>
 
-                        <th
-                            class="px-6 py-3.5 text-xs font-semibold
-                                   uppercase tracking-wider">
+                        <th>
                             Номер договора
                         </th>
 
-                        <th
-                            class="px-6 py-3.5 text-xs font-semibold
-                                   uppercase tracking-wider">
+                        <th>
                             Компания
                         </th>
 
-                        <th class="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">
+                        <th>
                             <a href="{{ $startSortUrl }}"
-                                class="inline-flex items-center gap-1.5 hover:text-blue-600 transition"
+                                class="crm-table-sort"
                                 title="{{ $currentSortBy === 'start_date' && $currentSortDirection === 'desc'
                                     ? 'Показать сначала старые даты'
                                     : 'Показать сначала новые даты' }}">
 
                                 <span>Дата начала</span>
 
-                                <span class="{{ $currentSortBy === 'start_date' ? 'text-blue-600' : 'text-gray-300' }}">
+                                <span class="crm-table-sort-indicator {{ $currentSortBy === 'start_date' ? 'crm-table-sort-indicator-active' : '' }}">
 
                                     @if ($currentSortBy === 'start_date')
                                         {{ $currentSortDirection === 'asc' ? '↑' : '↓' }}
@@ -402,16 +398,16 @@
                             </a>
                         </th>
 
-                        <th class="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">
+                        <th>
                             <a href="{{ $endSortUrl }}"
-                                class="inline-flex items-center gap-1.5 hover:text-blue-600 transition"
+                                class="crm-table-sort"
                                 title="{{ $currentSortBy === 'end_date' && $currentSortDirection === 'desc'
                                     ? 'Показать сначала ранние даты окончания'
                                     : 'Показать сначала поздние даты окончания' }}">
 
                                 <span>Дата окончания</span>
 
-                                <span class="{{ $currentSortBy === 'end_date' ? 'text-blue-600' : 'text-gray-300' }}">
+                                <span class="crm-table-sort-indicator {{ $currentSortBy === 'end_date' ? 'crm-table-sort-indicator-active' : '' }}">
 
                                     @if ($currentSortBy === 'end_date')
                                         {{ $currentSortDirection === 'asc' ? '↑' : '↓' }}
@@ -422,57 +418,51 @@
                             </a>
                         </th>
 
-                        <th
-                            class="px-6 py-3.5 text-xs font-semibold
-                                   uppercase tracking-wider">
+                        <th>
                             Статус
                         </th>
 
-                        <th
-                            class="px-6 py-3.5 text-xs font-semibold
-                                   uppercase tracking-wider">
+                        <th class="crm-table-actions">
                         </th>
                     </tr>
                 </thead>
 
-                <tbody class="divide-y divide-gray-100 text-gray-700">
+                <tbody>
 
                     @forelse($contracts as $contract)
 
-                        <tr class="hover:bg-gray-50/50 transition">
+                        <tr>
 
                             {{-- Номер договора --}}
-                            <td class="px-6 py-4">
+                            <td>
 
                                 <a href="{{ route('contracts.show', $contract) }}"
-                                    class="font-mono font-semibold text-gray-900
-                                          hover:text-blue-600 transition">
+                                    class="crm-table-primary-link crm-table-number">
 
                                     {{ $contract->contract_number }}
                                 </a>
                             </td>
 
                             {{-- Компания --}}
-                            <td class="px-6 py-4">
+                            <td>
 
                                 @can('view', $contract->company)
                                     <a href="{{ route('companies.show', ['company' => $contract->company, 'return_url' => route('contracts.index', \Illuminate\Support\Arr::except($contractEditContext, 'edit_origin'))]) }}"
-                                        class="font-medium text-gray-900
-                                              hover:text-blue-600 transition">
+                                        class="crm-table-primary-link">
                                         {{ $contract->company->name }}
                                     </a>
                                 @else
-                                    <span class="font-medium text-gray-900">{{ $contract->company->name }}</span>
+                                    <span class="font-medium text-slate-700">{{ $contract->company->name }}</span>
                                 @endcan
                             </td>
 
                             {{-- Дата начала --}}
-                            <td class="px-6 py-4 text-gray-600">
+                            <td class="crm-table-date">
                                 {{ $contract->start_date->format('d/m/Y') }}
                             </td>
 
                             {{-- Дата окончания --}}
-                            <td class="px-6 py-4">
+                            <td class="crm-table-date">
 
                                 @if ($contract->end_date)
                                     <div
@@ -489,7 +479,7 @@
                                         </div>
                                     @endif
                                 @else
-                                    <span class="text-gray-400">
+                                    <span class="text-slate-400">
                                         Бессрочный
                                     </span>
                                 @endif
@@ -497,7 +487,7 @@
                             </td>
 
                             {{-- Статус --}}
-                            <td class="px-6 py-4">
+                            <td>
 
                                 @include('partials.badge', [
                                     'status' => $contract->effective_status,
@@ -505,13 +495,12 @@
                             </td>
 
                             {{-- Действия --}}
-                            <td class="px-6 py-4 text-right">
+                            <td class="crm-table-actions">
 
                                 <div class="flex items-center justify-end gap-3">
 
                                     <a href="{{ route('contracts.show', $contract) }}"
-                                        class="text-blue-600 hover:text-blue-800
-                                              text-sm font-semibold transition">
+                                        class="crm-table-action-link">
                                         Открыть →
                                     </a>
 
@@ -536,17 +525,16 @@
                     @empty
 
                         <tr>
-                            <td colspan="6" class="px-6 py-12 text-center text-gray-400">
-
-                                Договоров не найдено.
+                            <td colspan="6" class="crm-table-empty">
+                                <span class="crm-table-empty-message">Договоров не найдено.</span>
 
                                 @if ($search !== '' || $status || $companyId || $sortBy !== 'start_date' || $sortDirection !== 'desc')
-                                    <a href="{{ route('contracts.index') }}" class="text-blue-600 hover:underline ml-1">
+                                    <a href="{{ route('contracts.index') }}" class="crm-table-empty-action">
                                         Сбросить фильтры
                                     </a>
                                 @else
                                     @can('create', \App\Models\Contract::class)
-                                        <a href="{{ route('contracts.create') }}" class="text-blue-600 hover:underline ml-1">
+                                        <a href="{{ route('contracts.create') }}" class="crm-table-empty-action">
                                             Создать первый договор
                                         </a>
                                     @endcan
@@ -561,7 +549,7 @@
 
         {{-- Пагинация --}}
         @if ($contracts->hasPages())
-            <div class="px-6 py-4 border-t border-gray-100 bg-gray-50/50">
+            <div class="crm-table-footer">
                 {{ $contracts->links() }}
             </div>
         @endif
