@@ -25,12 +25,12 @@
 
     <form method="GET" action="{{ route('admin.users.index') }}" class="mb-6 grid gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm md:grid-cols-4">
         <input type="search" name="search" value="{{ $search }}" placeholder="Имя или email" class="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
-        <select name="status" class="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500">
+        <select name="status" class="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500 {{ $status === '' ? 'crm-filter-neutral' : '' }}">
             <option value="">Все статусы</option>
             <option value="active" @selected($status === 'active')>Активные</option>
             <option value="inactive" @selected($status === 'inactive')>Отключённые</option>
         </select>
-        <select name="role" class="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500">
+        <select name="role" class="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500 {{ $role === '' ? 'crm-filter-neutral' : '' }}">
             <option value="">Все группы</option>
             @foreach ($roles as $availableRole)
                 <option value="{{ $availableRole->id }}" @selected((string) $role === (string) $availableRole->id)>{{ $availableRole->display_name }}</option>

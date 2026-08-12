@@ -8,6 +8,7 @@
     <title>@yield('title', 'CRM') — IT Company</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    @include('components.forms.styles')
     {{-- Alpine.js — для интерактивности (модалки, дропдауны) без написания JS --}}
     <style>
         [x-cloak] {
@@ -107,7 +108,7 @@
                 </div>
             @endif
 
-            <main class="crm-main w-full flex-1 px-4 py-6 sm:px-6 lg:px-8">
+            <main class="crm-main crm-form-scope w-full flex-1 px-4 py-6 sm:px-6 lg:px-8">
                 @yield('content')
             </main>
 

@@ -122,7 +122,7 @@
                     x-on:keydown.enter.prevent="submitOrSelect()" x-on:focus="if (results.length) open = true"
                     value="{{ $search }}" autocomplete="off"
                     placeholder="Поиск по названию, краткому имени или VÖEN…"
-                    class="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition">
+                    class="crm-control-with-leading-icon w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition">
 
                 <div x-show="open" x-cloak
                     class="absolute z-30 mt-1 w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
@@ -165,7 +165,8 @@
                 <input type="hidden" name="status" x-model="selectedStatus">
                 <button type="button" x-on:click="open = !open"
                     class="relative w-full px-3 py-2 pr-10 border border-gray-200 rounded-lg bg-white text-left text-sm text-gray-700 hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition">
-                    <span x-text="selectedLabel"></span>
+                    <span x-text="selectedLabel"
+                        :class="selectedStatus ? 'crm-filter-selected' : 'crm-filter-neutral'"></span>
                     <svg class="absolute right-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                     </svg>

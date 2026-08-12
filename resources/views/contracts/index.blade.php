@@ -88,7 +88,7 @@
 
                 <input type="text" name="search" value="{{ $search }}"
                     placeholder="Поиск по номеру договора или компании..."
-                    class="w-full pl-10 pr-4 py-2 border border-gray-200
+                    class="crm-control-with-leading-icon w-full pl-10 pr-4 py-2 border border-gray-200
                               rounded-lg text-sm focus:border-blue-500
                               focus:ring-1 focus:ring-blue-500
                               outline-none transition">
@@ -174,7 +174,8 @@
                         class="w-full px-3 py-2 pr-16 border border-gray-200
                    rounded-lg text-sm focus:border-blue-500
                    focus:ring-1 focus:ring-blue-500
-                   outline-none transition">
+                   outline-none transition"
+                        :class="selectedId ? 'crm-filter-selected' : 'crm-filter-neutral'">
 
                     {{-- Очистить --}}
                     <button type="button" x-show="query.length > 0" x-cloak x-on:click="clearCompany()"
@@ -293,8 +294,8 @@
                     <span x-text="selectedLabel"
                         :class="selectedStatus
                             ?
-                            'text-gray-700' :
-                            'text-gray-400'">
+                            'crm-filter-selected' :
+                            'crm-filter-neutral'">
                     </span>
 
                     <span class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">

@@ -86,7 +86,7 @@
 
                 <input type="text" name="search" value="{{ $search }}"
                     placeholder="Номер, компания, плательщик или договор..."
-                    class="w-full pl-10 pr-4 py-2 border border-gray-200
+                    class="crm-control-with-leading-icon w-full pl-10 pr-4 py-2 border border-gray-200
                            rounded-lg text-sm focus:border-blue-500
                            focus:ring-1 focus:ring-blue-500
                            outline-none transition">
@@ -124,7 +124,8 @@
                         x-on:input="selectedId = ''; open = true"
                         x-on:keydown.enter.prevent="if (filteredCompanies.length > 0) selectCompany(filteredCompanies[0])"
                         placeholder="Все компании" autocomplete="off"
-                        class="w-full px-3 py-2 pr-16 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition">
+                        class="w-full px-3 py-2 pr-16 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition"
+                        :class="selectedId ? 'crm-filter-selected' : 'crm-filter-neutral'">
 
                     <button type="button" x-show="query.length > 0" x-cloak x-on:click="clearCompany()"
                         class="absolute inset-y-0 right-8 flex items-center px-2 text-gray-400 hover:text-red-500 transition"
@@ -160,7 +161,7 @@
             {{-- Фильтр по договору --}}
             <div class="w-full md:w-56">
                 <select name="contract_id"
-                    class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition">
+                    class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition {{ $activeContractId === null ? 'crm-filter-neutral' : '' }}">
                     <option value="">Все договоры</option>
                     @foreach ($contracts as $contract)
                         <option value="{{ $contract->id }}" @selected($activeContractId === (int) $contract->id)>
@@ -193,7 +194,8 @@
                 <input type="hidden" name="status" x-model="selectedStatus">
                 <button type="button" x-on:click="open = !open"
                     class="relative w-full px-3 py-2 pr-10 border border-gray-200 rounded-lg bg-white text-left text-sm text-gray-700 hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition">
-                    <span x-text="selectedLabel" :class="selectedStatus ? 'text-gray-700' : 'text-gray-400'"></span>
+                    <span x-text="selectedLabel"
+                        :class="selectedStatus ? 'crm-filter-selected' : 'crm-filter-neutral'"></span>
                     <span class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
                         <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />

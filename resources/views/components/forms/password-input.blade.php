@@ -20,7 +20,7 @@
     <div class="relative">
         <input
             {{ $attributes->merge([
-                'class' => 'w-full rounded-lg border px-3 py-2.5 pr-11 text-sm outline-none transition '.($error
+                'class' => 'crm-control crm-control-with-action w-full rounded-lg border px-3 py-2.5 pr-11 text-sm outline-none transition '.($error
                     ? 'border-red-300 focus:border-red-500 focus:ring-1 focus:ring-red-500'
                     : 'border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500'),
             ]) }}

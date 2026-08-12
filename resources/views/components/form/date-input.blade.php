@@ -144,7 +144,7 @@
             x-bind:disabled="disabled"
             x-bind:readonly="readonly"
             {{ $attributes->except(['x-model', 'x-data', ':required', 'x-bind:required', ':disabled', 'x-bind:disabled', ':readonly', 'x-bind:readonly'])->class([
-                'w-full rounded-lg border px-3 py-2 pr-10 text-sm outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500',
+                'crm-control crm-control-with-action w-full rounded-lg border px-3 py-2 pr-10 text-sm outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500',
                 'border-red-300' => $errorBag->has($name),
                 'border-gray-200' => !$errorBag->has($name),
                 'bg-gray-100 text-gray-500' => $disabled || $readonly,
