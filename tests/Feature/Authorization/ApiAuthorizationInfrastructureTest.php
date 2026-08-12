@@ -46,7 +46,6 @@ class ApiAuthorizationInfrastructureTest extends AuthorizationTestCase
         $company = Company::query()->create([
             'name' => 'API authorization target',
             'status' => 'active',
-            'invoice_mode' => 'separate',
         ]);
         $this->actingAsPermissions();
 
@@ -73,7 +72,6 @@ class ApiAuthorizationInfrastructureTest extends AuthorizationTestCase
         $company = Company::query()->create([
             'name' => 'API nested authorization target',
             'status' => 'active',
-            'invoice_mode' => 'separate',
         ]);
         $this->actingAsPermissions([PermissionName::CompaniesUpdate->value]);
 

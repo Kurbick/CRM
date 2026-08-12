@@ -417,7 +417,6 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
         return Company::create([
             'name' => $name,
             'status' => 'active',
-            'invoice_mode' => 'separate',
             ...$attributes,
         ]);
     }

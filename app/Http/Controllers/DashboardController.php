@@ -72,7 +72,6 @@ class DashboardController extends Controller
                 'id' => $company->id,
                 'name' => $company->name,
                 'status' => $company->status,
-                'invoice_mode' => $company->invoice_mode,
                 'total_debt' => $summary?->total_debt ?? '0.00',
                 'has_overdue' => (int) ($summary?->overdue_count ?? 0) > 0,
                 'active_contracts_count' => $company->active_contracts_count,
@@ -147,14 +146,13 @@ class DashboardController extends Controller
         ]);
     }
 
-    /** @return array{id: int, name: string, status: string, invoice_mode: string} */
+    /** @return array{id: int, name: string, status: string} */
     private function companyProjection(Company $company): array
     {
         return [
             'id' => (int) $company->id,
             'name' => $company->name,
             'status' => $company->status,
-            'invoice_mode' => $company->invoice_mode,
         ];
     }
 

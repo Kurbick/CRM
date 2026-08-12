@@ -24,7 +24,6 @@ class ApiCompanyAuthorizationTest extends AuthorizationTestCase
         'phone',
         'website',
         'status',
-        'invoice_mode',
         'created_at',
         'updated_at',
     ];
@@ -233,6 +232,8 @@ class ApiCompanyAuthorizationTest extends AuthorizationTestCase
         });
         $this->actingAsPermissions([PermissionName::CompaniesCreate->value]);
         $payload = $this->companyPayload('STORE-COMPANY');
+        $removedField = implode('_', ['invoice', 'mode']);
+        $payload[$removedField] = 'legacy-value';
         $payload += [
             'id' => 9_000_000,
             'created_at' => '2000-01-01 00:00:00',
@@ -245,6 +246,7 @@ class ApiCompanyAuthorizationTest extends AuthorizationTestCase
             ->assertCreated();
 
         $this->assertSame(self::DETAIL_KEYS, array_keys($response->json()));
+        $this->assertArrayNotHasKey($removedField, $response->json());
         $this->assertContains('create', $abilities);
         $this->assertNotSame(9_000_000, $response->json('id'));
         $this->assertNotSame('2000-01-01T00:00:00.000000Z', $response->json('created_at'));
@@ -252,7 +254,6 @@ class ApiCompanyAuthorizationTest extends AuthorizationTestCase
             'id' => $response->json('id'),
             'name' => 'STORE-COMPANY',
             'status' => $payload['status'],
-            'invoice_mode' => $payload['invoice_mode'],
         ]);
         $this->assertDatabaseMissing('company_contacts', ['first_name' => 'SHOULD-NOT-EXIST']);
     }
@@ -268,22 +269,23 @@ class ApiCompanyAuthorizationTest extends AuthorizationTestCase
             }
         });
         $this->actingAsPermissions([PermissionName::CompaniesUpdate->value]);
+        $removedField = implode('_', ['invoice', 'mode']);
 
         $response = $this->patchJson(route('api.companies.update', $company), [
             'name' => 'PATCH-UPDATED',
             'status' => 'suspended',
-            'invoice_mode' => 'consolidated',
+            $removedField => 'legacy-value',
             'id' => 9_000_001,
             'created_at' => '2000-01-01 00:00:00',
             'contract_id' => 8_000_001,
         ])->assertOk();
 
         $this->assertSame(self::DETAIL_KEYS, array_keys($response->json()));
+        $this->assertArrayNotHasKey($removedField, $response->json());
         $this->assertContains('update', $abilities);
         $company->refresh();
         $this->assertSame('PATCH-UPDATED', $company->name);
         $this->assertSame('suspended', $company->status);
-        $this->assertSame('consolidated', $company->invoice_mode);
         $this->assertSame($originalIban, $company->iban);
         $this->assertNotSame(9_000_001, $company->id);
         $this->assertNotSame('2000-01-01 00:00:00', $company->getRawOriginal('created_at'));

@@ -166,7 +166,6 @@ class InvoiceSubscriptionLifecycleTest extends FinancialTestCase
         $company = Company::query()->create([
             'name' => 'Lifecycle '.$suffix,
             'status' => 'active',
-            'invoice_mode' => 'separate',
         ]);
         $contract = Contract::query()->create([
             'company_id' => $company->id,

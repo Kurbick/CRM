@@ -35,6 +35,36 @@ class CompanyIndexTest extends TestCase
             ->assertSee('Поиск по названию, краткому имени или VÖEN…');
     }
 
+    public function test_company_can_be_created_without_removed_invoice_setting(): void
+    {
+        $response = $this->post(route('companies.store'), [
+            'type' => 'company',
+            'name' => 'Created Without Removed Setting',
+            'status' => 'active',
+        ])->assertRedirect();
+
+        $company = Company::query()->where('name', 'Created Without Removed Setting')->firstOrFail();
+
+        $this->assertSame(route('companies.show', $company), $response->headers->get('Location'));
+        $this->assertSame('active', $company->status);
+    }
+
+    public function test_company_views_do_not_render_removed_invoice_setting(): void
+    {
+        $company = $this->company('Company Without Removed Setting');
+        $removedField = implode('_', ['invoice', 'mode']);
+
+        $this->get(route('companies.create'))
+            ->assertOk()
+            ->assertDontSee('name="'.$removedField.'"', false);
+        $this->get(route('companies.edit', $company))
+            ->assertOk()
+            ->assertDontSee('name="'.$removedField.'"', false);
+        $this->get(route('companies.show', $company))
+            ->assertOk()
+            ->assertDontSee($removedField);
+    }
+
     public function test_company_name_and_open_action_link_to_show_without_filter_context(): void
     {
         $company = $this->company('Linked Company');
@@ -351,7 +381,6 @@ class CompanyIndexTest extends TestCase
             'short_name' => $shortName,
             'voen' => $voen,
             'status' => $status,
-            'invoice_mode' => 'separate',
         ]);
     }
 
@@ -385,7 +414,6 @@ class CompanyIndexTest extends TestCase
             'type' => $company->type,
             'name' => $company->name,
             'status' => $company->status,
-            'invoice_mode' => $company->invoice_mode,
         ];
     }
 }

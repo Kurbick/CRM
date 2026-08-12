@@ -11,7 +11,7 @@ use Tests\Support\DomainQueryRecorder;
 
 class ApiDashboardAuthorizationTest extends AuthorizationTestCase
 {
-    private const COMPANY_KEYS = ['id', 'name', 'status', 'invoice_mode'];
+    private const COMPANY_KEYS = ['id', 'name', 'status'];
 
     private const INVOICE_KEYS = [
         'id',

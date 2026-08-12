@@ -126,7 +126,6 @@ class ApiCompanyContactAuthorizationTest extends AuthorizationTestCase
             $company->email,
             $company->website,
             $company->status,
-            $company->invoice_mode,
             $company->comment,
             $other->first_name,
         ] as $marker) {

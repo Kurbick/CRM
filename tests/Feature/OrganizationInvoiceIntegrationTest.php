@@ -110,7 +110,6 @@ class OrganizationInvoiceIntegrationTest extends AuthorizationTestCase
         $company = Company::query()->create([
             'name' => $prefix.' company',
             'status' => 'active',
-            'invoice_mode' => 'separate',
         ]);
         $contract = Contract::query()->create([
             'company_id' => $company->id,

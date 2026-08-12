@@ -161,7 +161,7 @@ class OrderPaymentTermsTest extends TestCase
 
     private function companyAndContract(): array
     {
-        $company = Company::create(['name' => 'Order Terms Company', 'status' => 'active', 'invoice_mode' => 'separate']);
+        $company = Company::create(['name' => 'Order Terms Company', 'status' => 'active']);
         $contract = Contract::create(['company_id' => $company->id, 'contract_number' => 'ORDER-TERMS', 'start_date' => '2026-01-01', 'status' => 'active']);
 
         return [$company, $contract];

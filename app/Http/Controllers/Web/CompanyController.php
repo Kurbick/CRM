@@ -197,7 +197,6 @@ class CompanyController extends Controller
             'phone' => 'nullable|string|max:30',
             'website' => 'nullable|string|max:255',
             'status' => 'required|in:active,suspended,archived',
-            'invoice_mode' => 'required|in:separate,consolidated',
             'comment' => 'nullable|string',
         ]);
 
@@ -481,7 +480,6 @@ class CompanyController extends Controller
             'phone' => 'nullable|string|max:30',
             'website' => 'nullable|string|max:255',
             'status' => 'required|in:active,suspended,archived',
-            'invoice_mode' => 'required|in:separate,consolidated',
             'comment' => 'nullable|string',
         ]);
 

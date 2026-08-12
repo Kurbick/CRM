@@ -211,17 +211,6 @@
                             @enderror
                         </div>
 
-                        <div>
-                            <label for="invoice_mode" class="block text-xs font-semibold text-gray-500 uppercase mb-1">Режим инвойсов <span class="text-red-500">*</span></label>
-                            <select name="invoice_mode" id="invoice_mode" required
-                                    class="w-full px-3 py-2 border @error('invoice_mode') border-red-300 @else border-gray-200 @enderror rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition">
-                                <option value="separate" {{ old('invoice_mode', 'separate') === 'separate' ? 'selected' : '' }}>Раздельный (по каждому заказу)</option>
-                                <option value="consolidated" {{ old('invoice_mode') === 'consolidated' ? 'selected' : '' }}>Сводный (один за месяц)</option>
-                            </select>
-                            @error('invoice_mode')
-                                <p class="text-xs text-red-500 mt-1">{{ $message }}</p>
-                            @enderror
-                        </div>
                     </div>
                 </div>
 

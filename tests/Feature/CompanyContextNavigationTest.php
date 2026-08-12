@@ -93,7 +93,7 @@ class CompanyContextNavigationTest extends TestCase
     /** @return array{Company, Contract} */
     private function companyAndContract(): array
     {
-        $company = Company::create(['name' => 'Context Company', 'status' => 'active', 'invoice_mode' => 'separate']);
+        $company = Company::create(['name' => 'Context Company', 'status' => 'active']);
         $contract = Contract::create(['company_id' => $company->id, 'contract_number' => 'CTX-1', 'start_date' => '2026-01-01', 'status' => 'active']);
 
         return [$company, $contract];

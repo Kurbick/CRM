@@ -139,7 +139,6 @@ class ApiInvoiceLifecycleTest extends FinancialTestCase
         $company = Company::query()->create([
             'name' => 'API Invoice Lifecycle',
             'status' => 'active',
-            'invoice_mode' => 'separate',
         ]);
         $contract = Contract::query()->create([
             'company_id' => $company->id,

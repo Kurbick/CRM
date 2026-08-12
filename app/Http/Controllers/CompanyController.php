@@ -24,7 +24,6 @@ class CompanyController extends Controller
         'phone',
         'website',
         'status',
-        'invoice_mode',
         'created_at',
         'updated_at',
     ];

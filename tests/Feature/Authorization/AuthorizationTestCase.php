@@ -72,7 +72,6 @@ abstract class AuthorizationTestCase extends TestCase
         return Company::query()->create([
             'name' => $name,
             'status' => 'active',
-            'invoice_mode' => 'separate',
         ]);
     }
 
@@ -306,7 +305,6 @@ abstract class AuthorizationTestCase extends TestCase
             'phone' => '+994500000002',
             'website' => 'https://example.test',
             'status' => 'active',
-            'invoice_mode' => 'separate',
             'comment' => 'Authorization company comment',
         ];
     }

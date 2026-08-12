@@ -33,7 +33,6 @@ class UpdateCompanyRequest extends FormRequest
             'phone' => 'nullable|string|max:30',
             'website' => 'nullable|url|max:255',
             'status' => 'nullable|in:active,suspended,archived',
-            'invoice_mode' => 'nullable|in:separate,consolidated',
             'comment' => 'nullable|string',
         ];
     }

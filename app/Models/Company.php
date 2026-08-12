@@ -11,7 +11,7 @@ class Company extends Model
         'bank_name', 'iban', 'bank_code', 'bank_voen', 'swift',
         'legal_address', 'actual_address',
         'email', 'phone', 'website',
-        'status', 'invoice_mode', 'comment',
+        'status', 'comment',
     ];
 
     public function contacts()
@@ -46,5 +46,4 @@ class Company extends Model
     public function getOrCreateCreditBalance(): CreditBalance{
         return $this->creditBalance ?? $this->creditBalance()->create(['amount' => 0]);
     }
-
 }

@@ -244,13 +244,6 @@
                     Основная информация</h3>
 
                 <dl class="space-y-4 text-sm">
-                    <div>
-                        <dt class="text-xs font-medium text-gray-400 uppercase">Режим счетов</dt>
-                        <dd class="mt-0.5 text-gray-900">
-                            {{ $company->invoice_mode === 'separate' ? 'Раздельный (по заказам)' : 'Сводный (месячный)' }}
-                        </dd>
-                    </div>
-
                     @if ($company->voen)
                         <div data-testid="company-voen">
                             <dt class="text-xs font-medium text-gray-400 uppercase">VÖEN (ИНН)</dt>
