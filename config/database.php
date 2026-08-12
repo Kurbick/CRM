@@ -20,6 +20,12 @@ return [
     'default' => env('DB_CONNECTION', 'sqlite'),
 
     /*
+    | Explicit local/development opt-in for manual destructive database commands.
+    | This is ignored in production and is disabled by default.
+    */
+    'allow_destructive_commands' => env('ALLOW_DESTRUCTIVE_DB_COMMANDS', false),
+
+    /*
     |--------------------------------------------------------------------------
     | Database Connections
     |--------------------------------------------------------------------------
