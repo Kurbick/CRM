@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AccessPermissionController as AdminAccessPermissionController;
+use App\Http\Controllers\Admin\OrganizationController as AdminOrganizationController;
 use App\Http\Controllers\Admin\RoleController as AdminRoleController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Web\CompanyContactController;
@@ -30,6 +31,11 @@ Route::middleware(['auth', 'active'])->group(function (): void {
 Route::middleware(['auth', 'active', 'password.changed'])->group(function (): void {
 
     Route::get('home', [HomeController::class, 'index'])->name('home');
+
+    Route::prefix('admin/organization')->name('admin.organization.')->controller(AdminOrganizationController::class)->group(function (): void {
+        Route::get('/', 'edit')->name('edit');
+        Route::put('/', 'update')->name('update');
+    });
 
     Route::prefix('admin/access-permissions')->name('admin.access-permissions.')->controller(AdminAccessPermissionController::class)->group(function (): void {
         Route::get('/', 'index')->middleware('can:access_permissions.view')->name('index');

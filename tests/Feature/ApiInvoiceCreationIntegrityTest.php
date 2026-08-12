@@ -7,6 +7,7 @@ use App\Models\Contract;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
 use App\Models\Order;
+use App\Models\Organization;
 use App\Models\Subscription;
 use App\Support\Access\PermissionName;
 use Illuminate\Support\Facades\Event;
@@ -151,7 +152,7 @@ class ApiInvoiceCreationIntegrityTest extends AuthorizationTestCase
         );
     }
 
-    public function test_empty_seller_config_values_are_normalized_to_null(): void
+    public function test_invoice_creation_uses_organization_instead_of_seller_config(): void
     {
         config([
             'invoice.seller.name' => '',
@@ -172,13 +173,15 @@ class ApiInvoiceCreationIntegrityTest extends AuthorizationTestCase
         )->assertCreated();
 
         $invoice = Invoice::query()->sole();
-        $this->assertNull($invoice->seller_name);
-        $this->assertNull($invoice->seller_voen);
-        $this->assertNull($invoice->seller_bank_name);
-        $this->assertSame('AZ00SERVERIBAN', $invoice->seller_iban);
-        $this->assertSame('SERVER-CODE', $invoice->seller_bank_code);
-        $this->assertSame('SERVER-BANK-VOEN', $invoice->seller_bank_voen);
-        $this->assertSame('SERVER-SWIFT', $invoice->seller_swift);
+        $organization = Organization::current();
+        $this->assertNotNull($organization);
+        $this->assertSame($organization->name, $invoice->seller_name);
+        $this->assertSame($organization->voen, $invoice->seller_voen);
+        $this->assertSame($organization->bank_name, $invoice->seller_bank_name);
+        $this->assertSame($organization->iban, $invoice->seller_iban);
+        $this->assertSame($organization->bank_code, $invoice->seller_bank_code);
+        $this->assertSame($organization->bank_voen, $invoice->seller_bank_voen);
+        $this->assertSame($organization->swift, $invoice->seller_swift);
     }
 
     public function test_seller_snapshot_is_immutable_after_configuration_changes(): void
@@ -638,6 +641,19 @@ class ApiInvoiceCreationIntegrityTest extends AuthorizationTestCase
             'invoice.seller.bank_voen' => $snapshot['seller_bank_voen'],
             'invoice.seller.swift' => $snapshot['seller_swift'],
         ]);
+
+        Organization::query()->updateOrCreate(
+            ['singleton_key' => Organization::SINGLETON_KEY],
+            [
+                'name' => $snapshot['seller_name'],
+                'voen' => $snapshot['seller_voen'],
+                'bank_name' => $snapshot['seller_bank_name'],
+                'iban' => $snapshot['seller_iban'],
+                'bank_code' => $snapshot['seller_bank_code'],
+                'bank_voen' => $snapshot['seller_bank_voen'],
+                'swift' => $snapshot['seller_swift'],
+            ],
+        );
 
         return $snapshot;
     }

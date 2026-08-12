@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Organization;
 use App\Services\AccessControlSynchronizer;
 use App\Support\Access\PermissionName;
 use Tests\AuthenticatedTestCase;
@@ -13,6 +14,11 @@ abstract class FinancialTestCase extends AuthenticatedTestCase
         parent::setUp();
 
         app(AccessControlSynchronizer::class)->sync();
+
+        Organization::query()->updateOrCreate(
+            ['singleton_key' => Organization::SINGLETON_KEY],
+            ['name' => 'Test Organization'],
+        );
 
         $this->authenticatedUser->givePermissionTo([
             PermissionName::InvoicesView->value,

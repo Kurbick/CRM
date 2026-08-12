@@ -8,6 +8,7 @@ use App\Models\Contract;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
 use App\Models\Order;
+use App\Models\Organization;
 use App\Models\Payment;
 use App\Models\PaymentAllocation;
 use App\Models\Role;
@@ -28,6 +29,11 @@ abstract class AuthorizationTestCase extends TestCase
         parent::setUp();
 
         app(AccessControlSynchronizer::class)->sync();
+
+        Organization::query()->updateOrCreate(
+            ['singleton_key' => Organization::SINGLETON_KEY],
+            ['name' => 'Test Organization'],
+        );
     }
 
     /** @param list<string> $permissions */

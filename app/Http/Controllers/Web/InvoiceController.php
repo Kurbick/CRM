@@ -347,7 +347,7 @@ class InvoiceController extends Controller
             'hasPayments',
             'actionablePayments'
         );
-        $viewData['sellerFallback'] = $this->sellerSnapshot->toArray();
+        $viewData['sellerFallback'] = $this->sellerSnapshot->legacyFallback();
 
         if ($canViewPaymentHistory) {
             $viewData += compact('paymentsById', 'paymentSource');

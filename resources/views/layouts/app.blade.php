@@ -147,6 +147,12 @@
                             </a>
                             @if (auth()->user()->can('users.view') || auth()->user()->can('roles.view') || auth()->user()->can('access_permissions.view'))
                                 <div class="my-1 border-t border-gray-100"></div>
+                                @if (auth()->user()->hasRole(\App\Support\Access\SystemRole::Administrator->value))
+                                    <a href="{{ route('admin.organization.edit') }}" role="menuitem"
+                                        class="block px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50 focus:bg-gray-50 focus:outline-none">
+                                        Наша организация
+                                    </a>
+                                @endif
                                 @can('users.view')
                                     <a href="{{ route('admin.users.index') }}" role="menuitem"
                                         class="block px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50 focus:bg-gray-50 focus:outline-none">

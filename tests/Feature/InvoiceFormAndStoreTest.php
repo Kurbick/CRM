@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Invoice;
+use App\Models\Organization;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\Feature\FinancialTestCase as TestCase;
@@ -308,6 +309,19 @@ class InvoiceFormAndStoreTest extends TestCase
             'invoice.seller.bank_voen' => $snapshot['seller_bank_voen'],
             'invoice.seller.swift' => $snapshot['seller_swift'],
         ]);
+
+        Organization::query()->updateOrCreate(
+            ['singleton_key' => Organization::SINGLETON_KEY],
+            [
+                'name' => $snapshot['seller_name'],
+                'voen' => $snapshot['seller_voen'],
+                'bank_name' => $snapshot['seller_bank_name'],
+                'iban' => $snapshot['seller_iban'],
+                'bank_code' => $snapshot['seller_bank_code'],
+                'bank_voen' => $snapshot['seller_bank_voen'],
+                'swift' => $snapshot['seller_swift'],
+            ],
+        );
 
         return $snapshot;
     }
