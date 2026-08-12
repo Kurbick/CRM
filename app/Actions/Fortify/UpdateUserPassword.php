@@ -21,13 +21,12 @@ class UpdateUserPassword implements UpdatesUserPasswords
      */
     public function update(User $user, array $input): void
     {
-        Validator::make($input, [
-            'current_password' => ['required', 'string', 'current_password:web'],
+        $rules = [
             'password' => ['required', 'string', PasswordPolicy::rule()],
             'password_confirmation' => ['required', 'string', 'same:password'],
-        ], [
-            'current_password.required' => 'Введите текущий пароль.',
-            'current_password.current_password' => 'Текущий пароль указан неверно.',
+        ];
+
+        $messages = [
             'password.required' => 'Введите новый пароль.',
             'password.min' => 'Пароль должен содержать не менее 12 символов.',
             'password.password.mixed' => 'Пароль должен содержать хотя бы одну заглавную и одну строчную букву.',
@@ -35,7 +34,15 @@ class UpdateUserPassword implements UpdatesUserPasswords
             'password.password.symbols' => 'Пароль должен содержать хотя бы один специальный символ.',
             'password_confirmation.required' => 'Пароли не совпадают.',
             'password_confirmation.same' => 'Пароли не совпадают.',
-        ])->validateWithBag('updatePassword');
+        ];
+
+        if (! $user->mustChangePassword()) {
+            $rules['current_password'] = ['required', 'string', 'current_password:web'];
+            $messages['current_password.required'] = 'Введите текущий пароль.';
+            $messages['current_password.current_password'] = 'Текущий пароль указан неверно.';
+        }
+
+        Validator::make($input, $rules, $messages)->validateWithBag('updatePassword');
 
         if (Hash::check($input['password'], $user->password)) {
             $exception = ValidationException::withMessages([

@@ -1,17 +1,21 @@
 @extends('layouts.guest')
 
-@section('title', 'Смена пароля')
+@section('title', auth()->user()->mustChangePassword() ? 'Установите новый пароль' : 'Смена пароля')
 
 @section('content')
-    <h1 class="text-2xl font-bold text-gray-900">Смена пароля</h1>
     @if (auth()->user()->mustChangePassword())
+        <h1 class="text-2xl font-bold text-gray-900">Установите новый пароль</h1>
         <p class="mt-2 text-sm text-gray-600">Для продолжения работы установите новый пароль.</p>
+    @else
+        <h1 class="text-2xl font-bold text-gray-900">Смена пароля</h1>
     @endif
     <form method="POST" action="{{ route('user-password.update') }}" class="mt-6 space-y-4">
         @csrf
         @method('PUT')
-        <x-forms.password-input name="current_password" label="Текущий пароль"
-            autocomplete="current-password" error-bag="updatePassword" required />
+        @unless (auth()->user()->mustChangePassword())
+            <x-forms.password-input name="current_password" label="Текущий пароль"
+                autocomplete="current-password" error-bag="updatePassword" required />
+        @endunless
         <div>
             <x-forms.password-input name="password" label="Новый пароль"
                 autocomplete="new-password" error-bag="updatePassword" required />
@@ -21,7 +25,9 @@
         </div>
         <x-forms.password-input name="password_confirmation" label="Подтверждение нового пароля"
             autocomplete="new-password" error-bag="updatePassword" required />
-        <button type="submit" class="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700">Изменить пароль</button>
+        <button type="submit" class="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700">
+            {{ auth()->user()->mustChangePassword() ? 'Установить новый пароль' : 'Изменить пароль' }}
+        </button>
     </form>
 
     <form method="POST" action="{{ route('logout') }}" class="mt-4 text-center">

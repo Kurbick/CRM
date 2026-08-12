@@ -104,15 +104,10 @@ class PasswordChangeTest extends TestCase
 
     public function test_current_confirmation_strength_and_reuse_are_validated(): void
     {
-        $user = User::factory()->requiringPasswordChange()->create([
+        $user = User::factory()->create([
             'password' => Hash::make('Current!Password12'),
         ]);
         $this->actingAs($user);
-
-        $this->put(route('user-password.update'), [
-            'password' => 'Strong!Password12',
-            'password_confirmation' => 'Strong!Password12',
-        ])->assertSessionHasErrorsIn('updatePassword', 'current_password');
 
         $this->put(route('user-password.update'), [
             'current_password' => 'wrong',
@@ -133,6 +128,26 @@ class PasswordChangeTest extends TestCase
         ])->assertSessionHasErrorsIn('updatePassword', 'password');
     }
 
+    public function test_forced_password_change_does_not_require_current_password(): void
+    {
+        $user = User::factory()->requiringPasswordChange()->create([
+            'password' => Hash::make('Temporary!Password12'),
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('password.change'))
+            ->assertOk()
+            ->assertSee('Установите новый пароль')
+            ->assertDontSee('name="current_password"', false);
+
+        $this->put(route('user-password.update'), [
+            'password' => 'New!Password123',
+            'password_confirmation' => 'New!Password123',
+        ])->assertRedirect(route('home'));
+
+        $this->assertFalse($user->fresh()->mustChangePassword());
+    }
+
     public function test_strong_password_clears_temporary_flag_and_keeps_current_session(): void
     {
         $user = User::factory()->requiringPasswordChange()->create();
@@ -141,7 +156,6 @@ class PasswordChangeTest extends TestCase
         $before = session()->getId();
 
         $this->put(route('user-password.update'), [
-            'current_password' => 'password',
             'password' => 'Strong!Password12',
             'password_confirmation' => 'Strong!Password12',
         ])->assertRedirect(route('home'))->assertSessionHas('success');
@@ -171,7 +185,6 @@ class PasswordChangeTest extends TestCase
         session()->put('url.intended', $intended);
 
         $response = $this->put(route('user-password.update'), [
-            'current_password' => 'password',
             'password' => 'Strong!Password12',
             'password_confirmation' => 'Strong!Password12',
         ])->assertRedirect(route($expectedRoute))->assertSessionHas('success');
@@ -200,7 +213,6 @@ class PasswordChangeTest extends TestCase
         }
 
         $this->actingAs($user)->put(route('user-password.update'), [
-            'current_password' => 'password',
             'password' => 'Strong!Password12',
             'password_confirmation' => 'Strong!Password12',
         ])->assertRedirect(route('home'));
