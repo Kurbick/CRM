@@ -73,4 +73,22 @@ class AuthenticationUiTest extends TestCase
         $guestHtml = $this->get(route('login'))->getContent();
         $this->assertStringNotContainsString('aria-label="Настройки"', $guestHtml);
     }
+
+    public function test_success_flash_auto_dismisses_but_error_flash_remains_persistent(): void
+    {
+        $user = User::factory()->create();
+
+        $success = $this->actingAs($user)->withSession(['success' => 'Операция выполнена.'])->get(route('home'));
+        $success->assertSeeText('Операция выполнена.')
+            ->assertSee('x-data="{ visible: true }"', false)
+            ->assertSee('setTimeout(() => visible = false, 3000)', false)
+            ->assertSee('x-on:click="visible = false"', false)
+            ->assertSee('role="status"', false)
+            ->assertSee('x-transition:leave-end="opacity-0"', false);
+
+        $error = $this->actingAs($user)->withSession(['success' => null, 'error' => 'Требуется внимание.'])->get(route('home'));
+        $error->assertSeeText('Требуется внимание.')
+            ->assertDontSee('setTimeout(() => visible = false, 3000)', false)
+            ->assertDontSee('x-on:click="visible = false"', false);
+    }
 }

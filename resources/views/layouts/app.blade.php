@@ -64,160 +64,60 @@
     </style>
 </head>
 
-<body class="bg-gray-50 text-gray-900">
+<body class="min-h-screen bg-slate-100 text-slate-900" x-data="{ sidebarOpen: false }">
     @php
         $authorizedLandingUrl ??= app(\App\Support\Navigation\AuthorizedLandingPage::class)
             ->url(auth()->user());
     @endphp
 
-    {{-- Навигация --}}
-    <nav class="crm-global-navigation crm-print-hide bg-white border-b border-gray-200 shadow-sm">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-16 items-center">
+    @include('components.layout.topbar')
 
-                {{-- Логотип --}}
-                <a href="{{ $authorizedLandingUrl }}" class="flex items-center gap-2">
-                    <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                        <span class="text-white font-bold text-sm">CR</span>
-                    </div>
-                    <span class="font-semibold text-gray-800 text-lg">CRM</span>
-                </a>
+    <div class="flex min-h-[calc(100vh-3.5rem)]">
+        @include('components.layout.sidebar')
 
-                {{-- Навигационные ссылки --}}
-                <div class="flex items-center gap-2">
+        <div class="flex min-w-0 flex-1 flex-col">
+            <div x-show="sidebarOpen" x-cloak x-on:click="sidebarOpen = false"
+                class="fixed inset-0 top-14 z-20 bg-slate-950/30 lg:hidden" aria-hidden="true"></div>
 
-                    @can(\App\Support\Access\PermissionName::DashboardView->value)
-                        <a href="{{ route('dashboard') }}"
-                            class="px-3 py-2 rounded-lg text-sm font-medium transition
-                    {{ request()->routeIs('dashboard')
-                        ? 'bg-blue-50 text-blue-600'
-                        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900' }}">
-                            Дашборд
-                        </a>
-                    @endcan
-
-                    @can('viewAny', \App\Models\Company::class)
-                        <a href="{{ route('companies.index') }}"
-                            class="px-3 py-2 rounded-lg text-sm font-medium transition
-                    {{ request()->routeIs('companies.*')
-                        ? 'bg-blue-50 text-blue-600'
-                        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900' }}">
-                            Компании
-                        </a>
-                    @endcan
-
-                    @can('viewAny', \App\Models\Contract::class)
-                        <a href="{{ route('contracts.index') }}"
-                            class="px-3 py-2 rounded-lg text-sm font-medium transition
-                {{ request()->routeIs('contracts.*')
-                    ? 'bg-blue-50 text-blue-600'
-                    : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900' }}">
-                            Договоры
-                        </a>
-                    @endcan
-
-                    @can('viewAny', \App\Models\Invoice::class)
-                        <a href="{{ route('invoices.index') }}"
-                            class="px-3 py-2 rounded-lg text-sm font-medium transition
-                    {{ request()->routeIs('invoices.*')
-                        ? 'bg-blue-50 text-blue-600'
-                        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900' }}">
-                            Инвойсы
-                        </a>
-                    @endcan
-
-                    <div class="relative ml-3 flex items-center gap-1.5" x-data="{ open: false }"
-                        x-on:click.outside="open = false" x-on:keydown.escape.window="open = false">
-                        <span class="text-sm text-gray-600">{{ auth()->user()->name }}</span>
-                        <button type="button" aria-label="Настройки" aria-haspopup="menu"
-                            x-bind:aria-expanded="open.toString()" x-on:click="open = !open"
-                            class="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <svg class="h-5 w-5" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
-                                    d="M9.6 3.2h4.8l.55 2.15c.5.2.98.47 1.4.8l2.12-.62 2.4 4.15-1.58 1.52c.04.27.06.53.06.8s-.02.53-.06.8l1.58 1.52-2.4 4.15-2.12-.62c-.42.33-.9.6-1.4.8l-.55 2.15H9.6l-.55-2.15a7.5 7.5 0 0 1-1.4-.8l-2.12.62-2.4-4.15 1.58-1.52A5.4 5.4 0 0 1 4.65 12c0-.27.02-.53.06-.8L3.13 9.68l2.4-4.15 2.12.62c.42-.33.9-.6 1.4-.8L9.6 3.2Z" />
-                                <circle cx="12" cy="12" r="2.75" stroke-width="1.8" />
-                            </svg>
+            @if (session('success'))
+                <div x-data="{ visible: true }" x-init="setTimeout(() => visible = false, 3000)"
+                    x-show="visible" x-transition:enter="transition ease-out duration-200"
+                    x-transition:enter-start="opacity-0 -translate-y-1"
+                    x-transition:enter-end="opacity-100 translate-y-0"
+                    x-transition:leave="transition ease-in duration-300"
+                    x-transition:leave-start="opacity-100"
+                    x-transition:leave-end="opacity-0"
+                    class="crm-flash-message crm-print-hide px-4 pt-5 sm:px-6 lg:px-8">
+                    <div class="relative flex items-start justify-between gap-4 border border-green-200 bg-green-50 px-4 py-3 pr-10 text-sm text-green-800"
+                        role="status" aria-live="polite">
+                        {{ session('success') }}
+                        <button type="button" x-on:click="visible = false" aria-label="Закрыть сообщение"
+                            class="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-lg leading-none text-green-700 transition hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-500">
+                            <span aria-hidden="true">&times;</span>
                         </button>
-
-                        <div x-show="open" x-cloak x-transition role="menu"
-                            class="absolute right-0 top-full z-50 mt-2 w-48 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
-                            <a href="{{ route('password.change') }}" role="menuitem"
-                                class="block px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50 focus:bg-gray-50 focus:outline-none">
-                                Сменить пароль
-                            </a>
-                            @if (auth()->user()->can('users.view') || auth()->user()->can('roles.view') || auth()->user()->can('access_permissions.view'))
-                                <div class="my-1 border-t border-gray-100"></div>
-                                @if (auth()->user()->hasRole(\App\Support\Access\SystemRole::Administrator->value))
-                                    <a href="{{ route('admin.organization.edit') }}" role="menuitem"
-                                        class="block px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50 focus:bg-gray-50 focus:outline-none">
-                                        Наша организация
-                                    </a>
-                                @endif
-                                @can('users.view')
-                                    <a href="{{ route('admin.users.index') }}" role="menuitem"
-                                        class="block px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50 focus:bg-gray-50 focus:outline-none">
-                                        Пользователи
-                                    </a>
-                                @endcan
-                                @can('roles.view')
-                                    <a href="{{ route('admin.roles.index') }}" role="menuitem"
-                                        class="block px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50 focus:bg-gray-50 focus:outline-none">
-                                        Группы
-                                    </a>
-                                @endcan
-                                @can('access_permissions.view')
-                                    <a href="{{ route('admin.access-permissions.index') }}" role="menuitem"
-                                        class="block px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50 focus:bg-gray-50 focus:outline-none">
-                                        Права доступа
-                                    </a>
-                                @endcan
-                                <div class="my-1 border-t border-gray-100"></div>
-                            @endif
-                            <form method="POST" action="{{ route('logout') }}">
-                                @csrf
-                                <button type="submit" role="menuitem"
-                                    class="block w-full px-4 py-2.5 text-left text-sm text-red-600 transition hover:bg-red-50 focus:bg-red-50 focus:outline-none">
-                                    Выйти
-                                </button>
-                            </form>
-                        </div>
                     </div>
-
                 </div>
+            @endif
 
-            </div>
+            @if (session('error'))
+                <div class="crm-flash-message crm-print-hide px-4 pt-5 sm:px-6 lg:px-8">
+                    <div class="border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                        {{ session('error') }}
+                    </div>
+                </div>
+            @endif
+
+            <main class="crm-main w-full flex-1 px-4 py-6 sm:px-6 lg:px-8">
+                @yield('content')
+            </main>
+
+            <footer class="crm-global-footer crm-print-hide border-t border-slate-200 bg-white">
+                <div class="px-4 py-4 sm:px-6 lg:px-8">
+                    <p class="text-xs text-slate-400">CRM IT Company © {{ date('Y') }}</p>
+                </div>
+            </footer>
         </div>
-    </nav>
-
-    {{-- Flash сообщения --}}
-    @if (session('success'))
-        <div class="crm-flash-message crm-print-hide max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
-            <div class="bg-green-50 border border-green-200 text-green-800 rounded-lg px-4 py-3 text-sm">
-                {{ session('success') }}
-            </div>
-        </div>
-    @endif
-
-    @if (session('error'))
-        <div class="crm-flash-message crm-print-hide max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
-            <div class="bg-red-50 border border-red-200 text-red-800 rounded-lg px-4 py-3 text-sm">
-                {{ session('error') }}
-            </div>
-        </div>
-    @endif
-
-    {{-- Основной контент --}}
-    <main class="crm-main max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        @yield('content')
-    </main>
-
-    {{-- Footer --}}
-    <footer class="crm-global-footer crm-print-hide border-t border-gray-200 mt-12">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <p class="text-xs text-gray-400 text-center">CRM IT Company © {{ date('Y') }}</p>
-        </div>
-    </footer>
-
+    </div>
 </body>
 
 </html>
