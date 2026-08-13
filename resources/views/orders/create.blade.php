@@ -1,92 +1,89 @@
 @extends('layouts.app')
-@section('title', 'Разовая услуга')
-@section('content')
 
-    <div class="mb-6">
-        <a href="{{ route('contracts.subjects.create', $contract) }}" class="text-sm text-gray-500 hover:text-gray-700">← Назад</a>
-        <h1 class="text-2xl font-bold text-gray-900 mt-2">Разовая услуга</h1>
-        <p class="text-sm text-gray-500 mt-1">
-            Договор <span class="font-mono font-medium text-gray-700">{{ $contract->contract_number }}</span>
-            <span class="mx-1 text-gray-300">•</span>
+@section('title', 'Разовая услуга')
+
+@section('content')
+    <div class="mb-5">
+        <a href="{{ route('contracts.subjects.create', $contract) }}" class="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-900">
+            <span aria-hidden="true">←</span>
+            Назад
+        </a>
+        <h1 class="mt-3 text-xl font-semibold text-slate-900">Разовая услуга</h1>
+        <p class="mt-1 text-sm text-slate-500">
+            Договор <span class="font-mono font-medium text-slate-700">{{ $contract->contract_number }}</span>
+            <span class="mx-1 text-slate-300">·</span>
             {{ $contract->company->name }}
         </p>
     </div>
 
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 max-w-2xl">
-        <form action="{{ route('contracts.orders.store', $contract) }}" method="POST" class="space-y-4">
-            @csrf
+    <form action="{{ route('contracts.orders.store', $contract) }}" method="POST" class="max-w-4xl">
+        @csrf
 
-            <div>
-                <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">
-                    Название <span class="text-red-500">*</span>
-                </label>
+        <div data-testid="one-time-service-form-workspace" class="overflow-hidden border-y border-slate-200 bg-white">
+            <section class="px-4 py-5 sm:px-5">
+                <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Основная информация</h2>
 
-                <input type="text" name="service_name" value="{{ old('service_name') }}"
-                    placeholder="Например: разработка сайта" maxlength="255"
-                    class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition"
-                    required>
+                <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div class="md:col-span-2">
+                        <label for="service_name" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Название <span class="text-red-500">*</span></label>
+                        <input type="text" name="service_name" id="service_name" value="{{ old('service_name') }}" placeholder="Например: разработка сайта" maxlength="255" required
+                            class="w-full @error('service_name') border-red-300 @else border-gray-200 @enderror">
+                        @error('service_name')
+                            <p class="mt-1 text-xs text-red-500">{{ $message }}</p>
+                        @enderror
+                    </div>
 
-                @error('service_name')
-                    <p class="text-xs text-red-500 mt-1">{{ $message }}</p>
-                @enderror
-            </div>
+                    <div>
+                        <label for="order_date" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Дата <span class="text-red-500">*</span></label>
+                        <x-form.date-input name="order_date" :value="old('order_date', now()->toDateString())" required />
+                    </div>
 
-            <div>
-                    <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Дата <span
-                            class="text-red-500">*</span></label>
-                    <x-form.date-input name="order_date" :value="old('order_date', now()->toDateString())" required />
-            </div>
+                    <div>
+                        <label for="price" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Сумма (₼) <span class="text-red-500">*</span></label>
+                        <input type="number" name="price" id="price" value="{{ old('price') }}" step="0.01" min="0" required
+                            class="w-full font-mono @error('price') border-red-300 @else border-gray-200 @enderror">
+                        @error('price')
+                            <p class="mt-1 text-xs text-red-500">{{ $message }}</p>
+                        @enderror
+                    </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Сумма (₼) <span
-                            class="text-red-500">*</span></label>
-                    <input type="number" name="price" value="{{ old('price') }}" step="0.01" min="0"
-                        class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:border-blue-500 outline-none transition"
-                        required>
-                    @error('price')
-                        <p class="text-xs text-red-500 mt-1">{{ $message }}</p>
+                    <div>
+                        <label for="payment_terms" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Срок оплаты (дней) <span class="text-red-500">*</span></label>
+                        <input type="number" name="payment_terms" value="{{ old('payment_terms') }}" id="payment_terms" min="0" max="3650" placeholder="Количество дней" required
+                            class="w-full font-mono @error('payment_terms') border-red-300 @else border-gray-200 @enderror">
+                        @error('payment_terms')
+                            <p class="mt-1 text-xs text-red-500">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div>
+                        <label for="status" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Статус <span class="text-red-500">*</span></label>
+                        <select name="status" id="status" required class="w-full @error('status') border-red-300 @else border-gray-200 @enderror">
+                            <option value="in_progress" @selected(old('status') === 'in_progress')>В работе</option>
+                            <option value="cancelled" @selected(old('status') === 'cancelled')>Отменён</option>
+                        </select>
+                        @error('status')
+                            <p class="mt-1 text-xs text-red-500">{{ $message }}</p>
+                        @enderror
+                    </div>
+                </div>
+            </section>
+
+            <section class="border-t border-slate-200 px-4 py-5 sm:px-5">
+                <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Комментарий</h2>
+                <div class="mt-4">
+                    <label for="comment" class="sr-only">Комментарий</label>
+                    <textarea name="comment" id="comment" rows="3" class="w-full @error('comment') border-red-300 @else border-gray-200 @enderror">{{ old('comment') }}</textarea>
+                    @error('comment')
+                        <p class="mt-1 text-xs text-red-500">{{ $message }}</p>
                     @enderror
                 </div>
-                <div>
-                    <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Срок оплаты (дней) <span class="text-red-500">*</span></label>
-                    <input type="number" name="payment_terms" value="{{ old('payment_terms') }}" min="0"
-                        max="3650" placeholder="Количество дней" required
-                        class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:border-blue-500 outline-none transition">
-                    @error('payment_terms')
-                        <p class="text-xs text-red-500 mt-1">{{ $message }}</p>
-                    @enderror
-                </div>
-            </div>
+            </section>
 
-            <div>
-                <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Статус <span
-                        class="text-red-500">*</span></label>
-                <select name="status"
-                    class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition"
-                    required>
-                    <option value="in_progress" {{ old('status') === 'in_progress' ? 'selected' : '' }}>В работе</option>
-                    <option value="cancelled" {{ old('status') === 'cancelled' ? 'selected' : '' }}>Отменён</option>
-                </select>
+            <div class="flex flex-wrap items-center gap-3 border-t border-slate-200 px-4 py-4 sm:px-5">
+                <button type="submit" class="bg-blue-600">Сохранить</button>
+                <a href="{{ route('contracts.subjects.create', $contract) }}" class="border border-gray-200">Отмена</a>
             </div>
-
-            <div>
-                <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Комментарий</label>
-                <textarea name="comment" rows="3"
-                    class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition">{{ old('comment') }}</textarea>
-            </div>
-
-            <div class="flex gap-3 pt-2">
-                <button type="submit"
-                    class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-6 py-2.5 rounded-lg transition">
-                    Сохранить
-                </button>
-                <a href="{{ route('contracts.subjects.create', $contract) }}"
-                    class="px-6 py-2.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition">
-                    Отмена
-                </a>
-            </div>
-        </form>
-    </div>
-
+        </div>
+    </form>
 @endsection

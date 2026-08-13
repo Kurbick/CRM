@@ -1,125 +1,129 @@
 @extends('layouts.app')
+
 @section('title', 'Подписка')
+
 @section('content')
+    <div class="mb-5">
+        <a href="{{ route('contracts.subjects.create', $contract) }}" class="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-900">
+            <span aria-hidden="true">←</span>
+            Назад
+        </a>
+        <h1 class="mt-3 text-xl font-semibold text-slate-900">Подписка</h1>
+        <p class="mt-1 text-sm text-slate-500">
+            Договор <span class="font-mono font-medium text-slate-700">{{ $contract->contract_number }}</span>
+            <span class="mx-1 text-slate-300">·</span>
+            {{ $contract->company->name }}
+        </p>
+    </div>
 
-<div class="mb-6">
-    <a href="{{ route('contracts.subjects.create', $contract) }}" class="text-sm text-gray-500 hover:text-gray-700">← Назад</a>
-    <h1 class="text-2xl font-bold text-gray-900 mt-2">Подписка</h1>
-    <p class="text-sm text-gray-500 mt-1">
-        Договор <span class="font-mono font-medium text-gray-700">{{ $contract->contract_number }}</span>
-        <span class="mx-1 text-gray-300">•</span>
-        {{ $contract->company->name }}
-    </p>
-</div>
-
-<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 max-w-2xl">
-    <form action="{{ route('contracts.subscriptions.store', $contract) }}" method="POST" class="space-y-4">
+    <form action="{{ route('contracts.subscriptions.store', $contract) }}" method="POST" class="max-w-4xl">
         @csrf
 
-        <div>
-        <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">
-            Название <span class="text-red-500">*</span>
-        </label>
+        <div data-testid="subscription-form-workspace" class="overflow-hidden border-y border-slate-200 bg-white">
+            <section class="px-4 py-5 sm:px-5">
+                <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Основная информация</h2>
 
-        <input
-            type="text"
-            name="service_name"
-            value="{{ old('service_name') }}"
-            placeholder="Например: ежемесячная техническая поддержка"
-            maxlength="255"
-            class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition"
-            required
-        >
+                <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div class="md:col-span-2">
+                        <label for="service_name" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Название <span class="text-red-500">*</span></label>
+                        <input type="text" name="service_name" id="service_name" value="{{ old('service_name') }}" placeholder="Например: ежемесячная техническая поддержка" maxlength="255" required
+                            class="w-full @error('service_name') border-red-300 @else border-gray-200 @enderror">
+                        @error('service_name')
+                            <p class="mt-1 text-xs text-red-500">{{ $message }}</p>
+                        @enderror
+                    </div>
 
-        @error('service_name')
-            <p class="text-xs text-red-500 mt-1">{{ $message }}</p>
-        @enderror
-        </div>
+                    <div>
+                        <label for="start_date" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Дата начала <span class="text-red-500">*</span></label>
+                        <x-form.date-input name="start_date" :value="old('start_date', now()->toDateString())" required />
+                    </div>
 
-        <div>
-        <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">
-            Дата начала <span class="text-red-500">*</span>
-        </label>
-
-        <x-form.date-input name="start_date" :value="old('start_date', now()->toDateString())" required />
-        </div>
-
-        <div class="grid grid-cols-2 gap-4">
-            <div>
-                <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Период <span class="text-red-500">*</span></label>
-                <select name="billing_period" id="billing_period"
-                    class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition"
-                    onchange="document.getElementById('custom_interval_fields').classList.toggle('hidden', this.value !== 'custom')"
-                    required>
-                    <option value="monthly" {{ old('billing_period') === 'monthly' ? 'selected' : '' }}>Ежемесячно</option>
-                    <option value="quarterly" {{ old('billing_period') === 'quarterly' ? 'selected' : '' }}>Ежеквартально</option>
-                    <option value="semiannual" {{ old('billing_period') === 'semiannual' ? 'selected' : '' }}>Раз в полгода</option>
-                    <option value="annual" {{ old('billing_period') === 'annual' ? 'selected' : '' }}>Ежегодно</option>
-                    <option value="custom" {{ old('billing_period') === 'custom' ? 'selected' : '' }}>Свой вариант</option>
-                </select>
-                <div id="custom_interval_fields" class="{{ old('billing_period') === 'custom' ? '' : 'hidden' }} mt-2 grid grid-cols-2 gap-2">
-                    <input type="number" name="custom_interval_value" value="{{ old('custom_interval_value') }}"
-                        min="1" max="3650" placeholder="Количество"
-                        class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition">
-                    <select name="custom_interval_unit"
-                        class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition">
-                        <option value="day" {{ old('custom_interval_unit') === 'day' ? 'selected' : '' }}>дней</option>
-                        <option value="month" {{ old('custom_interval_unit') === 'month' ? 'selected' : '' }}>месяцев</option>
-                        <option value="year" {{ old('custom_interval_unit') === 'year' ? 'selected' : '' }}>лет</option>
-                    </select>
+                    <div>
+                        <label for="amount" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Сумма (₼) <span class="text-red-500">*</span></label>
+                        <input type="number" name="amount" id="amount" value="{{ old('amount') }}" step="0.01" min="0" required
+                            class="w-full font-mono @error('amount') border-red-300 @else border-gray-200 @enderror">
+                        @error('amount')
+                            <p class="mt-1 text-xs text-red-500">{{ $message }}</p>
+                        @enderror
+                    </div>
                 </div>
-                @error('custom_interval_value')<p class="text-xs text-red-500 mt-1">{{ $message }}</p>@enderror
-                @error('custom_interval_unit')<p class="text-xs text-red-500 mt-1">{{ $message }}</p>@enderror
-            </div>
-            <div>
-                <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Сумма (₼) <span class="text-red-500">*</span></label>
-                <input type="number" name="amount" value="{{ old('amount') }}"
-                       step="0.01" min="0"
-                       class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:border-blue-500 outline-none transition"
-                       required>
-                @error('amount')<p class="text-xs text-red-500 mt-1">{{ $message }}</p>@enderror
-            </div>
-        </div>
+            </section>
 
-        <div class="grid grid-cols-2 gap-4">
-            <div>
-                <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Срок оплаты (дней) <span class="text-red-500">*</span></label>
-                <input type="number" name="payment_terms" value="{{ old('payment_terms', 30) }}"
-                       min="1" max="365"
-                       class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:border-blue-500 outline-none transition"
-                       required>
-                @error('payment_terms')<p class="text-xs text-red-500 mt-1">{{ $message }}</p>@enderror
-            </div>
-            <div>
-                <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Статус <span class="text-red-500">*</span></label>
-                <select name="status"
-                        class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition"
-                        required>
-                    <option value="active" {{ old('status') === 'active' ? 'selected' : '' }}>Активна</option>
-                    <option value="suspended" {{ old('status') === 'suspended' ? 'selected' : '' }}>Приостановлена</option>
-                    <option value="completed" {{ old('status') === 'completed' ? 'selected' : '' }}>Завершена</option>
-                    <option value="cancelled" {{ old('status') === 'cancelled' ? 'selected' : '' }}>Отменена</option>
-                </select>
-            </div>
-        </div>
+            <section class="border-t border-slate-200 px-4 py-5 sm:px-5">
+                <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">График оплаты</h2>
 
-        <div>
-            <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Комментарий</label>
-            <textarea name="comment" rows="3"
-                      class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 outline-none transition">{{ old('comment') }}</textarea>
-        </div>
+                <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div>
+                        <label for="billing_period" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Период <span class="text-red-500">*</span></label>
+                        <select name="billing_period" id="billing_period" required
+                            class="w-full @error('billing_period') border-red-300 @else border-gray-200 @enderror"
+                            onchange="document.getElementById('custom_interval_fields').classList.toggle('hidden', this.value !== 'custom')">
+                            <option value="monthly" @selected(old('billing_period') === 'monthly')>Ежемесячно</option>
+                            <option value="quarterly" @selected(old('billing_period') === 'quarterly')>Ежеквартально</option>
+                            <option value="semiannual" @selected(old('billing_period') === 'semiannual')>Раз в полгода</option>
+                            <option value="annual" @selected(old('billing_period') === 'annual')>Ежегодно</option>
+                            <option value="custom" @selected(old('billing_period') === 'custom')>Свой вариант</option>
+                        </select>
+                        @error('billing_period')
+                            <p class="mt-1 text-xs text-red-500">{{ $message }}</p>
+                        @enderror
 
-        <div class="flex gap-3 pt-2">
-            <button type="submit"
-                    class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-6 py-2.5 rounded-lg transition">
-                Сохранить
-            </button>
-                <a href="{{ route('contracts.subjects.create', $contract) }}"
-               class="px-6 py-2.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition">
-                Отмена
-            </a>
+                        <div id="custom_interval_fields" class="{{ old('billing_period') === 'custom' ? '' : 'hidden' }} mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <input type="number" name="custom_interval_value" value="{{ old('custom_interval_value') }}" min="1" max="3650" placeholder="Количество"
+                                class="w-full @error('custom_interval_value') border-red-300 @else border-gray-200 @enderror">
+                            <select name="custom_interval_unit" class="w-full @error('custom_interval_unit') border-red-300 @else border-gray-200 @enderror">
+                                <option value="day" @selected(old('custom_interval_unit') === 'day')>дней</option>
+                                <option value="month" @selected(old('custom_interval_unit') === 'month')>месяцев</option>
+                                <option value="year" @selected(old('custom_interval_unit') === 'year')>лет</option>
+                            </select>
+                        </div>
+                        @error('custom_interval_value')
+                            <p class="mt-1 text-xs text-red-500">{{ $message }}</p>
+                        @enderror
+                        @error('custom_interval_unit')
+                            <p class="mt-1 text-xs text-red-500">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div>
+                        <label for="payment_terms" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Срок оплаты (дней) <span class="text-red-500">*</span></label>
+                        <input type="number" name="payment_terms" id="payment_terms" value="{{ old('payment_terms', 30) }}" min="1" max="365" required
+                            class="w-full font-mono @error('payment_terms') border-red-300 @else border-gray-200 @enderror">
+                        @error('payment_terms')
+                            <p class="mt-1 text-xs text-red-500">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div>
+                        <label for="status" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Статус <span class="text-red-500">*</span></label>
+                        <select name="status" id="status" required class="w-full @error('status') border-red-300 @else border-gray-200 @enderror">
+                            <option value="active" @selected(old('status') === 'active')>Активна</option>
+                            <option value="suspended" @selected(old('status') === 'suspended')>Приостановлена</option>
+                            <option value="completed" @selected(old('status') === 'completed')>Завершена</option>
+                            <option value="cancelled" @selected(old('status') === 'cancelled')>Отменена</option>
+                        </select>
+                        @error('status')
+                            <p class="mt-1 text-xs text-red-500">{{ $message }}</p>
+                        @enderror
+                    </div>
+                </div>
+            </section>
+
+            <section class="border-t border-slate-200 px-4 py-5 sm:px-5">
+                <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Комментарий</h2>
+                <div class="mt-4">
+                    <label for="comment" class="sr-only">Комментарий</label>
+                    <textarea name="comment" id="comment" rows="3" class="w-full @error('comment') border-red-300 @else border-gray-200 @enderror">{{ old('comment') }}</textarea>
+                    @error('comment')
+                        <p class="mt-1 text-xs text-red-500">{{ $message }}</p>
+                    @enderror
+                </div>
+            </section>
+
+            <div class="flex flex-wrap items-center gap-3 border-t border-slate-200 px-4 py-4 sm:px-5">
+                <button type="submit" class="bg-blue-600">Сохранить</button>
+                <a href="{{ route('contracts.subjects.create', $contract) }}" class="border border-gray-200">Отмена</a>
+            </div>
         </div>
     </form>
-</div>
-
 @endsection
