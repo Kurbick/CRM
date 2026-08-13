@@ -15,46 +15,56 @@
     @endunless
 
     @if ($hasDomainBlocks)
-        <div class="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div data-testid="dashboard-financial-summary" class="mb-8 overflow-hidden border-y border-slate-200 bg-white">
+            <div class="border-b border-slate-200 px-4 py-3 sm:px-5">
+                <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Финансы</h2>
+            </div>
+
+            <div class="grid grid-cols-1 divide-y divide-slate-200 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
             @if ($abilities['global_debt'])
-                <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                    <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Общий долг</p>
-                    <p class="mt-1 text-2xl font-bold text-gray-900">{{ number_format($overview['total_debt'], 2) }} ₼</p>
+                <div data-testid="dashboard-financial-debt" class="px-4 py-4 sm:px-5">
+                    <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Общий долг</p>
+                    <p class="mt-1 text-xl font-semibold {{ $overview['total_debt'] > 0 ? 'text-red-600' : 'text-slate-900' }}">{{ number_format($overview['total_debt'], 2) }} ₼</p>
                 </div>
             @endif
 
             @if ($abilities['invoices'])
-                <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                    <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Выставлено</p>
-                    <p class="mt-1 text-2xl font-bold text-gray-900">{{ number_format($overview['total_invoiced'], 2) }} ₼</p>
+                <div data-testid="dashboard-financial-invoiced" class="px-4 py-4 sm:px-5">
+                    <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Выставлено</p>
+                    <p class="mt-1 text-xl font-semibold text-slate-900">{{ number_format($overview['total_invoiced'], 2) }} ₼</p>
                 </div>
 
-                <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                    <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Просрочено</p>
-                    <p class="mt-1 text-2xl font-bold text-red-600">{{ $overview['overdue_count'] }}</p>
-                    <p class="mt-1 text-xs text-gray-400">{{ number_format($overview['overdue_amount'], 2) }} ₼</p>
+                <div data-testid="dashboard-financial-overdue" class="px-4 py-4 sm:px-5">
+                    <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Просрочено</p>
+                    <p class="mt-1 text-xl font-semibold {{ $overview['overdue_count'] > 0 ? 'text-red-600' : 'text-slate-900' }}">{{ $overview['overdue_count'] }}</p>
+                    <p class="mt-1 text-xs text-slate-400">{{ number_format($overview['overdue_amount'], 2) }} ₼</p>
                 </div>
             @endif
 
             @if ($abilities['payments'])
-                <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                    <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Оплачено</p>
-                    <p class="mt-1 text-2xl font-bold text-green-600">{{ number_format($overview['total_paid'], 2) }} ₼</p>
-                    <p class="mt-1 text-xs text-gray-400">Всего платежей</p>
+                <div data-testid="dashboard-financial-paid" class="px-4 py-4 sm:px-5">
+                    <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Оплачено</p>
+                    <p class="mt-1 text-xl font-semibold text-green-600">{{ number_format($overview['total_paid'], 2) }} ₼</p>
+                    <p class="mt-1 text-xs text-slate-400">Всего платежей</p>
                 </div>
             @endif
+            </div>
 
-            @if ($abilities['contracts'])
-                <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                    <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Подписки</p>
-                    <p class="mt-1 text-2xl font-bold text-blue-600">{{ $overview['active_subscriptions'] }}</p>
-                </div>
-            @endif
+            @if ($abilities['companies'] || $abilities['contracts'])
+                <div data-testid="dashboard-secondary-counters" class="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-slate-200 px-4 py-3 text-sm sm:px-5">
+                    @if ($abilities['companies'])
+                        <div class="flex items-baseline gap-2">
+                            <span class="text-xs uppercase tracking-wide text-slate-500">Активные компании</span>
+                            <span class="font-semibold tabular-nums text-slate-900">{{ $overview['active_companies'] }}</span>
+                        </div>
+                    @endif
 
-            @if ($abilities['companies'])
-                <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                    <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Активные компании</p>
-                    <p class="mt-1 text-2xl font-bold text-blue-600">{{ $overview['active_companies'] }}</p>
+                    @if ($abilities['contracts'])
+                        <div class="flex items-baseline gap-2">
+                            <span class="text-xs uppercase tracking-wide text-slate-500">Подписки</span>
+                            <span class="font-semibold tabular-nums text-slate-900">{{ $overview['active_subscriptions'] }}</span>
+                        </div>
+                    @endif
                 </div>
             @endif
         </div>
