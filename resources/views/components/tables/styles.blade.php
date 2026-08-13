@@ -102,7 +102,7 @@
     }
 
     .crm-table-numeric {
-        text-align: right;
+        text-align: left;
     }
 
     .crm-table-actions {

@@ -115,7 +115,27 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
 
         $this->get(route('companies.show', $company))
             ->assertOk()
+            ->assertSee('data-testid="company-entity-header"', false)
             ->assertSeeInOrder(['SkyCell', 'data-testid="company-status"', 'Активна', 'Юридическое лицо'], false);
+    }
+
+    public function test_company_show_exposes_compact_detail_sections_without_removed_fields(): void
+    {
+        $company = $this->company('SkyCell', [
+            'voen' => '1234567890',
+            'email' => 'company@example.test',
+        ]);
+
+        $this->get(route('companies.show', $company))
+            ->assertOk()
+            ->assertSee('data-testid="company-information"', false)
+            ->assertSee('data-testid="company-financial-summary"', false)
+            ->assertSee('data-testid="company-tabs"', false)
+            ->assertSee('Основная информация')
+            ->assertSee('Финансы')
+            ->assertSee('VÖEN (ИНН)')
+            ->assertSee('company@example.test')
+            ->assertDontSee('invoice_mode');
     }
 
     public function test_one_time_debt_remains_visible_when_subscription_is_fully_paid(): void
@@ -237,7 +257,7 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
             ->assertOk()
             ->assertSee('30.00 ₼')
             ->assertSee('70.00 ₼')
-            ->assertSee('Частично оплачено');
+            ->assertSee('Частично оплачен');
     }
 
     public function test_overdue_period_shows_overdue_badge_days_and_summary(): void
@@ -321,7 +341,7 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
             ->assertOk()
             ->assertSee('25.00 ₼')
             ->assertSee('75.00 ₼')
-            ->assertSee('Частично оплачено');
+            ->assertSee('Частично оплачен');
     }
 
     public function test_draft_cancelled_and_other_company_lines_are_excluded_but_manual_line_is_detailed(): void
@@ -396,19 +416,17 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
             ->assertDontSee('missing_period_start');
     }
 
-    public function test_debt_tables_use_consistent_left_alignment(): void
+    public function test_debt_tables_use_consistent_compact_table_primitive(): void
     {
         $view = file_get_contents(resource_path('views/companies/show.blade.php'));
-        preg_match_all('/<table class="w-full min-w-\[940px\].*?<\/table>/s', $view, $matches);
+        preg_match_all('/<table class="crm-table min-w-\[940px\] table-fixed">.*?<\/table>/s', $view, $matches);
 
         $this->assertCount(2, $matches[0]);
         foreach ($matches[0] as $table) {
             $this->assertStringNotContainsString('text-right', $table);
             $this->assertStringNotContainsString('text-center', $table);
-            $this->assertMatchesRegularExpression('/<th class="[^"]*text-left/', $table);
-            $this->assertMatchesRegularExpression('/<td class="[^"]*text-left/', $table);
-            $this->assertMatchesRegularExpression('/<th class="[^"]*text-left[^"]*">Статус<\/th>/', $table);
-            $this->assertMatchesRegularExpression('/<td class="[^"]*text-left[^"]*tabular-nums/', $table);
+            $this->assertStringContainsString('<th>Статус</th>', $table);
+            $this->assertStringContainsString('class="crm-table-number', $table);
         }
     }
 

@@ -30,6 +30,14 @@ class UnifiedListUiTest extends TestCase
         ] as $primitive) {
             $this->assertStringContainsString($primitive, $styles);
         }
+
+        $this->assertMatchesRegularExpression(
+            '/\.crm-table-numeric\s*\{[^}]*text-align:\s*left;/s',
+            $styles
+        );
+
+        $badge = file_get_contents(resource_path('views/partials/badge.blade.php'));
+        $this->assertStringContainsString("'partially_paid'=> 'Частично оплачен'", $badge);
     }
 
     public function test_representative_lists_use_the_shared_table_contract(): void

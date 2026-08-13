@@ -234,9 +234,9 @@
                                 <th class="pb-3 pr-4">Позиция</th>
                                 <th class="invoice-print-only hidden pb-3 pr-4">Описание / тип</th>
                                 <th class="invoice-print-only hidden pb-3 pr-4">Расчётный период</th>
-                                <th class="pb-3 text-right pr-4">Сумма</th>
-                                <th class="crm-print-hide pb-3 text-right pr-4 print:hidden">Оплачено</th>
-                                <th class="crm-print-hide pb-3 text-right pr-4 print:hidden">Остаток</th>
+                                <th class="pb-3 text-left pr-4">Сумма</th>
+                                <th class="crm-print-hide pb-3 text-left pr-4 print:hidden">Оплачено</th>
+                                <th class="crm-print-hide pb-3 text-left pr-4 print:hidden">Остаток</th>
                                 <th class="crm-print-hide pb-3 print:hidden">Статус</th>
                             </tr>
                         </thead>
@@ -260,13 +260,13 @@
                                     <td class="invoice-print-only hidden py-4 pr-4 text-xs text-gray-600">
                                         {{ $line['period_label'] ?: '—' }}
                                     </td>
-                                    <td class="py-4 text-right font-semibold text-gray-900 font-mono pr-4">
+                                    <td class="py-4 text-left font-semibold text-gray-900 font-mono pr-4">
                                         <span class="whitespace-nowrap tabular-nums">{{ $formatMoney($line['amount']) }}</span>
                                     </td>
-                                    <td class="crm-print-hide py-4 text-right font-semibold text-green-600 font-mono pr-4 print:hidden">
+                                    <td class="crm-print-hide py-4 text-left font-semibold text-green-600 font-mono pr-4 print:hidden">
                                         <span class="whitespace-nowrap tabular-nums">{{ $formatMoney($line['paid_amount']) }}</span>
                                     </td>
-                                    <td class="crm-print-hide py-4 text-right font-semibold text-gray-900 font-mono pr-4 print:hidden">
+                                    <td class="crm-print-hide py-4 text-left font-semibold text-gray-900 font-mono pr-4 print:hidden">
                                         <span class="whitespace-nowrap tabular-nums">{{ $formatMoney($line['remaining_amount']) }}</span>
                                     </td>
                                     <td class="crm-print-hide py-4 print:hidden">
