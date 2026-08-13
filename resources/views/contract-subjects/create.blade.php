@@ -20,26 +20,23 @@
         </p>
     </div>
 
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm max-w-3xl">
-        <div class="px-6 py-5 border-b border-gray-100">
+    <div class="w-full max-w-2xl rounded-lg border border-gray-200 bg-white">
+        <div class="border-b border-gray-100 px-5 py-4">
             <h2 class="font-semibold text-gray-800">Выберите тип предмета</h2>
-            <p class="text-sm text-gray-500 mt-1">Данные будут заполнены на следующем шаге.</p>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 p-6">
+        <div class="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
             @if ($canCreateOrder)
                 <a href="{{ route('contracts.orders.create', $contract) }}"
-                    class="block rounded-xl border border-gray-200 p-5 hover:border-blue-300 hover:bg-blue-50/50 transition">
-                    <span class="block font-semibold text-gray-900">Разовая услуга</span>
-                    <span class="block text-sm text-gray-500 mt-1">Однократная работа или услуга по договору.</span>
+                    class="flex min-h-16 items-center rounded-lg border border-slate-200 bg-slate-50/40 px-4 py-3 transition-colors hover:border-blue-300 hover:bg-blue-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                    <span class="font-semibold text-gray-900">Разовая услуга</span>
                 </a>
             @endif
 
             @if ($canCreateSubscription)
                 <a href="{{ route('contracts.subscriptions.create', $contract) }}"
-                    class="block rounded-xl border border-gray-200 p-5 hover:border-blue-300 hover:bg-blue-50/50 transition">
-                    <span class="block font-semibold text-gray-900">Подписка</span>
-                    <span class="block text-sm text-gray-500 mt-1">Регулярная услуга с расчётным периодом.</span>
+                    class="flex min-h-16 items-center rounded-lg border border-slate-200 bg-slate-50/40 px-4 py-3 transition-colors hover:border-blue-300 hover:bg-blue-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                    <span class="font-semibold text-gray-900">Подписка</span>
                 </a>
             @endif
         </div>

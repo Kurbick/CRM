@@ -1,11 +1,15 @@
 @extends('layouts.app')
-@section('title', 'Добавить подписку')
+@section('title', 'Подписка')
 @section('content')
 
 <div class="mb-6">
-    <a href="{{ $backUrl }}" class="text-sm text-gray-500 hover:text-gray-700">← Назад</a>
-    <h1 class="text-2xl font-bold text-gray-900 mt-2">Добавить подписку</h1>
-    <p class="text-sm text-gray-500">Договор: {{ $contract->contract_number }} — {{ $contract->company->name }}</p>
+    <a href="{{ route('contracts.subjects.create', $contract) }}" class="text-sm text-gray-500 hover:text-gray-700">← Назад</a>
+    <h1 class="text-2xl font-bold text-gray-900 mt-2">Подписка</h1>
+    <p class="text-sm text-gray-500 mt-1">
+        Договор <span class="font-mono font-medium text-gray-700">{{ $contract->contract_number }}</span>
+        <span class="mx-1 text-gray-300">•</span>
+        {{ $contract->company->name }}
+    </p>
 </div>
 
 <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 max-w-2xl">
@@ -14,7 +18,7 @@
 
         <div>
         <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">
-            Название услуги <span class="text-red-500">*</span>
+            Название <span class="text-red-500">*</span>
         </label>
 
         <input
@@ -108,9 +112,9 @@
         <div class="flex gap-3 pt-2">
             <button type="submit"
                     class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-6 py-2.5 rounded-lg transition">
-                Сохранить подписку
+                Сохранить
             </button>
-            <a href="{{ $backUrl }}"
+                <a href="{{ route('contracts.subjects.create', $contract) }}"
                class="px-6 py-2.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition">
                 Отмена
             </a>

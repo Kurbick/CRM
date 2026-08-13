@@ -45,6 +45,27 @@ class OrderPaymentTermsTest extends TestCase
         $this->assertDoesNotMatchRegularExpression('/name="payment_terms"[^>]*value="14"/', $response->getContent());
     }
 
+    public function test_create_forms_return_to_subject_type_selection(): void
+    {
+        $this->authenticatedUser->givePermissionTo([
+            PermissionName::ContractSubjectsCreate->value,
+            PermissionName::ContractsView->value,
+        ]);
+        [, $contract] = $this->companyAndContract();
+        $selectorUrl = route('contracts.subjects.create', $contract);
+        $contractUrl = route('contracts.show', $contract);
+
+        foreach ([
+            route('contracts.orders.create', $contract),
+            route('contracts.subscriptions.create', $contract),
+        ] as $createUrl) {
+            $this->get($createUrl)
+                ->assertOk()
+                ->assertSee('href="'.$selectorUrl.'"', false)
+                ->assertDontSee('href="'.$contractUrl.'"', false);
+        }
+    }
+
     public function test_typed_order_requires_terms_and_saves_exact_zero_or_positive_value(): void
     {
         $this->grantSubjectPermission(PermissionName::ContractSubjectsCreate);
