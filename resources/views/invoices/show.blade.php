@@ -20,124 +20,129 @@
             $invoice->status === 'partially_paid' => 'text-orange-600',
             default => 'text-gray-900',
         };
+
+        $hasPaymentRegistration = in_array($invoice->status, ['issued', 'partially_paid'], true)
+            && $invoice->remaining_amount > 0
+            && \Illuminate\Support\Facades\Gate::allows('create', [\App\Models\Payment::class, $invoice]);
+
     @endphp
 
-    {{-- Верхний заголовок и действия --}}
-    <div class="invoice-page-header crm-print-hide mb-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4 print:hidden">
-        <div>
-            @php
-                $canReturnToCompany = $companyContext['active'] && auth()->user()->can('view', $invoice->company);
-            @endphp
-            <a href="{{ $canReturnToCompany ? $companyContext['company_url'] : route('invoices.index') }}"
-                class="text-sm text-gray-500 hover:text-gray-900 transition flex items-center gap-1.5 mb-2">
+    {{-- Компактный заголовок инвойса --}}
+    <div data-testid="invoice-entity-header" class="invoice-page-header crm-print-hide mb-5 print:hidden">
+        @php
+            $canReturnToCompany = $companyContext['active'] && auth()->user()->can('view', $invoice->company);
+        @endphp
+        <a href="{{ $canReturnToCompany ? $companyContext['company_url'] : route('invoices.index') }}"
+            class="mb-3 inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 transition hover:text-slate-900">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
                 {{ $canReturnToCompany ? $companyContext['label'] : 'Назад к списку' }}
-            </a>
-            <div class="flex items-center gap-3">
-                <h1 class="text-2xl font-bold text-gray-900">Счёт {{ $invoice->invoice_number }}</h1>
-                @include('partials.badge', ['status' => $invoice->status])
+        </a>
+
+        <div class="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-end sm:justify-between">
+            <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                    <h1 class="truncate font-mono text-xl font-semibold leading-tight text-slate-900">
+                        {{ $invoice->invoice_number }}
+                    </h1>
+                    @include('partials.badge', ['status' => $invoice->status])
+                </div>
+
+                <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+                    @if ($invoice->company)
+                        @can('view', $invoice->company)
+                            <a href="{{ $companyContext['company_url'] }}"
+                                class="font-medium text-blue-600 transition hover:text-blue-800 hover:underline">
+                                {{ $invoice->company->name }}
+                            </a>
+                        @else
+                            <span>{{ $invoice->company->name }}</span>
+                        @endcan
+                    @else
+                        <span>{{ $invoice->payer_name ?: 'Плательщик не указан' }}</span>
+                    @endif
+
+                    @if ($invoice->contract)
+                        <span class="text-slate-300">·</span>
+                        @can('view', $invoice->contract)
+                            <a href="{{ route('contracts.show', $invoice->contract) }}"
+                                class="font-mono font-medium text-blue-600 transition hover:text-blue-800 hover:underline">
+                                {{ $invoice->contract->contract_number }}
+                            </a>
+                        @else
+                            <span class="font-mono">{{ $invoice->contract->contract_number }}</span>
+                        @endcan
+                    @elseif ($invoice->contract_reference)
+                        <span class="text-slate-300">·</span>
+                        <span class="font-mono">{{ $invoice->contract_reference }}</span>
+                    @endif
+                </div>
             </div>
-        </div>
 
-        @error('issue')
-            <div class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-                <p class="text-sm text-red-700">
-                    {{ $message }}
-                </p>
-            </div>
-        @enderror
+            <div class="flex shrink-0 flex-wrap items-center gap-1">
+                @can('print', $invoice)
+                    <button type="button" onclick="window.print()" class="crm-light-action">
+                        Печать
+                    </button>
+                @endcan
 
-        @error('cancel')
-            <div class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-                <p class="text-sm text-red-700">
-                    {{ $message }}
-                </p>
-            </div>
-        @enderror
-
-        @error('payment_confirm')
-            <div class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-                <p class="text-sm text-red-700">
-                    {{ $message }}
-                </p>
-            </div>
-        @enderror
-
-        <div class="flex flex-wrap items-center gap-5">
-            {{-- Кнопка Печать --}}
-            @can('print', $invoice)
-            <button type="button" onclick="window.print()"
-                class="inline-flex items-center text-sm border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg font-medium transition shadow-sm">
-                <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                </svg>
-                Печать
-            </button>
-            @endcan
-
-            <div class="flex items-center gap-2">
                 @can('update', $invoice)
-                @if ($editability['editable'])
-                    <a href="{{ route('invoices.edit', $invoice) }}{{ $companyContext['active'] ? '?'.http_build_query($companyContext['query']) : '' }}"
-                        class="px-4 py-2 border border-gray-200 text-gray-600
-                   text-sm font-medium rounded-lg hover:bg-gray-50 transition">
-
-                        Редактировать
-                    </a>
-                @endif
+                    @if ($editability['editable'])
+                        <a href="{{ route('invoices.edit', $invoice) }}{{ $companyContext['active'] ? '?'.http_build_query($companyContext['query']) : '' }}"
+                            class="crm-light-action">
+                            Редактировать
+                        </a>
+                    @endif
                 @endcan
 
                 @can('delete', $invoice)
-                @if ($invoice->status === 'draft')
-                    <form action="{{ route('invoices.destroy', $invoice) }}" method="POST"
-                        onsubmit="return confirm('Вы уверены, что хотите удалить этот счет? Действие необратимо.')">
-                        @csrf
-                        @method('DELETE')
-                        <button type="submit"
-                            class="inline-flex items-center text-sm bg-red-50 hover:bg-red-100 text-red-700 px-4 py-2 rounded-lg font-medium transition border border-red-200">
-                            <svg class="w-4 h-4 mr-1.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                            Удалить
-                        </button>
-                    </form>
-                @endif
-                @endcan
-                @can('cancel', $invoice)
-                @if ($invoice->status === 'issued' && !$hasPayments)
-                    <form action="{{ route('invoices.cancel', $invoice) }}" method="POST"
-                        onsubmit="return confirm('Отменить выставленный инвойс? График подписок будет восстановлен.')">
-
-                        @csrf
-                        @method('PATCH')
-
-                        <button type="submit"
-                            class="inline-flex items-center px-4 py-2
-                       rounded-lg border border-red-200
-                       bg-red-50 text-sm font-medium text-red-700
-                       hover:bg-red-100 transition">
-
-                            Отменить счёт
-                        </button>
-                    </form>
-                @endif
+                    @if ($invoice->status === 'draft')
+                        <form action="{{ route('invoices.destroy', $invoice) }}" method="POST"
+                            onsubmit="return confirm('Вы уверены, что хотите удалить этот счет? Действие необратимо.')">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit"
+                                class="inline-flex items-center rounded px-1.5 py-1 text-xs font-semibold text-red-600 transition hover:bg-red-50 hover:text-red-700">
+                                Удалить
+                            </button>
+                        </form>
+                    @endif
                 @endcan
             </div>
         </div>
     </div>
 
-    <div class="invoice-screen-grid grid grid-cols-1 lg:grid-cols-3 gap-6">
+    @error('issue')
+        <div class="crm-print-hide mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 print:hidden">
+            <p class="text-sm text-red-700">{{ $message }}</p>
+        </div>
+    @enderror
+
+    @error('cancel')
+        <div class="crm-print-hide mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 print:hidden">
+            <p class="text-sm text-red-700">{{ $message }}</p>
+        </div>
+    @enderror
+
+    @error('payment_confirm')
+        <div class="crm-print-hide mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 print:hidden">
+            <p class="text-sm text-red-700">{{ $message }}</p>
+        </div>
+    @enderror
+
+    <div data-testid="invoice-workspace" @class([
+        'invoice-screen-grid grid grid-cols-1 items-start gap-5',
+        'lg:grid-cols-[minmax(0,2fr)_minmax(280px,0.85fr)]' => $hasPaymentRegistration,
+        'lg:grid-cols-1' => ! $hasPaymentRegistration,
+    ])>
 
         {{-- Основной документ инвойса (2/3 ширины) --}}
-        <div class="invoice-document-column lg:col-span-2 print:w-full print:col-span-3">
+        <div class="invoice-document-column min-w-0 print:w-full print:col-span-3">
 
             {{-- Печатный бланк счета --}}
             <div
-                class="invoice-document bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:p-8 relative overflow-hidden print:border-none print:shadow-none print:p-0">
+                class="invoice-document relative overflow-hidden border-y border-slate-200 bg-white p-4 sm:p-5 md:p-6 print:border-none print:shadow-none print:p-0">
 
                 {{-- Верхняя декоративная полоса (скрывается при печати) --}}
                 <div class="crm-print-hide absolute top-0 left-0 right-0 h-1.5 bg-blue-600 print:hidden"></div>
@@ -223,10 +228,13 @@
                     </div>
                 </div>
 
-                {{-- Таблица позиций (Lines) --}}
-                <div class="mb-6">
+                {{-- Позиции счета --}}
+                <section data-testid="invoice-line-items" class="mb-6">
+                    <div class="mb-3 flex items-center justify-between gap-3">
+                        <h2 class="text-sm font-semibold text-slate-900">Позиции счета</h2>
+                    </div>
                     <div class="overflow-x-auto print:overflow-visible">
-                    <table class="w-full table-auto text-left text-sm">
+                    <table class="crm-table w-full table-auto text-left text-sm">
                         <thead>
                             <tr
                                 class="border-b border-gray-200 text-gray-400 font-semibold uppercase tracking-wider text-xs pb-3">
@@ -284,7 +292,62 @@
                         </tbody>
                     </table>
                     </div>
-                </div>
+                </section>
+
+                @can('viewAny', \App\Models\Payment::class)
+                    {{-- Платежи --}}
+                    <section data-testid="invoice-payments" class="crm-print-hide mb-6 overflow-hidden border-y border-slate-200 print:hidden">
+                        <div class="flex flex-wrap items-center gap-3 border-b border-slate-200 px-3 py-3">
+                            <div class="flex items-baseline gap-3">
+                                <h2 class="text-sm font-semibold text-slate-900">Платежи</h2>
+                                <span class="text-xs tabular-nums text-slate-500">{{ $paymentBreakdown['payments_count'] }}</span>
+                            </div>
+                        </div>
+
+                        @if ($paymentBreakdown['payments_count'] > 0)
+                            <div class="crm-table-scroll">
+                                <table class="crm-table min-w-[620px] table-fixed">
+                                    <colgroup>
+                                        <col class="w-[20%]">
+                                        <col class="w-[20%]">
+                                        <col class="w-[24%]">
+                                        <col class="w-[22%]">
+                                        <col class="w-[14%]">
+                                    </colgroup>
+                                    <thead>
+                                        <tr>
+                                            <th>Дата</th>
+                                            <th>Сумма</th>
+                                            <th>Метод</th>
+                                            <th>Статус</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach ($paymentBreakdown['paymentRows'] as $paymentRow)
+                                            <tr>
+                                                <td class="crm-table-date">
+                                                    {{ $paymentRow['payment_date'] ? \Illuminate\Support\Carbon::parse($paymentRow['payment_date'])->format('d/m/Y') : '—' }}
+                                                </td>
+                                                <td class="crm-table-numeric font-semibold text-slate-900">{{ $formatMoney($paymentRow['amount']) }}</td>
+                                                <td>{{ $paymentRow['payment_method_label'] }}</td>
+                                                <td>
+                                                    @include('partials.badge', ['status' => $paymentRow['status']])
+                                                </td>
+                                                <td class="crm-table-actions">
+                                                    <button type="button" x-ref="paymentHistoryTrigger" @click="$dispatch('open-payment-history')"
+                                                        class="crm-table-action-link">Детали</button>
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        @else
+                            <p class="px-3 py-4 text-sm text-slate-500">Платежей пока нет.</p>
+                        @endif
+                    </section>
+                @endcan
 
                 {{-- Расчет итога --}}
                 <div class="invoice-totals border-t border-gray-100 pt-6 flex flex-col items-end gap-2 text-sm text-gray-600">
@@ -337,21 +400,33 @@
                 </div>
 
                 @can('issue', $invoice)
-                @if ($invoice->status === 'draft')
-                    <div class="crm-print-hide mt-4 flex justify-end print:hidden">
-                        <form action="{{ route('invoices.issue', $invoice) }}" method="POST"
-                            class="w-64 max-w-full">
+                    @if ($invoice->status === 'draft')
+                        <div class="crm-print-hide mt-5 border-t border-slate-200 pt-4 print:hidden">
+                            <form action="{{ route('invoices.issue', $invoice) }}" method="POST">
+                                @csrf
+                                <button type="submit"
+                                    class="w-full rounded bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-700">
+                                    Выставить счёт
+                                </button>
+                            </form>
+                        </div>
+                    @endif
+                @endcan
 
-                            @csrf
-
-                            <button type="submit"
-                                class="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-700">
-
-                                Выставить счёт
-                            </button>
-                        </form>
-                    </div>
-                @endif
+                @can('cancel', $invoice)
+                    @if ($invoice->status === 'issued' && ! $hasPayments)
+                        <div class="crm-print-hide mt-4 border-t border-slate-200 pt-3 print:hidden">
+                            <form action="{{ route('invoices.cancel', $invoice) }}" method="POST"
+                                onsubmit="return confirm('Отменить выставленный инвойс? График подписок будет восстановлен.')">
+                                @csrf
+                                @method('PATCH')
+                                <button type="submit"
+                                    class="text-xs font-semibold text-red-600 transition hover:text-red-700">
+                                    Отменить счёт
+                                </button>
+                            </form>
+                        </div>
+                    @endif
                 @endcan
 
                 {{-- Примечание продавца --}}
@@ -366,7 +441,7 @@
 
         </div>
 
-        {{-- Правая боковая колонка: Регистрация оплат и история (скрывается при печати) --}}
+        {{-- Правая боковая колонка: Регистрация оплат и дополнительные действия --}}
         <div class="invoice-sidebar crm-print-hide space-y-6 print:hidden">
 
             {{-- Форма добавления оплаты --}}
@@ -523,11 +598,10 @@
                 @endif
             @endcannot
 
-            {{-- История платежей --}}
+            {{-- Дополнительные детали и действия по платежам --}}
             @can('viewAny', \App\Models\Payment::class)
             @php
                 $paymentHistoryShouldOpen = $errors->has('cancel_reason') && old('cancel_payment_id');
-                $latestPayment = $paymentBreakdown['latest_payment'];
             @endphp
             <div x-data="{
                     paymentHistoryOpen: @js((bool) $paymentHistoryShouldOpen),
@@ -544,57 +618,11 @@
                 }"
                 x-init="if (paymentHistoryOpen) { document.body.style.overflow = 'hidden'; $nextTick(() => $refs.paymentHistoryClose.focus()); }"
                 x-on:keydown.escape.window="if (paymentHistoryOpen) closePaymentHistory()"
+                x-on:open-payment-history.window="openPaymentHistory()"
                 class="invoice-payment-history crm-print-hide print:hidden">
 
-                {{-- Компактная карточка в основном потоке страницы --}}
-                <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                    <div class="flex items-center justify-between gap-3">
-                        <h3 class="font-bold text-sm uppercase tracking-wider text-gray-500">История платежей</h3>
-                        <span class="inline-flex min-w-6 items-center justify-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
-                            {{ $paymentBreakdown['payments_count'] }}
-                        </span>
-                    </div>
-
-                    @if ($latestPayment)
-                        <div class="mt-4 text-sm">
-                            <div class="text-xs text-gray-400">Последний платёж:</div>
-                            <div class="mt-1 font-semibold text-gray-900">
-                                <span class="whitespace-nowrap tabular-nums">{{ $formatMoney($latestPayment['amount']) }}</span>
-                                <span class="font-normal text-gray-400">·</span>
-                                <span>{{ $latestPayment['status'] === 'pending' ? 'Ожидает подтверждения' : $latestPayment['status_label'] }}</span>
-                            </div>
-                            @if ($latestPayment['payment_date'])
-                                <div class="mt-0.5 text-xs text-gray-500">
-                                    {{ \Illuminate\Support\Carbon::parse($latestPayment['payment_date'])->format('d/m/Y') }}
-                                </div>
-                            @endif
-                        </div>
-
-                        @if ($paymentBreakdown['pending_payments_count'] > 0)
-                            <div class="mt-3 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
-                                Ожидают подтверждения: {{ $paymentBreakdown['pending_payments_count'] }}
-                            </div>
-                        @endif
-
-                        @if ($paymentSource['credit_balance_applied_minor'] > 0)
-                            <div class="mt-3 text-xs text-gray-400">
-                                Из баланса: {{ $formatMoney($paymentSource['credit_balance_applied_amount']) }}
-                            </div>
-                        @endif
-
-                        <button type="button" x-ref="paymentHistoryTrigger" @click="openPaymentHistory()"
-                            aria-haspopup="dialog" aria-controls="payment-history-drawer"
-                            class="mt-4 inline-flex w-full items-center justify-between border-t border-gray-100 pt-3 text-sm font-medium text-blue-600 transition hover:text-blue-800">
-                            <span>Открыть историю</span>
-                            <span aria-hidden="true">→</span>
-                        </button>
-                    @else
-                        <p class="mt-3 text-sm text-gray-400">Платежей пока нет.</p>
-                    @endif
-                </div>
-
                 @if ($paymentBreakdown['payments_count'] > 0)
-                    {{-- Drawer с полной историей --}}
+                    {{-- Drawer с дополнительными деталями платежей --}}
                     <div x-show="paymentHistoryOpen" x-cloak id="payment-history-drawer"
                         class="payment-history-drawer crm-print-hide fixed inset-0 z-50 print:hidden"
                         role="dialog" aria-modal="true" aria-labelledby="payment-history-title">

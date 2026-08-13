@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\PaymentAllocation;
+use App\Support\Access\PermissionName;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\Feature\FinancialTestCase as TestCase;
@@ -41,6 +42,40 @@ class InvoicePrintAndDisplayTest extends TestCase
         $this->assertStringContainsString('@media print', $content);
         $this->assertStringContainsString('.crm-print-hide', $content);
         $this->assertStringContainsString('invoice-print-only hidden', $content);
+    }
+
+    public function test_invoice_document_preserves_identity_metadata_totals_and_lifecycle_action(): void
+    {
+        $invoice = $this->invoice('draft', '1350.00');
+        $this->line($invoice, 'Работа по договору', '1350.00');
+        $invoice->load(['company', 'contract']);
+        $this->authenticatedUser->givePermissionTo([
+            PermissionName::CompaniesView->value,
+            PermissionName::ContractsView->value,
+        ]);
+
+        $response = $this->get(route('invoices.show', $invoice))
+            ->assertOk()
+            ->assertSee('data-testid="invoice-entity-header"', false)
+            ->assertSee('data-testid="invoice-workspace"', false)
+            ->assertSee('data-testid="invoice-line-items"', false)
+            ->assertDontSee('data-testid="invoice-financial-strip"', false)
+            ->assertDontSee('data-testid="invoice-context"', false)
+            ->assertSee('Позиции счета')
+            ->assertSee('Оплачено')
+            ->assertSee('Остаток')
+            ->assertSee($invoice->invoice_number)
+            ->assertSee($invoice->company->name)
+            ->assertSee(route('companies.show', $invoice->company), false)
+            ->assertSee($invoice->contract->contract_number)
+            ->assertSee(route('contracts.show', $invoice->contract), false)
+            ->assertSee('Работа по договору')
+            ->assertSee('1 350,00 ₼')
+            ->assertSee('Дата выставления:')
+            ->assertSee('Срок оплаты:')
+            ->assertSee('invoice-totals', false)
+            ->assertSee('Выставить счёт');
+
     }
 
     public function test_stored_seller_snapshot_has_priority_over_current_configuration(): void
@@ -147,6 +182,8 @@ class InvoicePrintAndDisplayTest extends TestCase
         $this->get(route('invoices.show', $invoice))
             ->assertOk()
             ->assertSee('Зарегистрировать платеж')
+            ->assertSee('Частично оплачен')
+            ->assertDontSee('Частично оплачено')
             ->assertSee('Оплачено')
             ->assertSee('Не оплачено')
             ->assertSee('100,00 ₼');

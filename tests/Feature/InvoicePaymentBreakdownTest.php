@@ -92,8 +92,8 @@ class InvoicePaymentBreakdownTest extends TestCase
         $response = $this->get(route('invoices.show', $invoice));
 
         $response->assertOk();
-        $this->assertSame(2, substr_count($response->getContent(), 'Из баланса: 10,00 ₼'));
-        $this->assertSame(3, substr_count($response->getContent(), 'Из баланса'));
+        $this->assertSame(1, substr_count($response->getContent(), 'Из баланса: 10,00 ₼'));
+        $this->assertSame(2, substr_count($response->getContent(), 'Из баланса'));
         $response->assertDontSee('Частично из баланса')
             ->assertDontSee('Оплата из Credit Balance');
     }
@@ -164,7 +164,7 @@ class InvoicePaymentBreakdownTest extends TestCase
         }
     }
 
-    public function test_compact_summary_and_drawer_include_the_full_ordered_payment_history(): void
+    public function test_payment_table_and_details_drawer_include_the_full_ordered_payment_history(): void
     {
         $invoice = $this->invoice('paid', '10.00');
         $line = $this->line($invoice, 'Работа', '10.00');
@@ -181,10 +181,11 @@ class InvoicePaymentBreakdownTest extends TestCase
         $rows = collect($breakdown['paymentRows']);
 
         $response->assertOk()
-            ->assertSee('Открыть историю')
-            ->assertSee('Последний платёж:')
+            ->assertSee('Платежи')
+            ->assertSee('Детали')
+            ->assertDontSee('Открыть историю')
             ->assertSee('Подтверждён')
-            ->assertSee('Ожидают подтверждения: 1')
+            ->assertSee('Ожидает')
             ->assertSee('Всего платежей: 7')
             ->assertSee('Отменённый 1')
             ->assertSee('Отменённый 5')

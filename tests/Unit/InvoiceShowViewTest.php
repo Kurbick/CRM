@@ -19,9 +19,15 @@ class InvoiceShowViewTest extends TestCase
         $this->assertStringContainsString("trim((string) \$invoice->payer_voen) !== ''", $source);
         $this->assertStringNotContainsString("VÖEN: {{ \$invoice->payer_voen ?: 'Не указан' }}", $source);
         $this->assertStringContainsString('$invoice->contract_reference', $source);
+        $this->assertStringContainsString('data-testid="invoice-entity-header"', $source);
+        $this->assertStringContainsString('data-testid="invoice-workspace"', $source);
+        $this->assertStringContainsString('>Позиции счета</h2>', $source);
+        $this->assertStringNotContainsString("count(\$paymentBreakdown['lineRows'])", $source);
+        $this->assertStringNotContainsString('data-testid="invoice-financial-strip"', $source);
+        $this->assertStringNotContainsString('data-testid="invoice-context"', $source);
+        $this->assertStringContainsString('$invoice->company->name', $source);
         $this->assertStringNotContainsString('Связано с аккаунтом', $source);
         $this->assertStringNotContainsString('Ödəyici', $source);
-        $this->assertStringNotContainsString('$invoice->company->name', $source);
     }
 
     public function test_invoice_view_formats_money_and_normalises_negative_zero(): void
@@ -53,9 +59,9 @@ class InvoiceShowViewTest extends TestCase
         $issueRoute = "route('invoices.issue', \$invoice)";
 
         $this->assertSame(1, substr_count($source, $issueRoute));
-        $this->assertGreaterThan(strpos($source, 'Остаток к оплате:'), strpos($source, $issueRoute));
-        $this->assertStringContainsString('class="crm-print-hide mt-4 flex justify-end print:hidden"', $source);
-        $this->assertStringContainsString('class="w-64 max-w-full"', $source);
+        $this->assertGreaterThan(strpos($source, 'invoice-totals'), strpos($source, $issueRoute));
+        $this->assertStringContainsString('class="crm-print-hide mt-5 border-t border-slate-200 pt-4 print:hidden"', $source);
+        $this->assertStringContainsString('class="w-full rounded bg-blue-600', $source);
         $this->assertStringContainsString("route('invoices.edit', \$invoice)", $source);
         $this->assertStringContainsString("route('invoices.destroy', \$invoice)", $source);
         $this->assertStringContainsString("@method('DELETE')", $source);
@@ -119,18 +125,18 @@ class InvoiceShowViewTest extends TestCase
         $this->assertStringContainsString('x-on:keydown.enter=', $source);
         $this->assertStringContainsString('if (!$event.shiftKey)', $source);
         $this->assertStringContainsString('$event.currentTarget.form.requestSubmit();', $source);
-        $this->assertStringContainsString("value.trim()", $source);
+        $this->assertStringContainsString('value.trim()', $source);
         $this->assertStringContainsString('cancelSubmitting = true;', $source);
         $this->assertStringNotContainsString('$event.currentTarget.form.submit();', $source);
     }
 
-    public function test_compact_payment_history_card_opens_an_accessible_drawer(): void
+    public function test_payment_details_drawer_remains_accessible_without_duplicate_history_summary(): void
     {
         $source = file_get_contents(resource_path('views/invoices/show.blade.php'));
 
         $this->assertStringContainsString("{{ \$paymentBreakdown['payments_count'] }}", $source);
-        $this->assertStringContainsString('Последний платёж:', $source);
-        $this->assertStringContainsString('Открыть историю', $source);
+        $this->assertStringContainsString('Детали', $source);
+        $this->assertStringNotContainsString('Открыть историю', $source);
         $this->assertStringContainsString('paymentHistoryOpen:', $source);
         $this->assertStringContainsString('x-show="paymentHistoryOpen" x-cloak', $source);
         $this->assertStringContainsString('id="payment-history-drawer"', $source);
@@ -140,7 +146,6 @@ class InvoiceShowViewTest extends TestCase
         $this->assertStringContainsString('aria-label="Закрыть историю платежей"', $source);
         $this->assertStringContainsString('overflow-y-auto', $source);
         $this->assertStringContainsString("@forelse (\$paymentBreakdown['paymentRows'] as \$paymentRow)", $source);
-        $this->assertStringContainsString('$paymentBreakdown[\'pending_payments_count\']', $source);
         $this->assertStringNotContainsString('Показать ещё', $source);
         $this->assertStringNotContainsString('Скрыть историю', $source);
         $this->assertStringNotContainsString('hidden_by_default', $source);
@@ -155,8 +160,8 @@ class InvoiceShowViewTest extends TestCase
         $this->assertStringContainsString('$refs.paymentHistoryTrigger?.focus()', $source);
         $this->assertStringContainsString('class="invoice-payment-history crm-print-hide print:hidden"', $source);
         $this->assertStringNotContainsString('<div class="mt-3 rounded-lg border border-red-100 bg-red-50 p-3">', $source);
-        $this->assertSame(2, substr_count($source, "\$paymentSource['credit_balance_applied_minor'] > 0"));
-        $this->assertSame(2, substr_count($source, "Из баланса: {{ \$formatMoney(\$paymentSource['credit_balance_applied_amount']) }}"));
+        $this->assertSame(1, substr_count($source, "\$paymentSource['credit_balance_applied_minor'] > 0"));
+        $this->assertSame(1, substr_count($source, "Из баланса: {{ \$formatMoney(\$paymentSource['credit_balance_applied_amount']) }}"));
         $this->assertStringNotContainsString('Частично из баланса', $source);
         $this->assertStringContainsString("\$paymentSource['credit_balance_payment_ids']", $source);
         $this->assertStringNotContainsString('Оплата из Credit Balance', $source);

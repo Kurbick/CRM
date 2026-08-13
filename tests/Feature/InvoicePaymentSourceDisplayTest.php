@@ -37,13 +37,13 @@ class InvoicePaymentSourceDisplayTest extends TestCase
         $this->get(route('invoices.index'))->assertOk()->assertSee('Из баланса: 500,00 ₼');
         $response = $this->get(route('invoices.show', $invoice))->assertOk();
 
-        $this->assertSame(2, substr_count($response->getContent(), 'Из баланса: 500,00 ₼'));
-        $this->assertSame(3, substr_count($response->getContent(), 'Из баланса'));
+        $this->assertSame(1, substr_count($response->getContent(), 'Из баланса: 500,00 ₼'));
+        $this->assertSame(2, substr_count($response->getContent(), 'Из баланса'));
         $response->assertDontSee('Частично из баланса')
             ->assertDontSee('Оплата из Credit Balance');
     }
 
-    public function test_mixed_source_is_separate_from_last_normal_payment(): void
+    public function test_mixed_source_is_rendered_separately_on_invoice_show(): void
     {
         [$invoice, $lineId] = $this->invoice('500.00', 'paid');
         $creditPayment = $this->payment($invoice, '20.00', '2026-07-20');
@@ -59,10 +59,8 @@ class InvoicePaymentSourceDisplayTest extends TestCase
             ->assertDontSee('Частично из баланса');
 
         $content = $response->getContent();
-        $this->assertStringContainsString('Последний платёж:', $content);
-        $this->assertLessThan(strpos($content, '480,00 ₼'), strpos($content, 'Из баланса: 20,00 ₼'));
-        $this->assertSame(2, substr_count($content, 'Из баланса: 20,00 ₼'));
-        $this->assertSame(3, substr_count($content, 'Из баланса'));
+        $this->assertSame(1, substr_count($content, 'Из баланса: 20,00 ₼'));
+        $this->assertSame(2, substr_count($content, 'Из баланса'));
     }
 
     public function test_only_applied_balance_money_is_full_even_with_remaining_invoice_debt(): void
