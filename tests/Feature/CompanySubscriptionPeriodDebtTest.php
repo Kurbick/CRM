@@ -64,6 +64,25 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
         );
     }
 
+    public function test_total_debt_uses_neutral_or_danger_value_style(): void
+    {
+        $company = $this->company();
+        $neutral = $this->get(route('companies.show', $company))->assertOk()->getContent();
+
+        $this->assertMatchesRegularExpression(
+            '/<dt[^>]*>Общий долг<\/dt>\s*<dd[^>]*text-slate-900/',
+            $neutral
+        );
+
+        $this->manualLine($company, 'Debt semantic color', '100.00', '2099-08-20');
+        $positive = $this->get(route('companies.show', $company))->assertOk()->getContent();
+
+        $this->assertMatchesRegularExpression(
+            '/<dt[^>]*>Общий долг<\/dt>\s*<dd[^>]*text-red-600/',
+            $positive
+        );
+    }
+
     public function test_main_information_hides_empty_fields_and_embeds_only_present_bank_details(): void
     {
         $empty = $this->company('Empty Details');

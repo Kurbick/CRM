@@ -82,7 +82,7 @@
                 </div>
                 <div class="px-4 py-3">
                     <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Общий долг</dt>
-                    <dd class="mt-1 font-semibold tabular-nums text-slate-900">{{ number_format($stats['total_debt'], 2) }} ₼</dd>
+                    <dd class="mt-1 font-semibold tabular-nums {{ $stats['total_debt'] > 0 ? 'text-red-600' : 'text-slate-900' }}">{{ number_format($stats['total_debt'], 2) }} ₼</dd>
                 </div>
                 <div data-testid="overdue-summary"
                     class="border-l-2 px-4 py-3 {{ $overdueRemaining !== '0.00' ? 'border-red-300 bg-red-50' : 'border-slate-200 bg-gray-50' }}">
