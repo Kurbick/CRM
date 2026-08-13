@@ -28,6 +28,110 @@ class ContractAuthorizationTest extends AuthorizationTestCase
         $this->get(route('contracts.edit', $contract))->assertForbidden();
     }
 
+    public function test_contract_show_preserves_workspace_identity_lifecycle_and_operational_data(): void
+    {
+        $company = $this->company('SkyCell Workspace');
+        $contract = $this->contract($company);
+        $contract->forceFill([
+            'contract_number' => 'CTR-2026-001',
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-11-01',
+            'comment' => 'Рабочий комментарий договора',
+        ])->save();
+        $order = $this->subjectOrder($contract, [
+            'title' => 'Настройка сети',
+            'order_date' => '2026-08-02',
+            'price' => '1250.50',
+        ]);
+        $subscription = $this->subjectSubscription($contract, [
+            'title' => 'Поддержка сети',
+            'start_date' => '2026-08-03',
+            'amount' => '300.00',
+        ]);
+        $document = $contract->documents()->create([
+            'document_type' => 'signed',
+            'original_name' => 'CTR-2026-001-signed.pdf',
+            'file_path' => "contract-documents/{$contract->id}/signed.pdf",
+            'file_size' => 2048,
+            'comment' => 'Подписанная версия',
+        ]);
+
+        $this->actingAsPermissions([
+            PermissionName::CompaniesView->value,
+            PermissionName::ContractsView->value,
+            PermissionName::ContractsUpdate->value,
+            PermissionName::ContractSubjectsCreate->value,
+            PermissionName::ContractSubjectsUpdate->value,
+            PermissionName::ContractSubjectsDelete->value,
+            PermissionName::ContractDocumentsUpload->value,
+            PermissionName::ContractDocumentsDownload->value,
+            PermissionName::ContractDocumentsDelete->value,
+        ]);
+
+        $response = $this->get(route('contracts.show', $contract))
+            ->assertOk()
+            ->assertSee('data-testid="contract-entity-header"', false)
+            ->assertSee('data-testid="contract-lifecycle"', false)
+            ->assertSee('data-testid="contract-lifecycle-status"', false)
+            ->assertSee('data-testid="contract-workspace"', false)
+            ->assertSee('data-layout="split"', false)
+            ->assertSee('data-testid="contract-context"', false)
+            ->assertSee('CTR-2026-001')
+            ->assertSee(route('companies.show', $company), false)
+            ->assertSee('SkyCell Workspace')
+            ->assertSee('01/08/2026')
+            ->assertSee('01/11/2026')
+            ->assertSee('Активен')
+            ->assertSee('Информация')
+            ->assertDontSee('Реквизиты договора')
+            ->assertSee('Рабочий комментарий договора')
+            ->assertSee('data-testid="contract-context-comment"', false)
+            ->assertSee('Разовых: 1')
+            ->assertSee('Подписок: 1')
+            ->assertSee('Разовая услуга')
+            ->assertSee('Подписка')
+            ->assertSee($order->title)
+            ->assertSee($subscription->title)
+            ->assertSee('1,250.50 ₼')
+            ->assertSee(route('contracts.subjects.create', $contract), false)
+            ->assertSee(route('orders.edit', $order), false)
+            ->assertSee(route('subscriptions.edit', $subscription), false)
+            ->assertSee('CTR-2026-001-signed.pdf')
+            ->assertSee('Подписанная версия')
+            ->assertSee(route('contract-documents.download', $document), false);
+
+        $this->assertSame(1, substr_count($response->getContent(), '01/08/2026'));
+        $this->assertSame(1, substr_count($response->getContent(), '01/11/2026'));
+        $this->assertSame(1, substr_count($response->getContent(), 'SkyCell Workspace'));
+        $this->assertSame(1, substr_count($response->getContent(), route('companies.show', $company)));
+    }
+
+    public function test_contract_show_uses_indefinite_and_compact_empty_state_language(): void
+    {
+        $company = $this->company('Indefinite Workspace');
+        $contract = $this->contract($company);
+        $this->actingAsPermissions([
+            PermissionName::ContractsView->value,
+            PermissionName::ContractSubjectsCreate->value,
+            PermissionName::ContractDocumentsDownload->value,
+        ]);
+
+        $response = $this->get(route('contracts.show', $contract))
+            ->assertOk()
+            ->assertSee('Бессрочный')
+            ->assertSee('Indefinite Workspace')
+            ->assertSee('data-layout="full"', false)
+            ->assertDontSee('Информация')
+            ->assertDontSee('data-testid="contract-context"', false)
+            ->assertDontSee('data-testid="contract-context-comment"', false)
+            ->assertSee('Предметы договора пока не добавлены.')
+            ->assertSee('Документы пока не добавлены.')
+            ->assertSee('+ Добавить')
+            ->assertDontSee('Предмет договора пока не добавлен');
+
+        $this->assertSame(1, substr_count($response->getContent(), $company->name));
+    }
+
     public function test_view_permission_reveals_only_minimal_company_context_without_company_view(): void
     {
         [$company, $secrets] = $this->companyWithSecrets('VIEW');

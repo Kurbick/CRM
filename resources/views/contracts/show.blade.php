@@ -19,13 +19,38 @@
             'other' => 'Другой документ',
         ];
 
+        $contractStatus = match ($contract->effective_status) {
+            'active' => [
+                'label' => 'Активен',
+                'dot' => 'bg-green-500',
+                'text' => 'text-green-700',
+            ],
+            'terminated' => [
+                'label' => 'Расторгнут',
+                'dot' => 'bg-red-500',
+                'text' => 'text-red-700',
+            ],
+            'expired' => [
+                'label' => 'Срок истёк',
+                'dot' => 'bg-red-500',
+                'text' => 'text-red-700',
+            ],
+            default => [
+                'label' => $contract->effective_status,
+                'dot' => 'bg-slate-400',
+                'text' => 'text-slate-600',
+            ],
+        };
+
+        $hasContractContext = filled($contract->comment);
+
         $services = collect();
 
         foreach ($contract->orders as $order) {
             $services->push([
                 'id' => $order->id,
                 'type' => 'order',
-                'type_name' => 'Разовая',
+                'type_name' => 'Разовая услуга',
                 'service_name' => $order->title ?? ($order->serviceType?->name ?? 'Услуга не указана'),
                 'date' => $order->order_date,
                 'period' => null,
@@ -65,30 +90,47 @@
         $services = $services->sortByDesc('date');
     @endphp
 
-    {{-- Заголовок страницы --}}
-    <div class="mb-6">
+    {{-- Компактный заголовок договора --}}
+    <div data-testid="contract-entity-header" class="mb-5">
         @php
             $canReturnToCompany = $companyContext['active'];
         @endphp
         <a href="{{ $canReturnToCompany ? $companyContext['company_url'] : route('contracts.index') }}"
-            class="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 transition">
-            ← {{ $canReturnToCompany ? $companyContext['label'] : 'Назад к договорам' }}
+            class="mb-3 inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 transition hover:text-slate-900">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+            {{ $canReturnToCompany ? $companyContext['label'] : 'Назад к договорам' }}
         </a>
 
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mt-3">
-            <h1 class="text-2xl font-bold text-gray-900 font-mono">
-                {{ $contract->contract_number }}
-            </h1>
+        <div class="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-end sm:justify-between">
+            <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                    <h1 class="truncate font-mono text-xl font-semibold leading-tight text-slate-900">
+                        {{ $contract->contract_number }}
+                    </h1>
+                    @include('partials.badge', [
+                        'status' => $contract->effective_status,
+                        'label' => $contractStatus['label'],
+                    ])
+                </div>
 
-            <div class="flex items-center gap-3">
-                @include('partials.badge', [
-                    'status' => $contract->effective_status,
-                ])
+                <div class="mt-1 text-xs text-slate-500">
+                    @can('view', $contract->company)
+                        <a href="{{ route('companies.show', $contract->company) }}"
+                            class="font-medium text-blue-600 transition hover:text-blue-800 hover:underline">
+                            {{ $contract->company->name }}
+                        </a>
+                    @else
+                        <span>{{ $contract->company->name }}</span>
+                    @endcan
+                </div>
+            </div>
 
+            <div class="flex shrink-0 flex-wrap items-center gap-1">
                 @can('update', $contract)
                     <a href="{{ route('contracts.edit', ['contract' => $contract, 'edit_origin' => 'show', ...$companyContext['query']]) }}"
-                        class="text-sm border border-gray-200 hover:bg-gray-50 text-gray-600
-                          px-4 py-2 rounded-lg transition">
+                        class="crm-light-action">
                         Редактировать
                     </a>
                 @endcan
@@ -100,7 +142,7 @@
                             @csrf
                             @method('DELETE')
                             <button type="submit"
-                                class="text-sm border border-red-200 text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg transition">
+                                class="inline-flex items-center rounded px-1.5 py-1 text-xs font-semibold text-red-600 transition hover:bg-red-50 hover:text-red-700">
                                 Удалить
                             </button>
                         </form>
@@ -110,110 +152,86 @@
         </div>
     </div>
 
-    {{-- Основная информация --}}
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm mb-6">
-        <div class="px-6 py-4 border-b border-gray-100">
-            <h2 class="font-semibold text-gray-800">
-                Основная информация
-            </h2>
-        </div>
-
-        <div class="px-6 py-5">
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                <div>
-                    <p class="text-xs font-semibold text-gray-400 uppercase">
-                        Компания
-                    </p>
-
-                    @can('view', $contract->company)
-                        <a href="{{ route('companies.show', $contract->company) }}"
-                            class="inline-block mt-2 text-sm font-medium text-blue-600
-                                  hover:text-blue-800 hover:underline transition">
-                            {{ $contract->company->name }}
-                        </a>
-                    @else
-                        <span class="inline-block mt-2 text-sm font-medium text-gray-900">
-                            {{ $contract->company->name }}
-                        </span>
-                    @endcan
-                </div>
-
-                <div>
-                    <p class="text-xs font-semibold text-gray-400 uppercase">
-                        Дата начала
-                    </p>
-
-                    <p class="mt-2 text-sm text-gray-700">
-                        {{ \Carbon\Carbon::parse($contract->start_date)->format('d/m/Y') }}
-                    </p>
-                </div>
-
-                <div>
-                    <p class="text-xs font-semibold text-gray-400 uppercase">
-                        Дата окончания
-                    </p>
-
-                    <p class="mt-2 text-sm text-gray-700">
-                        @if ($contract->end_date)
-                            {{ \Carbon\Carbon::parse($contract->end_date)->format('d/m/Y') }}
-                        @else
-                            Бессрочный
-                        @endif
-                    </p>
-                </div>
+    {{-- Жизненный цикл договора --}}
+    <section data-testid="contract-lifecycle" class="mb-5 border-y border-slate-200 bg-white">
+        <div class="grid gap-3 px-4 py-3 sm:grid-cols-[auto_minmax(2rem,1fr)_auto_minmax(2rem,1fr)_auto] sm:items-center">
+            <div>
+                <p class="text-sm font-semibold tabular-nums text-slate-900">
+                    {{ \Carbon\Carbon::parse($contract->start_date)->format('d/m/Y') }}
+                </p>
+                <p class="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Начало</p>
             </div>
 
-            @if (filled($contract->comment))
-                <div class="mt-5 pt-5 border-t border-gray-100">
-                    <p class="text-xs font-semibold text-gray-400 uppercase">
-                        Комментарий
-                    </p>
+            <div aria-hidden="true" class="hidden h-px bg-slate-200 sm:block"></div>
 
-                    <p class="mt-2 text-sm text-gray-700 whitespace-pre-line">
-                        {{ $contract->comment }}
-                    </p>
-                </div>
-            @endif
-        </div>
-    </div>
+            <div data-testid="contract-lifecycle-status"
+                class="flex items-center gap-1.5 text-xs font-semibold {{ $contractStatus['text'] }} sm:justify-center">
+                <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-500 sm:hidden">Статус</span>
+                <span aria-hidden="true" class="h-1.5 w-1.5 rounded-full {{ $contractStatus['dot'] }}"></span>
+                <span>{{ $contractStatus['label'] }}</span>
+            </div>
 
-    {{-- Документы договора --}}
-    @if ($canUploadDocuments || $canReadDocumentMetadata)
-        <div x-data="{
-            uploadOpen: {{ $errors->has('document') || $errors->has('document_type') || $errors->has('comment') ? 'true' : 'false' }}
-        }" class="bg-white rounded-xl border border-gray-200 shadow-sm mb-6">
-        {{-- Заголовок блока --}}
-        <div class="px-6 py-5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-                <h2 class="font-semibold text-gray-800">
-                    Документы договора
-                </h2>
+            <div aria-hidden="true" class="hidden h-px bg-slate-200 sm:block"></div>
 
-                @if ($canReadDocumentMetadata)
-                    <p class="text-sm text-gray-500 mt-1">
-                        Прикреплённых файлов: {{ $contract->documents->count() }}
-                    </p>
+            <div class="sm:text-right">
+                <p class="text-sm font-semibold tabular-nums text-slate-900">
+                    {{ $contract->end_date ? \Carbon\Carbon::parse($contract->end_date)->format('d/m/Y') : 'Бессрочный' }}
+                </p>
+                @if ($contract->end_date)
+                    <p class="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Окончание</p>
                 @endif
             </div>
-
-            @can('create', [\App\Models\ContractDocument::class, $contract])
-                <button type="button" @click="uploadOpen = !uploadOpen"
-                class="crm-light-action">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                </svg>
-
-                <span x-text="uploadOpen ? 'Скрыть форму' : 'Загрузить документ'">
-                    Загрузить документ
-                </span>
-                </button>
-            @endcan
         </div>
+    </section>
+
+    {{-- Рабочая область договора --}}
+    <div data-testid="contract-workspace" data-layout="{{ $hasContractContext ? 'split' : 'full' }}"
+        class="grid items-start gap-5 {{ $hasContractContext ? 'lg:grid-cols-[minmax(0,2fr)_minmax(260px,0.85fr)]' : 'grid-cols-1' }}">
+        @if ($hasContractContext)
+            <aside data-testid="contract-context"
+                class="order-1 overflow-hidden border-y border-slate-200 bg-white lg:order-2 lg:sticky lg:top-6">
+                <div class="border-b border-slate-200 px-4 py-3">
+                    <h2 class="text-sm font-semibold text-slate-900">Информация</h2>
+                </div>
+
+                <dl class="px-4">
+                    <div data-testid="contract-context-comment">
+                        <dt class="pt-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Комментарий</dt>
+                        <dd class="whitespace-pre-line pb-3 pt-1 text-sm leading-5 text-slate-700">{{ $contract->comment }}</dd>
+                    </div>
+                </dl>
+            </aside>
+        @endif
+
+        <div class="flex min-w-0 flex-col gap-5 {{ $hasContractContext ? 'order-2 lg:order-1' : '' }}">
+
+            {{-- Документы --}}
+            @if ($canUploadDocuments || $canReadDocumentMetadata)
+                <section data-testid="contract-documents" x-data="{
+            uploadOpen: {{ $errors->has('document') || $errors->has('document_type') || $errors->has('comment') ? 'true' : 'false' }}
+        }" class="order-2 overflow-hidden border-y border-slate-200 bg-white">
+                    <div class="flex flex-col gap-2 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                            <h2 class="text-sm font-semibold text-slate-900">Документы</h2>
+
+                            @if ($canReadDocumentMetadata)
+                                <p class="text-xs tabular-nums text-slate-500">{{ $contract->documents->count() }} файлов</p>
+                            @endif
+                        </div>
+
+                        @can('create', [\App\Models\ContractDocument::class, $contract])
+                            <button type="button" @click="uploadOpen = !uploadOpen" class="crm-light-action">
+                                <span x-text="uploadOpen ? 'Скрыть форму' : '+ Загрузить документ'">
+                                    + Загрузить документ
+                                </span>
+                            </button>
+                        @endcan
+                    </div>
 
         {{-- Форма загрузки --}}
-        @can('create', [\App\Models\ContractDocument::class, $contract])
-            <div x-show="uploadOpen" x-cloak class="px-6 py-5 bg-gray-50/50 border-b border-gray-100">
-            <form action="{{ route('contracts.documents.store', $contract) }}" method="POST"
+                    @can('create', [\App\Models\ContractDocument::class, $contract])
+                        <div x-show="uploadOpen" x-cloak class="border-b border-slate-200 bg-slate-50/70 px-4 py-4">
+                            <form action="{{ route('contracts.documents.store', $contract) }}" method="POST"
                 enctype="multipart/form-data">
                 @csrf
 
@@ -309,276 +327,183 @@
                         Отмена
                     </button>
                 </div>
-            </form>
-            </div>
-        @endcan
-
-        {{-- Список документов --}}
-        @if ($canReadDocumentMetadata)
-            @if ($contract->documents->isNotEmpty())
-                <div class="divide-y divide-gray-100">
-                    @foreach ($contract->documents as $document)
-                    @php
-                        if ($document->file_size) {
-                            $documentSize =
-                                $document->file_size >= 1048576
-                                    ? number_format($document->file_size / 1048576, 2) . ' МБ'
-                                    : number_format($document->file_size / 1024, 0) . ' КБ';
-                        } else {
-                            $documentSize = null;
-                        }
-                    @endphp
-
-                    <div class="px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                        <div class="flex items-start gap-3 min-w-0">
-                            {{-- Иконка файла --}}
-                            <div
-                                class="flex-shrink-0 w-10 h-10 rounded-lg bg-blue-50
-                                        text-blue-600 flex items-center justify-center">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M14 2H6a2 2 0 0 0-2 2v16a2 2
-                                                             0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M14 2v6h6" />
-                                </svg>
-                            </div>
-
-                            <div class="min-w-0">
-                                <p class="text-sm font-medium text-gray-900 truncate">
-                                    {{ $document->original_name }}
-                                </p>
-
-                                <div class="flex flex-wrap items-center gap-2 mt-1">
-                                    <span
-                                        class="inline-flex px-2 py-0.5 rounded-full
-                                                 bg-gray-100 text-gray-600 text-xs font-medium">
-                                        {{ $documentTypes[$document->document_type] ?? 'Другой документ' }}
-                                    </span>
-
-                                    @if ($documentSize)
-                                        <span class="text-xs text-gray-400">
-                                            {{ $documentSize }}
-                                        </span>
-                                    @endif
-
-                                    <span class="text-xs text-gray-400">
-                                        {{ $document->created_at->format('d/m/Y H:i') }}
-                                    </span>
-                                </div>
-
-                                @if ($document->comment)
-                                    <p class="text-xs text-gray-500 mt-2">
-                                        {{ $document->comment }}
-                                    </p>
-                                @endif
-                            </div>
+                            </form>
                         </div>
+                    @endcan
 
-                        {{-- Действия --}}
-                        <div class="flex items-center gap-3 flex-shrink-0 sm:ml-4">
-                            @can('download', $document)
-                                <a href="{{ route('contract-documents.download', $document) }}"
-                                class="inline-flex items-center text-sm font-medium
-                                       text-blue-600 hover:text-blue-800 transition">
-                                <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 0 0 2 2h12a2
-                                                             2 0 0 0 2-2v-2M8 12l4 4
-                                                             4-4m-4 4V4" />
-                                </svg>
+                    {{-- Список документов --}}
+                    @if ($canReadDocumentMetadata)
+                        @if ($contract->documents->isNotEmpty())
+                            <div class="crm-table-scroll">
+                                <table class="crm-table min-w-[720px] table-fixed">
+                                    <colgroup>
+                                        <col class="w-[36%]">
+                                        <col class="w-[18%]">
+                                        <col class="w-[18%]">
+                                        <col class="w-[10%]">
+                                        <col class="w-[18%]">
+                                    </colgroup>
+                                    <thead>
+                                        <tr>
+                                            <th>Файл</th>
+                                            <th>Тип</th>
+                                            <th>Загружен</th>
+                                            <th>Размер</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach ($contract->documents as $document)
+                                            @php
+                                                if ($document->file_size) {
+                                                    $documentSize =
+                                                        $document->file_size >= 1048576
+                                                            ? number_format($document->file_size / 1048576, 2).' МБ'
+                                                            : number_format($document->file_size / 1024, 0).' КБ';
+                                                } else {
+                                                    $documentSize = null;
+                                                }
+                                            @endphp
+                                            <tr>
+                                                <td>
+                                                    <div class="crm-table-primary truncate">{{ $document->original_name }}</div>
+                                                    @if ($document->comment)
+                                                        <div class="crm-table-secondary mt-0.5 truncate">{{ $document->comment }}</div>
+                                                    @endif
+                                                </td>
+                                                <td>
+                                                    <span class="crm-badge crm-badge-neutral">
+                                                        {{ $documentTypes[$document->document_type] ?? 'Другой документ' }}
+                                                    </span>
+                                                </td>
+                                                <td class="crm-table-date">{{ $document->created_at->format('d/m/Y H:i') }}</td>
+                                                <td class="crm-table-number">{{ $documentSize ?? '—' }}</td>
+                                                <td class="crm-table-actions">
+                                                    <div class="inline-flex items-center gap-3">
+                                                        @can('download', $document)
+                                                            <a href="{{ route('contract-documents.download', $document) }}"
+                                                                class="crm-table-action-link">Скачать</a>
+                                                        @endcan
 
-                                Скачать
-                                </a>
-                            @endcan
+                                                        @can('delete', $document)
+                                                            <form action="{{ route('contract-documents.destroy', $document) }}" method="POST"
+                                                                onsubmit="return confirm('Удалить этот документ?')">
+                                                                @csrf
+                                                                @method('DELETE')
+                                                                <button type="submit"
+                                                                    class="text-xs font-semibold text-red-500 transition hover:text-red-700">
+                                                                    Удалить
+                                                                </button>
+                                                            </form>
+                                                        @endcan
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        @else
+                            <p class="px-4 py-5 text-sm text-slate-500">Документы пока не добавлены.</p>
+                        @endif
+                    @endif
+                </section>
+            @endif
 
-                            @can('delete', $document)
-                                <form action="{{ route('contract-documents.destroy', $document) }}" method="POST"
-                                onsubmit="return confirm('Удалить этот документ?')">
-                                @csrf
-                                @method('DELETE')
-
-                                <button type="submit"
-                                    class="text-sm font-medium text-red-500
-                                           hover:text-red-700 transition">
-                                    Удалить
-                                </button>
-                                </form>
-                            @endcan
-                        </div>
+            {{-- Предмет договора --}}
+            <section data-testid="contract-subjects"
+                class="order-1 overflow-hidden border-y border-slate-200 bg-white">
+                <div class="flex flex-col gap-2 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                        <h2 class="text-sm font-semibold text-slate-900">Предмет договора</h2>
+                        <p class="text-xs tabular-nums text-slate-500">
+                            Разовых: {{ $contract->orders->count() }}
+                            <span class="mx-1 text-slate-300">·</span>
+                            Подписок: {{ $contract->subscriptions->count() }}
+                        </p>
                     </div>
-                    @endforeach
-                </div>
-            @else
-                <p class="px-6 py-5 text-sm text-gray-500">Документы пока не добавлены.</p>
-            @endif
-        @endif
-        </div>
-    @endif
 
-    {{-- Предмет договора --}}
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm">
-        <div
-            class="px-6 py-5 border-b border-gray-100
-                    flex flex-col sm:flex-row sm:items-center
-                    sm:justify-between gap-4">
-
-            <div>
-                <h2 class="font-semibold text-gray-800">
-                    Предмет договора
-                </h2>
-
-                <p class="text-sm text-gray-500 mt-1">
-                    Разовых: {{ $contract->orders->count() }}
-
-                    <span class="mx-1 text-gray-300">•</span>
-
-                    Подписок: {{ $contract->subscriptions->count() }}
-                </p>
-            </div>
-
-            @if (\Illuminate\Support\Facades\Gate::allows('create', [\App\Models\Order::class, $contract]) || \Illuminate\Support\Facades\Gate::allows('create', [\App\Models\Subscription::class, $contract]))
-                <a href="{{ route('contracts.subjects.create', $contract) }}"
-                    class="crm-light-action">
-                    + Добавить
-                </a>
-            @endif
-        </div>
-
-        @if ($services->isNotEmpty())
-            {{-- Таблица услуг --}}
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr class="border-b border-gray-100 bg-gray-50 text-left">
-                            <th class="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">
-                                Услуга
-                            </th>
-
-                            <th class="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">
-                                Тип
-                            </th>
-
-                            <th class="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">
-                                Дата
-                            </th>
-
-                            <th class="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">
-                                Период
-                            </th>
-
-                            <th class="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">
-                                Сумма
-                            </th>
-
-                            <th class="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">
-                                Статус
-                            </th>
-
-                            <th class="px-6 py-3"></th>
-                        </tr>
-                    </thead>
-
-                    <tbody class="divide-y divide-gray-100">
-                        @foreach ($services as $service)
-                            <tr class="hover:bg-gray-50/50 transition">
-                                <td class="px-6 py-4">
-                                    <div class="font-medium text-gray-900">
-                                        {{ $service['service_name'] }}
-                                    </div>
-                                </td>
-
-                                <td class="px-6 py-4">
-                                    @if ($service['type'] === 'order')
-                                        <span
-                                            class="inline-flex px-2.5 py-1 rounded-full
-                                                     text-xs font-medium
-                                                     bg-gray-100 text-gray-700">
-                                            Разовая
-                                        </span>
-                                    @else
-                                        <span
-                                            class="inline-flex px-2.5 py-1 rounded-full
-                                                     text-xs font-medium
-                                                     bg-purple-100 text-purple-700">
-                                            Подписка
-                                        </span>
-                                    @endif
-                                </td>
-
-                                <td class="px-6 py-4 text-gray-600">
-                                    @if ($service['date'])
-                                        {{ \Carbon\Carbon::parse($service['date'])->format('d/m/Y') }}
-                                    @else
-                                        —
-                                    @endif
-                                </td>
-
-                                <td class="px-6 py-4 text-gray-600">
-                                    {{ $service['period'] ?? '—' }}
-                                </td>
-
-                                <td class="px-6 py-4 font-mono font-medium text-gray-900">
-                                    {{ number_format((float) $service['amount'], 2) }} ₼
-                                </td>
-
-                                <td class="px-6 py-4">
-                                    @include('partials.badge', [
-                                        'status' => $service['status'],
-                                    ])
-                                </td>
-
-                                <td class="px-6 py-4 text-right">
-                                    <div class="inline-flex items-center gap-3">
-                                        @can('update', $service['subject'])
-                                            <a href="{{ $service['edit_route'] }}"
-                                                class="text-gray-400 hover:text-blue-600 text-xs transition">
-                                                Редактировать
-                                            </a>
-                                        @endcan
-
-                                        @can('delete', $service['subject'])
-                                            @if ($service['can_delete'])
-                                                <form action="{{ $service['type'] === 'order' ? route('orders.destroy', $service['subject']) : route('subscriptions.destroy', $service['subject']) }}"
-                                                    method="POST" onsubmit="return confirm('Удалить предмет договора?')">
-                                                    @csrf
-                                                    @method('DELETE')
-                                                    <button type="submit"
-                                                        class="text-red-400 hover:text-red-600 text-xs transition">
-                                                        Удалить
-                                                    </button>
-                                                </form>
-                                            @endif
-                                        @endcan
-                                    </div>
-                                </td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
-        @else
-            {{-- Пустое состояние --}}
-            <div class="px-6 py-14 text-center">
-                <div
-                    class="mx-auto w-14 h-14 rounded-xl border-2 border-gray-200
-                            flex items-center justify-center text-gray-300">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor" stroke-width="1.5">
-
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 9.75h16.5m-15 0 1.5-4.5h10.5
-                                                 l1.5 4.5m-13.5 0v7.5a1.5 1.5 0 0 0
-                                                 1.5 1.5h10.5a1.5 1.5 0 0 0
-                                                 1.5-1.5v-7.5m-9 4.5h3" />
-                    </svg>
+                    @if (\Illuminate\Support\Facades\Gate::allows('create', [\App\Models\Order::class, $contract]) || \Illuminate\Support\Facades\Gate::allows('create', [\App\Models\Subscription::class, $contract]))
+                        <a href="{{ route('contracts.subjects.create', $contract) }}" class="crm-light-action">
+                            + Добавить
+                        </a>
+                    @endif
                 </div>
 
-                <h3 class="mt-5 text-base font-semibold text-gray-900">
-                    Предмет договора пока не добавлен
-                </h3>
+                @if ($services->isNotEmpty())
+                    <div class="crm-table-scroll">
+                        <table class="crm-table min-w-[820px] table-fixed">
+                            <colgroup>
+                                <col class="w-[18%]">
+                                <col class="w-[18%]">
+                                <col class="w-[10%]">
+                                <col class="w-[12%]">
+                                <col class="w-[12%]">
+                                <col class="w-[15%]">
+                                <col class="w-[15%]">
+                            </colgroup>
+                            <thead>
+                                <tr>
+                                    <th>Тип</th>
+                                    <th>Название</th>
+                                    <th>Дата</th>
+                                    <th>Период</th>
+                                    <th>Сумма</th>
+                                    <th>Статус</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($services as $service)
+                                    <tr>
+                                        <td>
+                                            @include('partials.badge', [
+                                                'status' => $service['type'] === 'order' ? 'one_time' : 'subscription',
+                                                'label' => $service['type_name'],
+                                            ])
+                                        </td>
+                                        <td class="crm-table-primary">{{ $service['service_name'] }}</td>
+                                        <td class="crm-table-date">
+                                            {{ $service['date'] ? \Carbon\Carbon::parse($service['date'])->format('d/m/Y') : '—' }}
+                                        </td>
+                                        <td>{{ $service['period'] ?? '—' }}</td>
+                                        <td class="crm-table-numeric font-medium text-slate-900">
+                                            {{ number_format((float) $service['amount'], 2) }} ₼
+                                        </td>
+                                        <td>@include('partials.badge', ['status' => $service['status']])</td>
+                                        <td class="crm-table-actions">
+                                            <div class="inline-flex items-center gap-3">
+                                                @can('update', $service['subject'])
+                                                    <a href="{{ $service['edit_route'] }}" class="crm-table-action-link">
+                                                        Изменить
+                                                    </a>
+                                                @endcan
 
-                <p class="mt-2 text-sm text-gray-500">
-                    Добавьте разовую услугу или подписку.
-                </p>
-            </div>
-        @endif
+                                                @can('delete', $service['subject'])
+                                                    @if ($service['can_delete'])
+                                                        <form action="{{ $service['type'] === 'order' ? route('orders.destroy', $service['subject']) : route('subscriptions.destroy', $service['subject']) }}"
+                                                            method="POST" onsubmit="return confirm('Удалить предмет договора?')">
+                                                            @csrf
+                                                            @method('DELETE')
+                                                            <button type="submit"
+                                                                class="text-xs font-semibold text-red-500 transition hover:text-red-700">
+                                                                Удалить
+                                                            </button>
+                                                        </form>
+                                                    @endif
+                                                @endcan
+                                            </div>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @else
+                    <p class="px-4 py-5 text-sm text-slate-500">Предметы договора пока не добавлены.</p>
+                @endif
+            </section>
+        </div>
     </div>
 
 @endsection
