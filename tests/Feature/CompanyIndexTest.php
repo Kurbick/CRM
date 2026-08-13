@@ -65,6 +65,38 @@ class CompanyIndexTest extends TestCase
             ->assertDontSee($removedField);
     }
 
+    public function test_company_create_and_edit_share_the_compact_form_workspace(): void
+    {
+        $company = $this->company('Workspace Company', 'Workspace', '1234567890', 'suspended');
+
+        $create = $this->get(route('companies.create'))->assertOk();
+
+        $create->assertSee('Новая компания')
+            ->assertSee('data-testid="company-form-workspace"', false)
+            ->assertSee('grid grid-cols-1 gap-4 md:grid-cols-2', false)
+            ->assertSeeInOrder(['Активна', 'Приостановлена', 'В архиве'], false)
+            ->assertDontSee('>Активен<', false)
+            ->assertDontSee('lg:grid-cols-3', false)
+            ->assertDontSee('name="invoice_mode"', false);
+
+        foreach ([
+            'name', 'short_name', 'type', 'voen', 'email', 'phone', 'website', 'status',
+            'legal_address', 'actual_address', 'bank_name', 'iban', 'bank_code', 'bank_voen', 'swift', 'comment',
+        ] as $field) {
+            $create->assertSee('name="'.$field.'"', false);
+        }
+
+        $this->get(route('companies.edit', ['company' => $company, 'origin' => 'show']))
+            ->assertOk()
+            ->assertSee('Редактирование компании')
+            ->assertSee('Назад к компании')
+            ->assertSee($company->name)
+            ->assertSee('value="'.$company->short_name.'"', false)
+            ->assertSee('value="suspended" selected', false)
+            ->assertSee('name="origin" value="show"', false)
+            ->assertSee('data-testid="company-form-workspace"', false);
+    }
+
     public function test_company_name_and_open_action_link_to_show_without_filter_context(): void
     {
         $company = $this->company('Linked Company');
