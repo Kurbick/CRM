@@ -20,7 +20,7 @@ class AccessPermissionController extends Controller
 
         $roles = Role::query()
             ->where('guard_name', 'web')
-            ->withCount('users')
+            ->withCount(['users', 'permissions'])
             ->orderBy('sort_order')
             ->orderBy('display_name')
             ->orderBy('name')
@@ -44,6 +44,7 @@ class AccessPermissionController extends Controller
             'managedAssigned' => $selectedRole->isAdministrator() ? $managedNames : $managedAssigned,
             'unknownPermissions' => $unknownPermissions,
             'immutable' => $selectedRole->isAdministrator(),
+            'canManageRoles' => $request->user()?->can('roles.view') ?? false,
         ]);
     }
 

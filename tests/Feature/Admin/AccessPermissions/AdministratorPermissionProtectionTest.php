@@ -15,8 +15,11 @@ class AdministratorPermissionProtectionTest extends AccessPermissionAdministrati
         $role = Role::findByName('administrator');
         $response = $this->actingAs($admin)->get(route('admin.access-permissions.index', ['role' => $role->id]));
         $content = $response->getContent();
-        $response->assertSeeText('Назначенных прав: 43 из 43')->assertSeeText('Группа „Администратор“ всегда имеет полный доступ.')
-            ->assertDontSee('Сохранить права')->assertDontSee('data-category-select-all', false);
+        $response->assertSeeText('Администратор')->assertSeeText('Системная')->assertSeeText('43 из 43 прав')
+            ->assertDontSee('Группа „Администратор“ всегда имеет полный доступ.')
+            ->assertSee('data-permission-scroll-area', false)
+            ->assertDontSee('Сохранить права')->assertDontSee('data-permission-actions', false)
+            ->assertDontSee('data-category-select-all', false);
         $this->assertSame(43, substr_count($content, 'name="permissions[]"'));
         $this->assertSame(43, substr_count($content, 'checked'));
         $this->assertGreaterThanOrEqual(43, substr_count($content, 'disabled'));

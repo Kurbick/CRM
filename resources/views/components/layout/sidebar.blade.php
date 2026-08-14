@@ -5,6 +5,11 @@
         || $user->can('users.view')
         || $user->can('roles.view')
         || $user->can('access_permissions.view');
+    $canAccessWorkspace = $user->can('roles.view') || $user->can('access_permissions.view');
+    $accessWorkspaceUrl = $user->can('access_permissions.view')
+        ? route('admin.access-permissions.index')
+        : route('admin.roles.index');
+    $accessWorkspaceActive = request()->routeIs('admin.roles.*', 'admin.access-permissions.*');
 
     $contractsActive = request()->routeIs(
         'contracts.*',
@@ -97,27 +102,16 @@
                     </a>
                 @endcan
 
-                @can('roles.view')
-                    <a href="{{ route('admin.roles.index') }}" @click="sidebarOpen = false"
-                        class="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition {{ request()->routeIs('admin.roles.*') ? 'bg-slate-100 text-slate-950' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950' }}"
-                        @if (request()->routeIs('admin.roles.*')) aria-current="page" @endif>
-                        <svg class="h-4 w-4 shrink-0 {{ request()->routeIs('admin.roles.*') ? 'text-slate-900' : 'text-slate-400' }}" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M7 5.5h10M7 12h10M7 18.5h10M4.5 5.5h.01M4.5 12h.01M4.5 18.5h.01" />
-                        </svg>
-                        <span>Группы</span>
-                    </a>
-                @endcan
-
-                @can('access_permissions.view')
-                    <a href="{{ route('admin.access-permissions.index') }}" @click="sidebarOpen = false"
-                        class="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition {{ request()->routeIs('admin.access-permissions.*') ? 'bg-slate-100 text-slate-950' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950' }}"
-                        @if (request()->routeIs('admin.access-permissions.*')) aria-current="page" @endif>
-                        <svg class="h-4 w-4 shrink-0 {{ request()->routeIs('admin.access-permissions.*') ? 'text-slate-900' : 'text-slate-400' }}" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                @if ($canAccessWorkspace)
+                    <a href="{{ $accessWorkspaceUrl }}" @click="sidebarOpen = false"
+                        class="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition {{ $accessWorkspaceActive ? 'bg-slate-100 text-slate-950' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950' }}"
+                        @if ($accessWorkspaceActive) aria-current="page" @endif>
+                        <svg class="h-4 w-4 shrink-0 {{ $accessWorkspaceActive ? 'text-slate-900' : 'text-slate-400' }}" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 3.5 19 6v5.1c0 4.45-2.97 7.76-7 9.4-4.03-1.64-7-4.95-7-9.4V6l7-2.5Zm0 4.2v4.1m0 3.5v.01" />
                         </svg>
-                        <span>Права доступа</span>
+                        <span>Доступ</span>
                     </a>
-                @endcan
+                @endif
             </div>
         @endif
     </nav>

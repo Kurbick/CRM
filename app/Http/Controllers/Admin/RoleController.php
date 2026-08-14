@@ -11,14 +11,19 @@ use App\Http\Requests\Admin\Roles\StoreRoleRequest;
 use App\Http\Requests\Admin\Roles\UpdateRoleRequest;
 use App\Models\Role;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 
 class RoleController extends Controller
 {
-    public function index(): View
+    public function index(): View|RedirectResponse
     {
         Gate::authorize('roles.view');
+
+        if (Gate::allows('access_permissions.view')) {
+            return redirect()->route('admin.access-permissions.index');
+        }
 
         $roles = Role::query()
             ->where('guard_name', 'web')
@@ -34,9 +39,10 @@ class RoleController extends Controller
     public function store(StoreRoleRequest $request, CreateRole $action): RedirectResponse
     {
         Gate::authorize('roles.create');
-        $action->handle($request->validated());
+        $role = $action->handle($request->validated());
 
-        return redirect()->route('admin.roles.index')->with('success', 'Группа создана. Права доступа можно будет настроить отдельно.');
+        return $this->workspaceRedirect($request, $role)
+            ->with('success', 'Группа создана.');
     }
 
     public function update(UpdateRoleRequest $request, Role $role, UpdateRole $action): RedirectResponse
@@ -45,10 +51,11 @@ class RoleController extends Controller
         abort_unless($role->guard_name === 'web', 404);
         $action->handle($role, $request->validated());
 
-        return redirect()->route('admin.roles.index')->with('success', 'Данные группы обновлены.');
+        return $this->workspaceRedirect($request, $role)
+            ->with('success', 'Данные группы обновлены.');
     }
 
-    public function destroy(Role $role, DeleteRole $action): RedirectResponse
+    public function destroy(Request $request, Role $role, DeleteRole $action): RedirectResponse
     {
         Gate::authorize('roles.delete');
         abort_unless($role->guard_name === 'web', 404);
@@ -59,6 +66,15 @@ class RoleController extends Controller
             return back()->with('error', $exception->getMessage())->with('openRole', $role->getKey());
         }
 
-        return redirect()->route('admin.roles.index')->with('success', 'Группа удалена.');
+        return $this->workspaceRedirect($request)->with('success', 'Группа удалена.');
+    }
+
+    private function workspaceRedirect(Request $request, ?Role $role = null): RedirectResponse
+    {
+        if ($request->user()?->can('access_permissions.view')) {
+            return redirect()->route('admin.access-permissions.index', $role ? ['role' => $role->getKey()] : []);
+        }
+
+        return redirect()->route('admin.roles.index');
     }
 }

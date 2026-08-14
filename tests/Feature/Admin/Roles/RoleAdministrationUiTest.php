@@ -6,30 +6,15 @@ use App\Models\User;
 
 class RoleAdministrationUiTest extends RoleAdministrationTestCase
 {
-    public function test_index_renders_compact_accessible_accordions_and_counts(): void
+    public function test_groups_url_redirects_to_access_workspace_when_permissions_are_visible(): void
     {
         $admin = $this->administrator();
         $custom = $this->customRole();
         User::factory()->create()->assignRole($custom);
 
-        $response = $this->actingAs($admin)->get(route('admin.roles.index'));
-        $response->assertSeeText('Настройка групп пользователей и их назначения в CRM.')
-            ->assertSee('data-create-role-accordion', false)
-            ->assertSee('aria-controls="create-role-content"', false)
-            ->assertSee('data-role-accordion=', false)
-            ->assertSee('aria-controls="role-'.$custom->id.'-content"', false)
-            ->assertSee('id="role-'.$custom->id.'-content"', false)
-            ->assertSee('x-bind:aria-expanded="open.toString()"', false)
-            ->assertSee('x-cloak', false)
-            ->assertSeeText('Администратор')->assertSeeText($custom->display_name)
-            ->assertDontSee('data-role-type-badge', false)
-            ->assertSeeText('Системная группа')->assertSeeText('Пользовательская группа')
-            ->assertSeeText('Пользователей: 1')->assertSeeText('Прав: 43')
-            ->assertDontSee('type="checkbox"', false)
-            ->assertDontSee('name="name"', false)
-            ->assertDontSee('name="guard_name"', false)
-            ->assertDontSee('name="is_system"', false)
-            ->assertDontSee('name="sort_order"', false);
+        $this->actingAs($admin)
+            ->get(route('admin.roles.index'))
+            ->assertRedirect(route('admin.access-permissions.index'));
     }
 
     public function test_delete_forms_follow_role_type_assignment_and_permission(): void

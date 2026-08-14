@@ -23,9 +23,11 @@ class RoleAdministrationAccessTest extends RoleAdministrationTestCase
         $this->delete(route('admin.roles.destroy', $role))->assertForbidden();
     }
 
-    public function test_administrator_accesses_index_via_registry_gate_before(): void
+    public function test_administrator_is_redirected_to_the_unified_access_workspace(): void
     {
-        $this->actingAs($this->administrator())->get(route('admin.roles.index'))->assertOk();
+        $this->actingAs($this->administrator())
+            ->get(route('admin.roles.index'))
+            ->assertRedirect(route('admin.access-permissions.index'));
     }
 
     public function test_settings_links_and_dividers_are_independent(): void

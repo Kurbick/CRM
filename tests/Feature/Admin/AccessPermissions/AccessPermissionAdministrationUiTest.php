@@ -7,43 +7,49 @@ use App\Support\Access\PermissionRegistry;
 
 class AccessPermissionAdministrationUiTest extends AccessPermissionAdministrationTestCase
 {
-    public function test_editable_matrix_uses_registry_categories_and_native_controls(): void
+    public function test_editable_workspace_uses_flat_registry_categories_and_native_controls(): void
     {
         $actor = $this->actorWithPermissions(['access_permissions.view', 'access_permissions.update']);
         $role = Role::findByName('accountant');
         $response = $this->actingAs($actor)->get(route('admin.access-permissions.index', ['role' => $role->id]));
         $content = $response->getContent();
 
-        $response->assertSeeText('Настройка разрешений для групп пользователей CRM.')
+        $response->assertSeeText('Управление группами пользователей и их правами.')
             ->assertSeeText($role->display_name)
             ->assertSee(route('admin.access-permissions.update', $role))
             ->assertSee('name="_method" value="PUT"', false)
-            ->assertSee('data-permission-matrix', false)
+            ->assertSee('data-permission-workspace', false)
+            ->assertSee('data-permission-scroll-area', false)
+            ->assertSee('data-permission-actions', false)
             ->assertSee('data-category-select-all', false)
-            ->assertSee('x-bind:aria-expanded="open.toString()"', false)
-            ->assertSee('aria-controls="permission-category-invoices"', false)
-            ->assertSee('id="permission-category-invoices"', false)
-            ->assertSee('x-cloak', false)
-            ->assertSeeText('Сохранить права')
+            ->assertDontSee('data-permission-matrix', false)
+            ->assertDontSee('aria-controls="permission-category-invoices"', false)
+            ->assertSeeText('Сохранить')
             ->assertDontSee('Выбрать всё для всех')
             ->assertDontSee('permission_slug')->assertDontSee('user_ids');
         $this->assertSame(43, substr_count($content, 'name="permissions[]"'));
         $this->assertSame(11, substr_count($content, 'data-category-select-all'));
+        $this->assertLessThan(
+            strpos($content, 'data-permission-actions'),
+            strpos($content, 'data-permission-scroll-area')
+        );
         foreach (PermissionRegistry::grouped() as $category) {
             $response->assertSeeText($category['label']);
         }
     }
 
-    public function test_read_only_user_sees_disabled_matrix_without_save_form(): void
+    public function test_read_only_user_sees_disabled_workspace_without_save_form(): void
     {
         $actor = $this->actorWithPermissions(['access_permissions.view']);
         $role = Role::findByName('viewer');
         $response = $this->actingAs($actor)->get(route('admin.access-permissions.index', ['role' => $role->id]));
         $this->assertSame(43, substr_count($response->getContent(), 'name="permissions[]"'));
-        $response->assertDontSee('Сохранить права')->assertDontSee('data-category-select-all', false)->assertSee('disabled', false);
+        $response->assertSee('data-permission-scroll-area', false)
+            ->assertDontSee('Сохранить права')->assertDontSee('data-permission-actions', false)
+            ->assertDontSee('data-category-select-all', false)->assertSee('disabled', false);
     }
 
-    public function test_selector_contains_only_web_roles_using_display_names(): void
+    public function test_group_list_contains_only_web_roles_using_display_names(): void
     {
         $actor = $this->actorWithPermissions(['access_permissions.view']);
         $custom = $this->customRole('Проектные менеджеры');

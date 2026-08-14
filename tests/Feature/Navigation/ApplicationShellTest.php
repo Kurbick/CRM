@@ -71,8 +71,9 @@ class ApplicationShellTest extends TestCase
         $adminResponse->assertSeeText('Администрирование')
             ->assertSeeText('Наша организация')
             ->assertSeeText('Пользователи')
-            ->assertSeeText('Группы')
-            ->assertSeeText('Права доступа');
+            ->assertSeeText('Доступ')
+            ->assertDontSee('<span>Группы</span>', false)
+            ->assertDontSee('<span>Права доступа</span>', false);
     }
 
     public function test_user_dropdown_contains_only_password_change_and_logout(): void
