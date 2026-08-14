@@ -23,8 +23,8 @@
         @endcan
     </div>
 
-    <form method="GET" action="{{ route('admin.users.index') }}" class="mb-6 grid gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm md:grid-cols-4">
-        <input type="search" name="search" value="{{ $search }}" placeholder="Имя или email" class="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+    <form method="GET" action="{{ route('admin.users.index') }}" class="mb-6 flex flex-col gap-3 border-b border-gray-200 pb-5 lg:flex-row lg:items-center">
+        <input type="search" name="search" value="{{ $search }}" placeholder="Имя или email..." class="min-w-0 flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
         <select name="status" class="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500 {{ $status === '' ? 'crm-filter-neutral' : '' }}">
             <option value="">Все статусы</option>
             <option value="active" @selected($status === 'active')>Активные</option>
@@ -37,8 +37,8 @@
             @endforeach
             <option value="none" @selected($role === 'none')>Без группы</option>
         </select>
-        <div class="flex gap-2">
-            <button class="flex-1 rounded-lg bg-gray-800 px-4 py-2 text-sm font-medium text-white hover:bg-gray-900">Применить</button>
+        <div class="flex shrink-0 gap-2">
+            <button class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Найти</button>
             @if ($filtersActive)
                 <a href="{{ route('admin.users.index') }}" class="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">Сбросить</a>
             @endif
@@ -70,21 +70,19 @@
                                 <span class="crm-table-sort-indicator {{ $sort === 'last_login_at' ? 'crm-table-sort-indicator-active' : '' }}">{{ $sort === 'last_login_at' ? ($direction === 'asc' ? '↑' : '↓') : '↕' }}</span>
                             </a>
                         </th>
-                        <th class="crm-table-actions">Действия</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse ($users as $user)
-                        <tr>
+                        <x-tables.clickable-row :url="route('admin.users.edit', $user)" :label="'Профиль пользователя '.$user->name">
                             <td><div class="crm-table-primary">{{ $user->name }}</div><div class="crm-table-secondary">{{ $user->email }}</div></td>
                             <td><x-admin.users.role-badge :role="$user->roles->first()" /></td>
                             <td><x-admin.users.status-badge :active="$user->is_active" /></td>
-                            <td class="crm-table-date">{{ $user->last_login_at?->translatedFormat('d.m.Y H:i') ?? 'Никогда' }}</td>
-                            <td class="crm-table-actions"><a href="{{ route('admin.users.edit', $user) }}" class="crm-table-action-link">Открыть</a></td>
-                        </tr>
+                            <td class="crm-table-date">{{ $user->last_login_at?->copy()->setTimezone('Asia/Baku')->translatedFormat('d.m.Y H:i') ?? 'Никогда' }}</td>
+                        </x-tables.clickable-row>
                     @empty
                         <tr>
-                            <td colspan="5" class="crm-table-empty">
+                            <td colspan="4" class="crm-table-empty">
                                 <span class="crm-table-empty-message">Пользователи не найдены.</span>
                                 @if ($filtersActive)
                                     <a href="{{ route('admin.users.index') }}" class="crm-table-empty-action">Сбросить фильтры</a>

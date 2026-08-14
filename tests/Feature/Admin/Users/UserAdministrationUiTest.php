@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Admin\Users;
 
+use App\Models\Role;
 use App\Models\User;
 
 class UserAdministrationUiTest extends UserAdministrationTestCase
@@ -13,10 +14,16 @@ class UserAdministrationUiTest extends UserAdministrationTestCase
         $withRole->assignRole('viewer');
         User::factory()->create();
         $this->actingAs($viewer)->get(route('admin.users.index'))->assertSeeText('Управление внутренними учётными записями и доступом к CRM.')->assertSeeText('Пользователь')->assertDontSee('Добавить пользователя');
-        $this->get(route('admin.users.index'))->assertSee('data-user-role-badge', false)->assertSee('data-user-status-badge', false)->assertSeeText('Только просмотр')->assertSeeText('Без группы');
+        $this->get(route('admin.users.index'))
+            ->assertSee('data-user-role-badge', false)->assertSee('data-user-status-badge', false)->assertSeeText('Только просмотр')->assertSeeText('Без группы')
+            ->assertSee('method="GET" action="'.route('admin.users.index').'"', false)
+            ->assertSeeText('Найти')->assertDontSeeText('Применить')
+            ->assertSee('data-row-url=', false)->assertDontSee('>Открыть<', false);
         $creator = $this->actorWithPermissions(['users.view', 'users.create', 'users.assign_role']);
         $this->actingAs($creator)->get(route('admin.users.index'))->assertSee('Добавить пользователя');
-        $this->get(route('admin.users.create'))->assertSee('type="password"', false)->assertSee('autocomplete="new-password"', false)->assertSeeText('Не менее 12 символов')->assertDontSee('value="Strong', false);
+        $this->get(route('admin.users.create'))
+            ->assertSee('data-user-create-form', false)->assertSee('type="password"', false)->assertSee('autocomplete="new-password"', false)
+            ->assertSeeText('Основная информация')->assertSeeText('Доступ')->assertSeeText('Не менее 12 символов')->assertDontSee('value="Strong', false);
     }
 
     public function test_edit_has_separate_forms_methods_and_no_delete(): void
@@ -25,13 +32,11 @@ class UserAdministrationUiTest extends UserAdministrationTestCase
         $target = User::factory()->create();
         $target->assignRole('viewer');
         $response = $this->actingAs($admin)->get(route('admin.users.edit', $target));
-        $response->assertSeeText('Основные данные')->assertSeeText('Группа')->assertSeeText('Статус учётной записи')->assertSeeText('Временный пароль')
+        $response->assertSeeText('Основная информация')->assertSeeText('Группа')->assertSeeText('Статус учётной записи')->assertSeeText('Временный пароль')->assertSeeText('Последний вход')
             ->assertSee(route('admin.users.update', $target))->assertSee(route('admin.users.role.update', $target))->assertSee(route('admin.users.deactivate', $target))->assertSee(route('admin.users.password.update', $target))
             ->assertSee('name="_method" value="PUT"', false)->assertSee('name="_method" value="PATCH"', false)->assertDontSee('Удалить пользователя')
-            ->assertSee('aria-controls="user-details-content"', false)->assertSee('aria-controls="user-role-content"', false)->assertSee('aria-controls="user-status-content"', false)->assertSee('aria-controls="user-password-content"', false)
-            ->assertSee('x-bind:aria-expanded="open.toString()"', false)->assertSee('id="user-details-content"', false)->assertSee('id="user-role-content"', false)->assertSee('id="user-status-content"', false)->assertSee('id="user-password-content"', false)
-            ->assertSee('data-initial-open="false"', false)->assertSee('x-cloak', false)->assertDontSee('value="Strong', false);
-        $this->assertSame(4, substr_count($response->getContent(), 'data-accordion-section='));
+            ->assertSee('data-user-details', false)->assertSee('data-user-role', false)->assertSee('data-user-status', false)->assertSee('data-user-security', false)
+            ->assertDontSee('data-accordion-section=', false)->assertDontSee('aria-controls="user-', false)->assertDontSee('value="Strong', false);
     }
 
     public function test_read_only_and_self_explanations_are_rendered(): void
@@ -43,7 +48,33 @@ class UserAdministrationUiTest extends UserAdministrationTestCase
         $this->actingAs($admin)->get(route('admin.users.edit', $admin))
             ->assertSeeText('Изменить собственную группу может другой администратор.')
             ->assertSeeText('Отключить собственную учётную запись может другой администратор.')
-            ->assertSeeText('Для своей учётной записи используйте пункт')->assertSee(route('password.change'));
+            ->assertSeeText('Для своей учётной записи используйте пункт')->assertSee(route('password.change'))
+            ->assertSee('data-user-self-restriction class="text-sm text-gray-500"', false)
+            ->assertDontSee('data-user-self-restriction class="text-sm text-amber-700"', false);
+    }
+
+    public function test_create_and_edit_forms_preserve_old_input(): void
+    {
+        $creator = $this->actorWithPermissions(['users.create', 'users.assign_role']);
+        $role = Role::findByName('viewer');
+
+        $this->actingAs($creator)->withSession(['_old_input' => [
+            'name' => 'Новое имя',
+            'email' => 'new@example.test',
+            'role_id' => $role->id,
+        ]])->get(route('admin.users.create'))
+            ->assertSee('value="Новое имя"', false)->assertSee('value="new@example.test"', false)
+            ->assertSee('value="'.$role->id.'" selected', false);
+
+        $editor = $this->actorWithPermissions(['users.view', 'users.update']);
+        $target = User::factory()->create();
+        $this->actingAs($editor)->withSession(['_old_input' => [
+            '_section' => 'user',
+            'name' => 'Исправленное имя',
+            'email' => 'edited@example.test',
+        ]])->get(route('admin.users.edit', $target))
+            ->assertSee('userOpen: true', false)->assertSee('value="Исправленное имя"', false)
+            ->assertSee('value="edited@example.test"', false);
     }
 
     public function test_logout_remains_post_form(): void
@@ -51,23 +82,23 @@ class UserAdministrationUiTest extends UserAdministrationTestCase
         $this->actingAs($this->administrator())->get(route('admin.users.index'))->assertSee('method="POST" action="'.route('logout').'"', false);
     }
 
-    public function test_validation_errors_open_only_their_accordion_section(): void
+    public function test_validation_errors_open_only_their_compact_form(): void
     {
         $admin = $this->administrator();
         $target = User::factory()->create();
         $target->assignRole('viewer');
         $this->actingAs($admin)->withSession(['_old_input' => ['_section' => 'user']])->get(route('admin.users.edit', $target))
-            ->assertSee('data-accordion-section="user" data-initial-open="true"', false)->assertSee('data-accordion-section="role" data-initial-open="false"', false);
+            ->assertSee('userOpen: true', false)->assertSee('roleOpen: false', false);
         $this->withSession(['_old_input' => ['_section' => 'role']])->get(route('admin.users.edit', $target))
-            ->assertSee('data-accordion-section="role" data-initial-open="true"', false);
+            ->assertSee('roleOpen: true', false);
         $this->withSession(['_old_input' => ['_section' => 'password']])->get(route('admin.users.edit', $target))
-            ->assertSee('data-accordion-section="password" data-initial-open="true"', false);
+            ->assertSee('passwordOpen: true', false);
     }
 
-    public function test_status_error_opens_status_section(): void
+    public function test_status_error_is_rendered_in_the_account_section(): void
     {
         $admin = $this->administrator();
         $this->actingAs($admin)->withSession(['error' => 'Нельзя отключить пользователя.'])->get(route('admin.users.edit', $admin))
-            ->assertSee('data-accordion-section="status" data-initial-open="true"', false);
+            ->assertSee('data-user-status', false)->assertSeeText('Нельзя отключить пользователя.');
     }
 }

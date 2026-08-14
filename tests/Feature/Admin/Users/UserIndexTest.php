@@ -3,6 +3,7 @@
 namespace Tests\Feature\Admin\Users;
 
 use App\Models\User;
+use Illuminate\Support\Carbon;
 
 class UserIndexTest extends UserAdministrationTestCase
 {
@@ -13,6 +14,17 @@ class UserIndexTest extends UserAdministrationTestCase
         $target->assignRole('viewer');
         $this->actingAs($actor)->get(route('admin.users.index'))
             ->assertOk()->assertSee('Иван Тестовый')->assertSee('ivan@example.test')->assertSee('Только просмотр')->assertSee('Отключён')->assertSee('Никогда');
+    }
+
+    public function test_last_login_is_displayed_in_baku_timezone_on_index_and_detail(): void
+    {
+        $actor = $this->actorWithPermissions(['users.view']);
+        $target = User::factory()->create(['last_login_at' => Carbon::create(2026, 8, 14, 7, 19, 0, 'UTC')]);
+
+        $this->actingAs($actor)->get(route('admin.users.index'))
+            ->assertOk()->assertSee('14.08.2026 11:19')->assertDontSee('14.08.2026 07:19');
+        $this->get(route('admin.users.edit', $target))
+            ->assertOk()->assertSee('14.08.2026 11:19')->assertDontSee('14.08.2026 07:19');
     }
 
     public function test_search_status_and_role_filters_work(): void
