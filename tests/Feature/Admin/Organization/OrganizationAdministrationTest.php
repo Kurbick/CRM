@@ -25,15 +25,24 @@ class OrganizationAdministrationTest extends TestCase
         $administrator = $this->administrator();
 
         $this->actingAs($administrator)
-            ->get(route('admin.organization.edit'))
+            ->get(route('admin.organization.show'))
             ->assertOk()
             ->assertSee('Наша организация')
-            ->assertSee('Сохранить');
+            ->assertSee(route('admin.organization.edit'))
+            ->assertDontSee('name="name"', false);
+
+        $this->get(route('admin.organization.edit'))
+            ->assertOk()
+            ->assertSee('data-organization-edit-form', false)
+            ->assertSee(route('admin.organization.update'))
+            ->assertSee('name="_method" value="PUT"', false)
+            ->assertSee('name="name"', false)
+            ->assertSee('name="swift"', false);
 
         $payload = $this->payload('ORG A');
         $this->actingAs($administrator)
             ->put(route('admin.organization.update'), $payload)
-            ->assertRedirect(route('admin.organization.edit'))
+            ->assertRedirect(route('admin.organization.show'))
             ->assertSessionHas('success');
 
         $this->assertDatabaseHas('organizations', [
@@ -49,11 +58,43 @@ class OrganizationAdministrationTest extends TestCase
         $this->assertDatabaseCount('organizations', 1);
     }
 
+    public function test_show_displays_empty_organization_fields_as_muted_dashes(): void
+    {
+        $administrator = $this->administrator();
+        Organization::query()->create(['name' => 'Only Name']);
+
+        $response = $this->actingAs($administrator)->get(route('admin.organization.show'));
+
+        $response->assertOk()
+            ->assertSeeText('Основная информация')
+            ->assertSeeText('Банковские реквизиты')
+            ->assertSeeText('Only Name')
+            ->assertSee('data-organization-empty-value', false)
+            ->assertSee('text-gray-400', false)
+            ->assertDontSee('name="bank_name"', false);
+        $this->assertSame(6, substr_count($response->getContent(), 'data-organization-empty-value'));
+    }
+
+    public function test_edit_preserves_old_input_and_returns_to_show_when_cancelled(): void
+    {
+        $administrator = $this->administrator();
+        Organization::query()->create($this->payload('CURRENT'));
+
+        $this->actingAs($administrator)->withSession(['_old_input' => [
+            'name' => 'Исправленное название',
+            'bank_name' => 'Новый банк',
+        ]])->get(route('admin.organization.edit'))
+            ->assertSee('value="Исправленное название"', false)
+            ->assertSee('value="Новый банк"', false)
+            ->assertSee('href="'.route('admin.organization.show').'"', false);
+    }
+
     public function test_non_administrator_cannot_view_or_update(): void
     {
         $user = User::factory()->create();
 
-        $this->actingAs($user)->get(route('admin.organization.edit'))->assertForbidden();
+        $this->actingAs($user)->get(route('admin.organization.show'))->assertForbidden();
+        $this->get(route('admin.organization.edit'))->assertForbidden();
         $this->actingAs($user)->put(route('admin.organization.update'), $this->payload('FORBIDDEN'))
             ->assertForbidden();
         $this->assertDatabaseCount('organizations', 0);
@@ -95,6 +136,7 @@ class OrganizationAdministrationTest extends TestCase
     {
         $this->assertNull(app('router')->getRoutes()->getByName('admin.organization.destroy'));
         $this->assertNull(app('router')->getRoutes()->getByName('admin.organization.index'));
+        $this->assertSame(['GET', 'HEAD'], app('router')->getRoutes()->getByName('admin.organization.show')->methods());
         $this->assertSame(['GET', 'HEAD'], app('router')->getRoutes()->getByName('admin.organization.edit')->methods());
     }
 

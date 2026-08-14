@@ -70,6 +70,7 @@ class ApplicationShellTest extends TestCase
         $adminResponse = $this->actingAs($administrator)->get(route('home'));
         $adminResponse->assertSeeText('Администрирование')
             ->assertSeeText('Наша организация')
+            ->assertSee('href="'.route('admin.organization.show').'"', false)
             ->assertSeeText('Пользователи')
             ->assertSeeText('Доступ')
             ->assertDontSee('<span>Группы</span>', false)

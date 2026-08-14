@@ -33,7 +33,8 @@ Route::middleware(['auth', 'active', 'password.changed'])->group(function (): vo
     Route::get('home', [HomeController::class, 'index'])->name('home');
 
     Route::prefix('admin/organization')->name('admin.organization.')->controller(AdminOrganizationController::class)->group(function (): void {
-        Route::get('/', 'edit')->name('edit');
+        Route::get('/', 'show')->name('show');
+        Route::get('edit', 'edit')->name('edit');
         Route::put('/', 'update')->name('update');
     });
 

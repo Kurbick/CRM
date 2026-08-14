@@ -81,7 +81,7 @@
             <p class="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Администрирование</p>
             <div class="space-y-1">
                 @if ($isAdministrator)
-                    <a href="{{ route('admin.organization.edit') }}" @click="sidebarOpen = false"
+                    <a href="{{ route('admin.organization.show') }}" @click="sidebarOpen = false"
                         class="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition {{ request()->routeIs('admin.organization.*') ? 'bg-slate-100 text-slate-950' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950' }}"
                         @if (request()->routeIs('admin.organization.*')) aria-current="page" @endif>
                         <svg class="h-4 w-4 shrink-0 {{ request()->routeIs('admin.organization.*') ? 'text-slate-900' : 'text-slate-400' }}" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor">

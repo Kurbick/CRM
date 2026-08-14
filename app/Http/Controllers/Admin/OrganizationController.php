@@ -12,6 +12,15 @@ use Illuminate\View\View;
 
 class OrganizationController extends Controller
 {
+    public function show(Request $request): View
+    {
+        $this->authorizeAdministrator($request);
+
+        return view('admin.organization.show', [
+            'organization' => Organization::query()->current()->first(),
+        ]);
+    }
+
     public function edit(Request $request): View
     {
         $this->authorizeAdministrator($request);
@@ -30,7 +39,7 @@ class OrganizationController extends Controller
             $request->validated(),
         );
 
-        return redirect()->route('admin.organization.edit')->with('success', 'Данные нашей организации сохранены.');
+        return redirect()->route('admin.organization.show')->with('success', 'Данные нашей организации сохранены.');
     }
 
     private function authorizeAdministrator(Request $request): void
