@@ -132,7 +132,7 @@ class InvoicePaymentBreakdownPresenter
                 'payment_state' => $state,
                 'payment_state_label' => match ($state) {
                     'paid' => 'Оплачено',
-                    'partially_paid' => 'Частично',
+                    'partially_paid' => 'Частично оплачен',
                     default => 'Не оплачено',
                 },
                 'allocations_count' => $lineAllocationsCount[$line['id']],

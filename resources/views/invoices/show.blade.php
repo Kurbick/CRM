@@ -369,7 +369,7 @@
 
                     @can('viewAny', \App\Models\Payment::class)
                         @if ($paymentSource['credit_balance_applied_minor'] > 0)
-                            <div class="w-64 text-right text-xs text-gray-400">
+                            <div class="w-64 text-right text-xs font-medium text-blue-700">
                                 Из баланса: {{ $formatMoney($paymentSource['credit_balance_applied_amount']) }}
                             </div>
                         @endif

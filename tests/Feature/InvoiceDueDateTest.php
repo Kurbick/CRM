@@ -78,34 +78,39 @@ class InvoiceDueDateTest extends TestCase
 
     public function test_manual_line_does_not_affect_linked_payment_terms(): void
     {
-        [$companyId, $contractId] = $this->companyAndContract('MIXED');
+        [$invoice, $contractId] = $this->draftInvoice('MIXED');
         $orderId = $this->order($contractId, 15);
+        $orderLine = $invoice->lines()->create($this->orderLine($orderId));
+        $legacyManualLine = $invoice->lines()->create($this->manualLine());
 
-        $this->post(route('invoices.store'), $this->storePayload(
-            $companyId,
-            $contractId,
-            [$this->orderLine($orderId), $this->manualLine()],
-            'INV-MIXED'
-        ))->assertSessionDoesntHaveErrors();
+        $this->put(route('invoices.update', $invoice), $this->updatePayload($invoice, [
+            [
+                'id' => $orderLine->id,
+                ...$this->orderLine($orderId),
+            ],
+            [
+                'id' => $legacyManualLine->id,
+                ...$this->manualLine(),
+            ],
+        ]))->assertSessionDoesntHaveErrors();
 
-        $this->assertSame('2026-08-16', Invoice::query()->sole()->due_date);
+        $this->assertSame('2026-08-16', $invoice->fresh()->due_date);
     }
 
     public function test_manual_due_date_is_kept_when_all_lines_are_manual(): void
     {
-        [$companyId, $contractId] = $this->companyAndContract('MANUAL');
-        $payload = $this->storePayload(
-            $companyId,
-            $contractId,
-            [$this->manualLine()],
-            'INV-MANUAL'
-        );
+        [$invoice] = $this->draftInvoice('MANUAL');
+        $legacyManualLine = $invoice->lines()->create($this->manualLine());
+        $payload = $this->updatePayload($invoice, [[
+            'id' => $legacyManualLine->id,
+            ...$this->manualLine(),
+        ]]);
         $payload['due_date'] = '2026-09-05';
 
-        $this->post(route('invoices.store'), $payload)
+        $this->put(route('invoices.update', $invoice), $payload)
             ->assertSessionDoesntHaveErrors();
 
-        $this->assertSame('2026-09-05', Invoice::query()->sole()->due_date);
+        $this->assertSame('2026-09-05', $invoice->fresh()->due_date);
     }
 
     public function test_forged_due_date_is_ignored_for_linked_item(): void

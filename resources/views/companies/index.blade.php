@@ -227,7 +227,7 @@
                 </thead>
                 <tbody>
                     @forelse ($companies as $company)
-                        <tr>
+                        <x-tables.clickable-row :url="route('companies.show', ['company' => $company, 'return_url' => $companyIndexReturnUrl])" :label="'Открыть компанию '.$company->name">
                             <td>
                                 <a href="{{ route('companies.show', $company) }}"
                                     class="crm-table-primary-link">
@@ -265,8 +265,6 @@
                             </td>
                             <td class="crm-table-actions">
                                 <div class="flex items-center justify-end gap-3">
-                                    <a href="{{ route('companies.show', ['company' => $company, 'return_url' => $companyIndexReturnUrl]) }}"
-                                        class="crm-table-action-link">Открыть →</a>
                                     @can('update', $company)
                                         <a href="{{ route('companies.edit', ['company' => $company, ...$editContext]) }}"
                                             class="text-gray-400 hover:text-gray-600 transition" title="Редактировать">
@@ -277,7 +275,7 @@
                                     @endcan
                                 </div>
                             </td>
-                        </tr>
+                        </x-tables.clickable-row>
                     @empty
                         <tr>
                             <td colspan="{{ $canViewFinancials ? 6 : 5 }}" class="crm-table-empty">

@@ -21,7 +21,7 @@ class InvoiceEditabilityTest extends TestCase
             $this->invoice('issued', dueDate: '2020-01-01'),
         ] as $invoice) {
             $this->get(route('invoices.show', $invoice))->assertOk()->assertSee('Редактировать');
-            $this->get(route('invoices.edit', $invoice))->assertOk()->assertSee('Редактировать инвойс');
+            $this->get(route('invoices.edit', $invoice))->assertOk()->assertSee('Редактирование инвойса');
         }
     }
 

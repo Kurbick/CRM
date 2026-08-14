@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Invoice;
+use App\Models\InvoiceLine;
 use App\Models\Organization;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -27,15 +28,21 @@ class InvoiceFormAndStoreTest extends TestCase
                 'lines' => [[
                     'description' => 'Old line',
                     'amount' => '15.00',
+                    'order_id' => '456',
                 ]],
             ],
         ])->get(route('invoices.create'));
 
         $response->assertOk()
-            ->assertSee('Новый счёт')
+            ->assertSee('Новый инвойс')
+            ->assertSee('data-testid="invoice-create-form-workspace"', false)
+            ->assertSee('Позиции счета')
+            ->assertSee('Итого')
             ->assertSee('Сохранить черновик')
             ->assertSee('Оплатить до')
-            ->assertSee('Добавить ручную позицию')
+            ->assertDontSee('Добавить ручную позицию')
+            ->assertDontSee('addManualLine()', false)
+            ->assertDontSee(':name="`lines[${index}][amount]`"', false)
             ->assertSee('name="company_id"', false)
             ->assertSee("selectedCompanyId: '".$companyId."'", false)
             ->assertSee("invoiceNumber: 'INV-OLD'", false)
@@ -45,6 +52,7 @@ class InvoiceFormAndStoreTest extends TestCase
             ->assertDontSee('name="payer_name"', false)
             ->assertDontSee('name="payer_voen"', false)
             ->assertDontSee('name="contract_reference"', false)
+            ->assertDontSee('grid grid-cols-1 gap-6 lg:grid-cols-3', false)
             ->assertDontSee('Позиции ещё не выбраны');
     }
 
@@ -82,7 +90,7 @@ class InvoiceFormAndStoreTest extends TestCase
             ->assertSee('При смене компании все введённые данные счёта будут очищены. Продолжить?', false);
     }
 
-    public function test_store_forces_draft_and_server_snapshots_and_ignores_invoice_periods(): void
+    public function test_web_store_creates_a_draft_from_a_contract_subject_with_server_snapshots(): void
     {
         $sellerSnapshot = $this->configureSeller('WEB SELLER SNAPSHOT');
         [$companyId, $contractId] = $this->companyAndContract('Main', 'AZ123', 'C-001');
@@ -108,13 +116,180 @@ class InvoiceFormAndStoreTest extends TestCase
         $this->assertNull($invoice->period_start);
         $this->assertNull($invoice->period_end);
         $this->assertSellerSnapshot($invoice, $sellerSnapshot);
-        $this->assertDatabaseHas('invoice_lines', [
-            'invoice_id' => $invoice->id,
-            'subscription_id' => null,
-            'order_id' => null,
-            'period_start' => null,
-            'period_end' => null,
+        $line = $invoice->lines()->sole();
+        $this->assertNotNull($line->order_id);
+        $this->assertNull($line->subscription_id);
+        $this->assertNull($line->period_start);
+        $this->assertNull($line->period_end);
+        $this->assertSame('25.00', $line->amount);
+        $this->assertSame('25.00', $invoice->total_amount);
+    }
+
+    public function test_web_store_uses_the_order_amount_instead_of_a_crafted_amount(): void
+    {
+        [$companyId, $contractId] = $this->companyAndContract();
+        $payload = $this->basePayload($companyId, $contractId, '1200.00');
+        $payload['lines'][0]['amount'] = '1.00';
+
+        $this->post(route('invoices.store'), $payload)->assertRedirect();
+
+        $invoice = Invoice::query()->sole();
+        $this->assertSame('1200.00', $invoice->lines()->sole()->amount);
+        $this->assertSame('1200.00', $invoice->total_amount);
+    }
+
+    public function test_web_store_creates_a_subject_backed_line_without_an_amount_field(): void
+    {
+        [$companyId, $contractId] = $this->companyAndContract();
+        $payload = $this->basePayload($companyId, $contractId, '1200.00');
+        unset($payload['lines'][0]['amount']);
+
+        $this->post(route('invoices.store'), $payload)->assertRedirect();
+
+        $invoice = Invoice::query()->sole();
+        $this->assertSame('1200.00', $invoice->lines()->sole()->amount);
+        $this->assertSame('1200.00', $invoice->total_amount);
+    }
+
+    public function test_web_store_uses_the_subscription_amount_instead_of_a_crafted_amount(): void
+    {
+        [$companyId, $contractId] = $this->companyAndContract();
+        $subscriptionId = $this->subscription($contractId, '1200.00');
+        $payload = $this->basePayload($companyId, $contractId);
+        $payload['lines'] = [[
+            'description' => 'Subscription line',
+            'amount' => '1.00',
+            'subscription_id' => $subscriptionId,
+        ]];
+
+        $this->post(route('invoices.store'), $payload)->assertRedirect();
+
+        $invoice = Invoice::query()->sole();
+        $this->assertSame('1200.00', $invoice->lines()->sole()->amount);
+        $this->assertSame('1200.00', $invoice->total_amount);
+    }
+
+    public function test_web_store_rejects_a_crafted_manual_line_without_creating_an_invoice(): void
+    {
+        [$companyId, $contractId] = $this->companyAndContract();
+        $payload = $this->basePayload($companyId, $contractId);
+        $payload['lines'] = [[
+            'description' => 'Forged manual line',
+            'amount' => '25.00',
+        ]];
+
+        $this->from(route('invoices.create'))
+            ->post(route('invoices.store'), $payload)
+            ->assertRedirect(route('invoices.create'))
+            ->assertSessionHasErrors('lines.0');
+
+        $this->assertDatabaseCount('invoices', 0);
+        $this->assertDatabaseCount('invoice_lines', 0);
+    }
+
+    public function test_web_update_rejects_a_crafted_new_manual_line_and_preserves_a_legacy_line(): void
+    {
+        [$companyId, $contractId] = $this->companyAndContract();
+        $invoice = Invoice::create([
+            'company_id' => $companyId,
+            'contract_id' => $contractId,
+            'invoice_number' => 'INV-LEGACY-MANUAL',
+            'issue_date' => '2026-07-20',
+            'due_date' => '2026-08-19',
+            'total_amount' => '25.00',
+            'status' => 'draft',
         ]);
+        $legacyLine = $invoice->lines()->create([
+            'description' => 'Legacy manual line',
+            'amount' => '25.00',
+        ]);
+
+        $this->from(route('invoices.edit', $invoice))
+            ->put(route('invoices.update', $invoice), [
+                'invoice_number' => $invoice->invoice_number,
+                'issue_date' => '2026-07-20',
+                'due_date' => '2026-08-19',
+                'lines' => [
+                    [
+                        'id' => $legacyLine->id,
+                        'description' => 'Legacy manual line',
+                        'amount' => '25.00',
+                        'subscription_id' => null,
+                        'order_id' => null,
+                        'period_start' => null,
+                        'period_end' => null,
+                    ],
+                    [
+                        'description' => 'Forged new manual line',
+                        'amount' => '10.00',
+                        'subscription_id' => null,
+                        'order_id' => null,
+                        'period_start' => null,
+                        'period_end' => null,
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('invoices.edit', $invoice))
+            ->assertSessionHasErrors('lines.1.id');
+
+        $this->assertDatabaseCount('invoice_lines', 1);
+        $this->assertSame('Legacy manual line', $legacyLine->fresh()->description);
+        $this->assertSame('25.00', $legacyLine->fresh()->amount);
+    }
+
+    public function test_web_update_preserves_a_subject_line_amount_against_a_crafted_request(): void
+    {
+        [$companyId, $contractId] = $this->companyAndContract();
+        $orderId = $this->order($contractId, '1200.00');
+        $invoice = Invoice::create([
+            'company_id' => $companyId,
+            'contract_id' => $contractId,
+            'invoice_number' => 'INV-SUBJECT-SNAPSHOT',
+            'issue_date' => '2026-07-20',
+            'due_date' => '2026-08-03',
+            'total_amount' => '1200.00',
+            'status' => 'draft',
+        ]);
+        $line = $invoice->lines()->create([
+            'order_id' => $orderId,
+            'description' => 'Subject line',
+            'amount' => '1200.00',
+        ]);
+
+        $this->put(route('invoices.update', $invoice), $this->subjectLineUpdatePayload($invoice, $line, '1.00'))
+            ->assertRedirect(route('invoices.show', $invoice));
+
+        $this->assertSame('1200.00', $line->fresh()->amount);
+        $this->assertSame('1200.00', $invoice->fresh()->total_amount);
+    }
+
+    public function test_web_update_keeps_the_historical_subject_amount_after_the_subject_price_changes(): void
+    {
+        [$companyId, $contractId] = $this->companyAndContract();
+        $orderId = $this->order($contractId, '1200.00');
+        $invoice = Invoice::create([
+            'company_id' => $companyId,
+            'contract_id' => $contractId,
+            'invoice_number' => 'INV-HISTORICAL-SNAPSHOT',
+            'issue_date' => '2026-07-20',
+            'due_date' => '2026-08-03',
+            'total_amount' => '1200.00',
+            'status' => 'draft',
+        ]);
+        $line = $invoice->lines()->create([
+            'order_id' => $orderId,
+            'description' => 'Historical subject line',
+            'amount' => '1200.00',
+        ]);
+        DB::table('orders')->where('id', $orderId)->update(['price' => '1500.00']);
+
+        $payload = $this->subjectLineUpdatePayload($invoice, $line);
+        unset($payload['lines'][0]['amount']);
+        $this->put(route('invoices.update', $invoice), $payload)
+            ->assertRedirect(route('invoices.show', $invoice));
+
+        $this->assertSame('1200.00', $line->fresh()->amount);
+        $this->assertSame('1200.00', $invoice->fresh()->total_amount);
     }
 
     public function test_web_store_rejects_forged_seller_fields_without_mutation(): void
@@ -213,12 +388,26 @@ class InvoiceFormAndStoreTest extends TestCase
 
         $this->get(route('invoices.edit', $invoice))
             ->assertOk()
+            ->assertSee('Редактирование инвойса')
+            ->assertSee('data-testid="invoice-edit-form-workspace"', false)
             ->assertSee('Компания:')
             ->assertSee('Договор:')
+            ->assertSee('Позиции счета')
+            ->assertSee('Итого')
+            ->assertDontSee('grid grid-cols-1 gap-6 lg:grid-cols-3', false)
             ->assertDontSee('name="company_id"', false)
             ->assertDontSee('name="contract_id"', false)
             ->assertDontSee('name="status"', false)
-            ->assertDontSee('name="payer_name"', false);
+            ->assertDontSee('name="payer_name"', false)
+            ->assertDontSee('Добавить ручную позицию')
+            ->assertDontSee('addLine()', false)
+            ->assertSee('x-if="line.order_id || line.subscription_id"', false)
+            ->assertSee('x-if="!line.order_id && !line.subscription_id"', false);
+
+        $this->get(route('invoices.show', $invoice))
+            ->assertOk()
+            ->assertSee('Manual')
+            ->assertSee('Ручная позиция');
 
         $this->put(route('invoices.update', $invoice), [
             'invoice_number' => 'INV-EDIT-FORM',
@@ -250,6 +439,9 @@ class InvoiceFormAndStoreTest extends TestCase
         $this->assertSame('Historic payer', $invoice->payer_name);
         $this->assertSame('Historic VOEN', $invoice->payer_voen);
         $this->assertSame('Historic contract', $invoice->contract_reference);
+        $this->assertSame('Updated manual', $line->fresh()->description);
+        $this->assertSame('12.00', $line->fresh()->amount);
+        $this->assertDatabaseCount('invoice_lines', 1);
     }
 
     private function companyAndContract(
@@ -271,8 +463,10 @@ class InvoiceFormAndStoreTest extends TestCase
         return [$companyId, $contractId];
     }
 
-    private function basePayload(int $companyId, int $contractId): array
+    private function basePayload(int $companyId, int $contractId, string $orderAmount = '25.00'): array
     {
+        $orderId = $this->order($contractId, $orderAmount);
+
         return [
             'company_id' => $companyId,
             'contract_id' => $contractId,
@@ -280,9 +474,59 @@ class InvoiceFormAndStoreTest extends TestCase
             'issue_date' => '2026-07-20',
             'due_date' => '2026-08-19',
             'lines' => [[
-                'description' => 'Manual line',
-                'amount' => 25,
+                'description' => 'Contract line',
+                'amount' => $orderAmount,
+                'order_id' => $orderId,
             ]],
+        ];
+    }
+
+    private function order(int $contractId, string $amount = '25.00'): int
+    {
+        return DB::table('orders')->insertGetId([
+            'contract_id' => $contractId,
+            'title' => 'One-time service',
+            'order_date' => '2026-07-01',
+            'price' => $amount,
+            'payment_terms' => 14,
+        ]);
+    }
+
+    private function subscription(int $contractId, string $amount): int
+    {
+        return DB::table('subscriptions')->insertGetId([
+            'contract_id' => $contractId,
+            'title' => 'Monthly service',
+            'start_date' => '2026-01-01',
+            'next_billing_date' => '2026-07-01',
+            'billing_period' => 'monthly',
+            'amount' => $amount,
+            'payment_terms' => 14,
+            'status' => 'active',
+        ]);
+    }
+
+    /** @return array<string, mixed> */
+    private function subjectLineUpdatePayload(Invoice $invoice, InvoiceLine $line, ?string $amount = null): array
+    {
+        $lineData = [
+            'id' => $line->id,
+            'description' => $line->description,
+            'subscription_id' => $line->subscription_id,
+            'order_id' => $line->order_id,
+            'period_start' => $line->period_start,
+            'period_end' => $line->period_end,
+        ];
+
+        if ($amount !== null) {
+            $lineData['amount'] = $amount;
+        }
+
+        return [
+            'invoice_number' => $invoice->invoice_number,
+            'issue_date' => '2026-07-20',
+            'due_date' => '2026-08-03',
+            'lines' => [$lineData],
         ];
     }
 

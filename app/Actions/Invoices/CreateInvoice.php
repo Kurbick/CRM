@@ -34,9 +34,10 @@ final class CreateInvoice
         Contract $contract,
         array $attributes,
         array $lines,
+        bool $canonicalizeSubjectAmounts = false,
     ): Invoice {
         try {
-            return DB::transaction(function () use ($company, $contract, $attributes, $lines): Invoice {
+            return DB::transaction(function () use ($company, $contract, $attributes, $lines, $canonicalizeSubjectAmounts): Invoice {
                 $lockedCompany = Company::query()
                     ->select(['id', 'name', 'short_name', 'voen'])
                     ->whereKey($company->getKey())
@@ -59,6 +60,7 @@ final class CreateInvoice
                 $normalizedLines = $this->normalizeLines(
                     $lines,
                     $lockedContract,
+                    $canonicalizeSubjectAmounts,
                 );
 
                 $orderIds = collect($normalizedLines)
@@ -128,7 +130,11 @@ final class CreateInvoice
      * @param  list<array<string, mixed>>  $lines
      * @return list<array<string, mixed>>
      */
-    private function normalizeLines(array $lines, Contract $contract): array
+    private function normalizeLines(
+        array $lines,
+        Contract $contract,
+        bool $canonicalizeSubjectAmounts,
+    ): array
     {
         $orders = [];
         $subscriptions = [];
@@ -178,7 +184,7 @@ final class CreateInvoice
                 ->whereIn('id', $orders)
                 ->orderBy('id')
                 ->lockForUpdate()
-                ->get(['id', 'contract_id', 'status', 'payment_terms', 'title'])
+                ->get(['id', 'contract_id', 'status', 'payment_terms', 'price', 'title'])
                 ->keyBy('id');
         $subscriptionRows = $subscriptions === []
             ? collect()
@@ -196,7 +202,6 @@ final class CreateInvoice
 
             $normalizedLine = [
                 'description' => $line['description'],
-                'amount' => $this->formatMinorUnits($this->toMinorUnits($line['amount'])),
                 'subscription_id' => $subscriptionId,
                 'order_id' => $orderId,
                 'period_start' => null,
@@ -213,6 +218,10 @@ final class CreateInvoice
                         "lines.{$index}.order_id" => 'Разовая услуга не принадлежит договору или отменена.',
                     ]);
                 }
+
+                if ($canonicalizeSubjectAmounts) {
+                    $line['amount'] = $order->price;
+                }
             }
 
             if ($subscriptionId === null) {
@@ -222,6 +231,7 @@ final class CreateInvoice
                     ]);
                 }
 
+                $normalizedLine['amount'] = $this->formatMinorUnits($this->toMinorUnits($line['amount']));
                 $normalized[] = $normalizedLine;
 
                 continue;
@@ -234,6 +244,10 @@ final class CreateInvoice
                 throw ValidationException::withMessages([
                     "lines.{$index}.subscription_id" => 'Подписка не активна или не принадлежит договору.',
                 ]);
+            }
+
+            if ($canonicalizeSubjectAmounts) {
+                $line['amount'] = $subscription->amount;
             }
 
             try {
@@ -297,6 +311,7 @@ final class CreateInvoice
             $normalizedLine['period_start'] = $periodStart->toDateString();
             $normalizedLine['period_end'] = $periodEnd->toDateString();
             $normalizedLine['billing_occurrence_key'] = $occurrenceKey;
+            $normalizedLine['amount'] = $this->formatMinorUnits($this->toMinorUnits($line['amount']));
             $normalized[] = $normalizedLine;
         }
 

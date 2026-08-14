@@ -246,8 +246,16 @@ class InvoiceController extends Controller
             'seller_swift' => 'prohibited',
             'comment' => 'nullable|string',
             'lines' => ['required', 'array', 'min:1'],
+            'lines.*' => [
+                'array',
+                function (string $attribute, mixed $line, \Closure $fail): void {
+                    if (empty($line['subscription_id']) && empty($line['order_id'])) {
+                        $fail('Выберите предмет договора для позиции инвойса.');
+                    }
+                },
+            ],
             'lines.*.description' => ['required', 'string', 'max:255'],
-            'lines.*.amount' => ['required', 'numeric', 'min:0.01'],
+            'lines.*.amount' => ['nullable', 'numeric', 'min:0.01'],
             'lines.*.subscription_id' => ['nullable', 'exists:subscriptions,id'],
             'lines.*.order_id' => ['nullable', 'exists:orders,id'],
             'lines.*.period_start' => ['nullable', 'date'],
@@ -273,6 +281,7 @@ class InvoiceController extends Controller
             $contract,
             $validated,
             array_values($validated['lines']),
+            canonicalizeSubjectAmounts: true,
         );
 
         return $this->mutationRedirect($invoice)
@@ -453,9 +462,9 @@ class InvoiceController extends Controller
             'due_date' => ['nullable', 'date'],
             'comment' => ['nullable', 'string'],
             'lines' => ['required', 'array', 'min:1'],
-            'lines.*.id' => ['nullable', 'integer', 'distinct'],
+            'lines.*.id' => ['required', 'integer', 'distinct'],
             'lines.*.description' => ['required', 'string', 'max:255'],
-            'lines.*.amount' => ['required', 'numeric', 'decimal:0,2', 'min:0.01'],
+            'lines.*.amount' => ['nullable', 'numeric', 'decimal:0,2', 'min:0.01'],
             'lines.*.subscription_id' => ['nullable', 'integer'],
             'lines.*.order_id' => ['nullable', 'integer'],
             'lines.*.period_start' => ['nullable', 'date'],
@@ -465,7 +474,12 @@ class InvoiceController extends Controller
         unset($validated['lines']);
 
         try {
-            $this->updateInvoice->execute($invoice, $validated, $lines);
+            $this->updateInvoice->execute(
+                $invoice,
+                $validated,
+                $lines,
+                preserveSubjectAmounts: true,
+            );
         } catch (ValidationException $exception) {
             $errors = $exception->errors();
             if (array_key_exists('invoice', $errors)) {

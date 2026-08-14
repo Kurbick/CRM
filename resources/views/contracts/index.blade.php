@@ -431,7 +431,7 @@
 
                     @forelse($contracts as $contract)
 
-                        <tr>
+                        <x-tables.clickable-row :url="route('contracts.show', $contract)" :label="'Открыть договор '.$contract->contract_number">
 
                             {{-- Номер договора --}}
                             <td>
@@ -499,11 +499,6 @@
 
                                 <div class="flex items-center justify-end gap-3">
 
-                                    <a href="{{ route('contracts.show', $contract) }}"
-                                        class="crm-table-action-link">
-                                        Открыть →
-                                    </a>
-
                                     @can('update', $contract)
                                         <a href="{{ route('contracts.edit', ['contract' => $contract, ...$contractEditContext]) }}"
                                             class="text-gray-400 hover:text-gray-600 transition" title="Редактировать">
@@ -520,7 +515,7 @@
                                     @endcan
                                 </div>
                             </td>
-                        </tr>
+                        </x-tables.clickable-row>
 
                     @empty
 

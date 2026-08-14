@@ -27,8 +27,9 @@ final class UpdateInvoice
         Invoice $invoice,
         array $attributes,
         ?array $lines = null,
+        bool $preserveSubjectAmounts = false,
     ): Invoice {
-        return DB::transaction(function () use ($invoice, $attributes, $lines): Invoice {
+        return DB::transaction(function () use ($invoice, $attributes, $lines, $preserveSubjectAmounts): Invoice {
             $lockedInvoice = Invoice::query()
                 ->whereKey($invoice->getKey())
                 ->lockForUpdate()
@@ -63,6 +64,10 @@ final class UpdateInvoice
                 }
 
                 return $lockedInvoice->fresh();
+            }
+
+            if ($preserveSubjectAmounts) {
+                $lines = $this->preserveExistingSubjectAmounts($lines, $lockedLines->keyBy('id'));
             }
 
             $paymentAvailability = $this->paymentAvailabilityService->evaluate($lockedInvoice);
@@ -262,6 +267,25 @@ final class UpdateInvoice
         }
 
         return $changes;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $lines
+     * @param  Collection<int, InvoiceLine>  $existingLines
+     * @return list<array<string, mixed>>
+     */
+    private function preserveExistingSubjectAmounts(array $lines, Collection $existingLines): array
+    {
+        foreach ($lines as $index => $line) {
+            $lineId = ! empty($line['id']) ? (int) $line['id'] : null;
+            $existingLine = $lineId ? $existingLines->get($lineId) : null;
+
+            if ($existingLine && ($existingLine->order_id !== null || $existingLine->subscription_id !== null)) {
+                $lines[$index]['amount'] = $existingLine->amount;
+            }
+        }
+
+        return $lines;
     }
 
     private function editabilityMessage(?string $reason): string

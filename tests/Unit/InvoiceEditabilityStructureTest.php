@@ -24,6 +24,7 @@ class InvoiceEditabilityStructureTest extends TestCase
     {
         $controller = file_get_contents(app_path('Http/Controllers/Web/InvoiceController.php'));
         $update = file_get_contents(app_path('Actions/Invoices/UpdateInvoice.php'));
+        $webUpdate = $this->methodSource($controller, 'public function update(', 'public function issue(');
 
         $this->assertStringContainsString('DB::transaction(', $update);
         $this->assertStringContainsString('->lockForUpdate()', $update);
@@ -34,7 +35,15 @@ class InvoiceEditabilityStructureTest extends TestCase
         );
         $this->assertStringNotContainsString("\$invoiceData['status']", $update);
         $this->assertStringContainsString('Нельзя удалить связанную позицию из уже выставленного инвойса.', $update);
-        $this->assertStringContainsString('$this->updateInvoice->execute($invoice', $controller);
+        $this->assertMatchesRegularExpression(
+            '/\$this->updateInvoice->execute\s*\(\s*\$invoice\s*,/s',
+            $webUpdate
+        );
+        $this->assertStringContainsString('preserveSubjectAmounts: true', $webUpdate);
+        $this->assertLessThan(
+            strpos($webUpdate, 'preserveSubjectAmounts: true'),
+            strpos($webUpdate, '$this->updateInvoice->execute')
+        );
     }
 
     public function test_api_update_uses_same_lock_and_explicitly_prohibits_protected_fields(): void
@@ -79,7 +88,7 @@ class InvoiceEditabilityStructureTest extends TestCase
             $update
         );
         $this->assertStringContainsString(
-            "'lines.*.amount' => ['required', 'numeric', 'decimal:0,2', 'min:0.01']",
+            "'lines.*.amount' => ['nullable', 'numeric', 'decimal:0,2', 'min:0.01']",
             $controller
         );
     }

@@ -97,7 +97,7 @@ class CompanyIndexTest extends TestCase
             ->assertSee('data-testid="company-form-workspace"', false);
     }
 
-    public function test_company_name_and_open_action_link_to_show_without_filter_context(): void
+    public function test_company_name_link_and_clickable_row_open_the_company_without_removing_edit_action(): void
     {
         $company = $this->company('Linked Company');
         $showUrl = route('companies.show', $company);
@@ -109,7 +109,10 @@ class CompanyIndexTest extends TestCase
 
         $response->assertSee('href="'.$showUrl.'"', false)
             ->assertSee('Linked Company')
-            ->assertSee('Открыть →')
+            ->assertSee('data-row-url=', false)
+            ->assertSee('tabindex="0"', false)
+            ->assertSee('title="Редактировать"', false)
+            ->assertDontSee('Открыть →')
             ->assertDontSee('href="'.route('companies.edit', $company).'">Linked Company', false);
     }
 

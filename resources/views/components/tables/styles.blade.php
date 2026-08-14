@@ -67,6 +67,15 @@
         background: #f8fafc;
     }
 
+    .crm-table tbody tr.crm-clickable-row {
+        cursor: pointer;
+    }
+
+    .crm-table tbody tr.crm-clickable-row:focus-visible {
+        outline: 2px solid #2563eb;
+        outline-offset: -2px;
+    }
+
     .crm-table tbody tr:last-child td {
         border-bottom: 0;
     }

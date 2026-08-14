@@ -75,6 +75,8 @@ class OrganizationInvoiceIntegrationTest extends AuthorizationTestCase
     /** @return array<string, mixed> */
     private function webPayload(Company $company, Contract $contract, string $number): array
     {
+        $order = $this->subjectOrder($contract, ['price' => '10.00']);
+
         return [
             'company_id' => $company->id,
             'contract_id' => $contract->id,
@@ -84,6 +86,7 @@ class OrganizationInvoiceIntegrationTest extends AuthorizationTestCase
             'lines' => [[
                 'description' => 'Organization test line',
                 'amount' => '10.00',
+                'order_id' => $order->id,
             ]],
         ];
     }

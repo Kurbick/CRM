@@ -292,7 +292,7 @@ class InvoiceUpdateTest extends TestCase
         $this->assertSame('100.00', $invoice->fresh()->total_amount);
     }
 
-    public function test_issued_linked_line_can_change_user_fields_and_manual_lines_can_be_replaced(): void
+    public function test_issued_linked_and_legacy_manual_lines_keep_their_identity_when_user_fields_change(): void
     {
         [$invoice, $contractId] = $this->invoice('ISSUED-EDIT', 'issued');
         $orderId = $this->order($contractId);
@@ -312,8 +312,8 @@ class InvoiceUpdateTest extends TestCase
             'period_start' => null,
             'period_end' => null,
         ], [
-            'id' => null,
-            'description' => 'New manual',
+            'id' => $manual->id,
+            'description' => 'Updated legacy manual',
             'amount' => 15,
             'subscription_id' => null,
             'order_id' => null,
@@ -321,23 +321,23 @@ class InvoiceUpdateTest extends TestCase
             'period_end' => null,
         ]]))->assertRedirect(route('invoices.show', $invoice));
 
-        $this->assertDatabaseMissing('invoice_lines', ['id' => $manual->id]);
         $this->assertDatabaseHas('invoice_lines', [
             'id' => $linked->id,
             'order_id' => $orderId,
             'description' => 'Updated linked order',
-            'amount' => 90,
+            'amount' => 80,
         ]);
         $this->assertDatabaseHas('invoice_lines', [
-            'invoice_id' => $invoice->id,
-            'description' => 'New manual',
+            'id' => $manual->id,
+            'description' => 'Updated legacy manual',
+            'amount' => 15,
             'subscription_id' => null,
             'order_id' => null,
         ]);
         $this->assertSame('issued', $invoice->fresh()->status);
     }
 
-    public function test_draft_can_remove_linked_and_manual_lines_and_add_manual_line(): void
+    public function test_draft_can_remove_lines_while_preserving_an_existing_legacy_manual_line(): void
     {
         [$invoice, $contractId] = $this->invoice('DRAFT-DELETE', 'draft');
         $subscription = $invoice->lines()->create([
@@ -349,30 +349,87 @@ class InvoiceUpdateTest extends TestCase
         ]);
         $order = $invoice->lines()->create([
             'order_id' => $this->order($contractId),
-            'description' => 'Order to remove',
+            'description' => 'Order to keep',
             'amount' => 40,
         ]);
         $manual = $invoice->lines()->create(['description' => 'Manual to remove', 'amount' => 20]);
 
         $this->put(route('invoices.update', $invoice), $this->payload($invoice, [[
-            'id' => null,
-            'description' => 'New manual',
-            'amount' => 55,
+            'id' => $order->id,
+            'description' => 'Order to keep',
+            'amount' => 40,
+            'subscription_id' => null,
+            'order_id' => $order->order_id,
+            'period_start' => null,
+            'period_end' => null,
+        ], [
+            'id' => $manual->id,
+            'description' => 'Manual to keep',
+            'amount' => 20,
             'subscription_id' => null,
             'order_id' => null,
             'period_start' => null,
             'period_end' => null,
         ]]))->assertRedirect(route('invoices.show', $invoice));
 
-        foreach ([$subscription, $order, $manual] as $removedLine) {
-            $this->assertDatabaseMissing('invoice_lines', ['id' => $removedLine->id]);
-        }
+        $this->assertDatabaseMissing('invoice_lines', ['id' => $subscription->id]);
         $this->assertDatabaseHas('invoice_lines', [
-            'invoice_id' => $invoice->id,
-            'description' => 'New manual',
-            'amount' => 55,
+            'id' => $order->id,
+            'description' => 'Order to keep',
+        ]);
+        $this->assertDatabaseHas('invoice_lines', [
+            'id' => $manual->id,
+            'description' => 'Manual to keep',
+            'amount' => 20,
         ]);
         $this->assertSame('draft', $invoice->fresh()->status);
+    }
+
+    public function test_web_update_rejects_a_new_manual_line_and_preserves_existing_lines(): void
+    {
+        [$invoice, $contractId] = $this->invoice('DRAFT-NEW-MANUAL', 'draft');
+        $order = $invoice->lines()->create([
+            'order_id' => $this->order($contractId),
+            'description' => 'Existing order',
+            'amount' => 80,
+        ]);
+        $legacyManual = $invoice->lines()->create([
+            'description' => 'Existing legacy manual',
+            'amount' => 20,
+        ]);
+
+        $this->from(route('invoices.edit', $invoice))
+            ->put(route('invoices.update', $invoice), $this->payload($invoice, [[
+                'id' => $order->id,
+                'description' => 'Existing order',
+                'amount' => 80,
+                'subscription_id' => null,
+                'order_id' => $order->order_id,
+                'period_start' => null,
+                'period_end' => null,
+            ], [
+                'id' => $legacyManual->id,
+                'description' => 'Existing legacy manual',
+                'amount' => 20,
+                'subscription_id' => null,
+                'order_id' => null,
+                'period_start' => null,
+                'period_end' => null,
+            ], [
+                'id' => null,
+                'description' => 'Forged new manual',
+                'amount' => 15,
+                'subscription_id' => null,
+                'order_id' => null,
+                'period_start' => null,
+                'period_end' => null,
+            ]]))
+            ->assertRedirect(route('invoices.edit', $invoice))
+            ->assertSessionHasErrors('lines.2.id');
+
+        $this->assertDatabaseCount('invoice_lines', 2);
+        $this->assertSame('Existing order', $order->fresh()->description);
+        $this->assertSame('Existing legacy manual', $legacyManual->fresh()->description);
     }
 
     public function test_issued_subscription_period_cannot_be_changed(): void

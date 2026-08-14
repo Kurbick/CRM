@@ -306,8 +306,6 @@
                             Статус
                         </th>
 
-                        <th class="crm-table-actions">
-                        </th>
                     </tr>
                 </thead>
 
@@ -319,7 +317,7 @@
                             $remainingAmount = $invoice->remaining_amount;
                             $paymentSource = $invoicePaymentSources->get($invoice->id);
                         @endphp
-                        <tr>
+                        <x-tables.clickable-row :url="route('invoices.show', $invoice)" :label="'Открыть инвойс '.$invoice->invoice_number">
 
                             {{-- Номер --}}
                             <td>
@@ -386,7 +384,7 @@
                                     </div>
 
                                     @if ($paymentSource['credit_balance_applied_minor'] > 0)
-                                        <div class="mt-0.5 text-[11px] text-gray-400">
+                                        <div class="mt-0.5 text-[11px] font-medium text-blue-700">
                                             Из баланса: {{ $formatMoney($paymentSource['credit_balance_applied_amount']) }}
                                         </div>
                                     @endif
@@ -414,22 +412,10 @@
                                 ])
                             </td>
 
-                            {{-- Действия --}}
-                            <td class="crm-table-actions">
-                                <div class="flex items-center justify-center gap-1">
-                                    <a href="{{ route('invoices.show', $invoice) }}"
-                                        class="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-400 transition hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                                        aria-label="Открыть счёт {{ $invoice->invoice_number }}" title="Открыть счёт">
-                                        <svg class="h-[18px] w-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                                        </svg>
-                                    </a>
-                                </div>
-                            </td>
-                        </tr>
+                        </x-tables.clickable-row>
                     @empty
                         <tr>
-                            <td colspan="8" class="crm-table-empty">
+                            <td colspan="7" class="crm-table-empty">
                                 <span class="crm-table-empty-message">Счетов не найдено.</span>
 
                                 @if ($search !== '' || $activeStatusFilter !== '' || $activeCompanyId !== null || $activeContractId !== null || $activeOverdue || $currentSort !== 'issue_date' || $currentDirection !== 'desc')

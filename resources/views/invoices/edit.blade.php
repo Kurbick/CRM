@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Редактировать инвойс')
+@section('title', 'Редактирование инвойса')
 
 @section('content')
 @php
@@ -27,9 +27,13 @@
         })
         ->values();
 @endphp
-<div class="mb-6">
-    <a href="{{ route('invoices.show', ['invoice' => $invoice, ...$companyContext['query']]) }}" class="text-sm text-gray-500 hover:text-gray-700">← Назад к просмотру</a>
-    <h1 class="mt-2 text-2xl font-bold text-gray-900">Редактировать инвойс</h1>
+<div class="mb-5">
+    <a href="{{ route('invoices.show', ['invoice' => $invoice, ...$companyContext['query']]) }}" class="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-900">
+        <span aria-hidden="true">←</span>
+        Назад к инвойсу
+    </a>
+    <h1 class="mt-3 text-xl font-semibold text-slate-900">Редактирование инвойса</h1>
+    <p class="mt-1 text-sm text-slate-500"><span class="font-mono">{{ $invoice->invoice_number }}</span><span class="mx-1.5 text-slate-300">·</span>{{ $invoice->company?->name ?? $invoice->payer_name }}</p>
 </div>
 
 @if ($editability['has_pending_payments'])
@@ -49,11 +53,11 @@
     get hasDifferentPaymentTerms() { return new Set(this.paymentTerms).size > 1 },
     get dueDateHint() { if (!this.hasAutomaticPaymentTerms) return 'Для выбранных позиций срок оплаты не задан'; if (this.hasDifferentPaymentTerms) return `У позиций разные условия оплаты. Использован минимальный срок: ${this.minimumPaymentTerms} дней`; return `Автоматически рассчитано: ${this.minimumPaymentTerms} календарных дней` },
     init() { this.recalculateDueDate() },
-    addLine() { this.lines.push({ id: null, description: '', amount: '', subscription_id: null, order_id: null, period_start: null, period_end: null, payment_terms: null }); this.recalculateDueDate() },
     removeLine(index) { this.lines.splice(index, 1); this.recalculateDueDate() },
     issueDateChanged() { if (this.hasAutomaticPaymentTerms) this.recalculateDueDate() },
     recalculateDueDate() { if (!this.hasAutomaticPaymentTerms) { if (this.dueDateWasAutomatic) this.dueDate = ''; this.dueDateWasAutomatic = false; return } this.dueDateWasAutomatic = true; if (!this.issueDate) { this.dueDate = ''; return } const date = this.parseDate(this.issueDate); date.setDate(date.getDate() + this.minimumPaymentTerms); this.dueDate = this.inputDate(date) },
     total() { return this.lines.reduce((sum, line) => sum + (Number.parseFloat(line.amount) || 0), 0) },
+    money(value) { return `${(Number.parseFloat(value) || 0).toFixed(2)} ₼` },
     type(line) { return line.subscription_id ? 'Подписка' : (line.order_id ? 'Разовая услуга' : 'Ручная позиция') },
     parseDate(value) { const [y, m, d] = value.split('-').map(Number); return new Date(y, m - 1, d) },
     inputDate(date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` },
@@ -65,15 +69,19 @@
     @csrf
     @method('PUT')
 
-    <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div class="space-y-4 lg:col-span-2">
-            <section class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                <h2 class="mb-3 font-semibold text-gray-800">Компания и договор</h2>
-                <div class="space-y-1 text-sm text-gray-700">
-                    <p><span class="text-gray-500">Компания:</span> {{ $invoice->company?->name ?? $invoice->payer_name }}</p>
-                    <p><span class="text-gray-500">Договор:</span> № {{ $invoice->contract?->contract_number ?? $invoice->contract_reference }}</p>
+    <div data-testid="invoice-edit-form-workspace" class="max-w-5xl overflow-hidden border-y border-slate-200 bg-white">
+        <section class="px-4 py-5 sm:px-5">
+            <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Основная информация</h2>
+            <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div class="text-sm text-slate-700">
+                    <span class="text-slate-500">Компания:</span>
+                    {{ $invoice->company?->name ?? $invoice->payer_name }}
+                </div>
+                <div class="text-sm text-slate-700">
+                    <span class="text-slate-500">Договор:</span>
+                    № {{ $invoice->contract?->contract_number ?? $invoice->contract_reference }}
                     @if ($invoice->contract)
-                        <p class="text-xs text-gray-500">
+                        <p class="mt-1 text-xs text-slate-500">
                             Срок действия:
                             @if ($invoice->contract->end_date)
                                 {{ $invoice->contract->start_date?->format('d/m/Y') }} — {{ $invoice->contract->end_date->format('d/m/Y') }}
@@ -83,70 +91,83 @@
                         </p>
                     @endif
                 </div>
-            </section>
-
-            <section class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                <h2 class="mb-4 font-semibold text-gray-800">Данные счёта</h2>
-                <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                    <div>
-                        <label class="mb-1 block text-xs font-semibold uppercase text-gray-500">Номер счёта <span class="text-red-500">*</span></label>
-                        <input name="invoice_number" value="{{ old('invoice_number', $invoice->invoice_number) }}" required class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono outline-none focus:border-blue-500">
-                        @error('invoice_number') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
-                    </div>
-                    <div>
-                        <label class="mb-1 block text-xs font-semibold uppercase text-gray-500">Дата выставления <span class="text-red-500">*</span></label>
-                        <x-form.date-input name="issue_date" x-model="issueDate" x-on:change="issueDateChanged()" required />
-                    </div>
-                    <div>
-                        <label class="mb-1 block text-xs font-semibold uppercase text-gray-500">Оплатить до <span class="text-red-500">*</span></label>
-                        <x-form.date-input name="due_date" x-model="dueDate" dynamic-readonly="hasAutomaticPaymentTerms" required />
-                        <p class="mt-1 text-xs text-gray-500" x-text="dueDateHint"></p>
-                    </div>
+                <div class="md:col-span-2">
+                    <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Номер счёта <span class="text-red-500">*</span></label>
+                    <input name="invoice_number" value="{{ old('invoice_number', $invoice->invoice_number) }}" required class="w-full font-mono @error('invoice_number') border-red-300 @else border-gray-200 @enderror">
+                    @error('invoice_number') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
                 </div>
-            </section>
-
-            <section class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                <div class="flex items-start justify-between gap-3">
-                    <div><h2 class="font-semibold text-gray-800">Позиции счёта</h2><p class="mt-1 text-xs text-gray-500">Измените описание или сумму либо добавьте ручную позицию.</p></div>
-                    <button type="button" x-on:click="addLine()" class="whitespace-nowrap text-sm font-medium text-blue-600 hover:text-blue-800">+ Добавить ручную позицию</button>
+                <div>
+                    <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Дата выставления <span class="text-red-500">*</span></label>
+                    <x-form.date-input name="issue_date" x-model="issueDate" x-on:change="issueDateChanged()" required />
                 </div>
-                <div x-show="lines.length" class="mt-4 space-y-3">
-                    <template x-for="(line, index) in lines" :key="line.id ?? `new-${index}`">
-                        <div class="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                            <input type="hidden" :name="`lines[${index}][id]`" :value="line.id || ''">
-                            <input type="hidden" :name="`lines[${index}][subscription_id]`" :value="line.subscription_id || ''">
-                            <input type="hidden" :name="`lines[${index}][order_id]`" :value="line.order_id || ''">
-                            <input type="hidden" :name="`lines[${index}][period_start]`" :value="line.period_start || ''">
-                            <input type="hidden" :name="`lines[${index}][period_end]`" :value="line.period_end || ''">
-                            <div class="mb-2 flex items-center justify-between">
-                                <div><p class="text-xs font-medium text-gray-500" x-text="type(line)"></p><p x-show="line.subscription_id" class="text-xs text-gray-500">Расчётный период: <span x-text="`${formatDate(line.period_start)} — ${formatDate(line.period_end)}`"></span></p></div>
-                                <button type="button" x-show="@js($invoice->status !== 'issued') || (!line.subscription_id && !line.order_id)"
-                                    x-on:click="removeLine(index)" class="text-sm text-red-500 hover:text-red-700">Удалить</button>
+                <div>
+                    <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Оплатить до <span class="text-red-500">*</span></label>
+                    <x-form.date-input name="due_date" x-model="dueDate" dynamic-readonly="hasAutomaticPaymentTerms" required />
+                    <p class="mt-1 text-xs text-gray-500" x-text="dueDateHint"></p>
+                </div>
+            </div>
+        </section>
+
+        <section class="border-t border-slate-200 px-4 py-5 sm:px-5">
+            <div>
+                <h2 class="text-sm font-semibold text-slate-900">Позиции счета</h2>
+                    <p class="mt-1 text-xs text-gray-500">Измените описание или сумму ручных позиций.</p>
+            </div>
+            <div x-show="lines.length" class="mt-4 border-y border-slate-200">
+                <template x-for="(line, index) in lines" :key="line.id ?? `new-${index}`">
+                    <div class="border-b border-slate-200 px-3 py-4 last:border-b-0">
+                        <input type="hidden" :name="`lines[${index}][id]`" :value="line.id || ''">
+                        <input type="hidden" :name="`lines[${index}][subscription_id]`" :value="line.subscription_id || ''">
+                        <input type="hidden" :name="`lines[${index}][order_id]`" :value="line.order_id || ''">
+                        <input type="hidden" :name="`lines[${index}][period_start]`" :value="line.period_start || ''">
+                        <input type="hidden" :name="`lines[${index}][period_end]`" :value="line.period_end || ''">
+                        <div class="mb-2 flex items-center justify-between gap-3">
+                            <div>
+                                <p class="text-xs font-medium text-gray-500" x-text="type(line)"></p>
+                                <p x-show="line.subscription_id" class="mt-0.5 text-xs text-gray-500">Расчётный период: <span x-text="`${formatDate(line.period_start)} — ${formatDate(line.period_end)}`"></span></p>
                             </div>
-                            <div class="grid grid-cols-1 gap-3 sm:grid-cols-12">
-                                <div class="sm:col-span-8"><label class="mb-1 block text-xs text-gray-500">Описание</label><input :name="`lines[${index}][description]`" x-model="line.description" required maxlength="255" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500"></div>
-                                <div class="sm:col-span-4"><label class="mb-1 block text-xs text-gray-500">Сумма (₼)</label><input type="number" :name="`lines[${index}][amount]`" x-model="line.amount" required min="0.01" step="0.01" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500"></div>
+                            <button type="button" x-show="@js($invoice->status !== 'issued') || (!line.subscription_id && !line.order_id)"
+                                x-on:click="removeLine(index)" class="text-xs font-semibold text-red-600 transition hover:text-red-700">Удалить</button>
+                        </div>
+                        <div class="grid grid-cols-1 gap-3 sm:grid-cols-12">
+                            <div class="sm:col-span-8">
+                                <label class="mb-1 block text-xs font-medium text-slate-500">Описание</label>
+                                <input :name="`lines[${index}][description]`" x-model="line.description" required maxlength="255" class="w-full border-gray-200">
+                            </div>
+                            <div class="sm:col-span-4">
+                                <label class="mb-1 block text-xs font-medium text-slate-500">Сумма (₼)</label>
+                                <template x-if="line.order_id || line.subscription_id">
+                                    <p class="py-2 font-mono text-sm font-semibold text-slate-900" x-text="money(line.amount)"></p>
+                                </template>
+                                <template x-if="!line.order_id && !line.subscription_id">
+                                    <input type="number" :name="`lines[${index}][amount]`" x-model="line.amount" required min="0.01" step="0.01" class="w-full font-mono border-gray-200">
+                                </template>
                             </div>
                         </div>
-                    </template>
-                </div>
-                @error('lines') <p class="mt-3 text-sm text-red-600">{{ $message }}</p> @enderror
-                @foreach ($errors->get('lines.*') as $messages) @foreach ($messages as $message) <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @endforeach @endforeach
-            </section>
+                    </div>
+                </template>
+            </div>
+            @error('lines') <p class="mt-3 text-sm text-red-600">{{ $message }}</p> @enderror
+            @foreach ($errors->get('lines.*') as $messages) @foreach ($messages as $message) <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @endforeach @endforeach
+        </section>
 
-            <section class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                <label class="mb-1 block text-xs font-semibold uppercase text-gray-500">Комментарий</label>
-                <textarea name="comment" rows="3" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500">{{ old('comment', $invoice->comment) }}</textarea>
-                @error('comment') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
-            </section>
+        <section class="border-t border-slate-200 px-4 py-5 sm:px-5">
+            <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Дополнительно</h2>
+            <label for="comment" class="sr-only">Комментарий</label>
+            <textarea name="comment" id="comment" rows="3" class="mt-4 w-full border-gray-200">{{ old('comment', $invoice->comment) }}</textarea>
+            @error('comment') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+        </section>
+
+        <div class="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 px-4 py-4 sm:px-5">
+            <div class="text-sm text-slate-600">
+                <span class="mr-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Итого</span>
+                <span class="font-semibold text-slate-900"><span x-text="total().toFixed(2)"></span> ₼</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+                <button type="submit" :disabled="!lines.length" class="bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50">Сохранить</button>
+                <a href="{{ route('invoices.show', ['invoice' => $invoice, ...$companyContext['query']]) }}" class="border border-gray-200">Отмена</a>
+            </div>
         </div>
-
-        <aside class="h-fit rounded-xl border border-gray-200 bg-white p-5 shadow-sm lg:sticky lg:top-6">
-            <h2 class="font-semibold text-gray-800">Итог</h2>
-            <div class="mt-4 flex justify-between text-sm text-gray-600"><span>Позиции:</span><span x-text="lines.length"></span></div>
-            <div class="mt-3 flex justify-between border-t border-gray-100 pt-3 font-semibold"><span>Итого:</span><span><span x-text="total().toFixed(2)"></span> ₼</span></div>
-            <button type="submit" :disabled="!lines.length" class="mt-5 w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">Сохранить изменения</button>
-        </aside>
     </div>
 </form>
 @endsection

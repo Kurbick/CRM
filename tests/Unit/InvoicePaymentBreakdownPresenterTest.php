@@ -46,6 +46,7 @@ class InvoicePaymentBreakdownPresenterTest extends TestCase
         $rows = $this->presenter->present($this->invoice($lines, [$payment]))['lineRows'];
 
         $this->assertSame(['paid', 'partially_paid'], array_column($rows, 'payment_state'));
+        $this->assertSame(['Оплачено', 'Частично оплачен'], array_column($rows, 'payment_state_label'));
         $this->assertSame(['0.00', '50.00'], array_column($rows, 'remaining_amount'));
     }
 

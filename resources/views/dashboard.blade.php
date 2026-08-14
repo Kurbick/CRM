@@ -75,8 +75,7 @@
             $companyColumnCount = 2
                 + ($abilities['company_debt'] ? 1 : 0)
                 + ($abilities['company_payments'] ? 1 : 0)
-                + ($abilities['company_invoices'] ? 1 : 0)
-                + 1;
+                + ($abilities['company_invoices'] ? 1 : 0);
         @endphp
 
         <div class="crm-table-shell">
@@ -105,12 +104,16 @@
                             @if ($abilities['company_invoices'])
                                 <th>След. оплата</th>
                             @endif
-                            <th class="crm-table-actions"></th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($companies as $company)
-                            <tr>
+                            @php
+                                $companyShowUrl = \Illuminate\Support\Facades\Gate::allows('view', $company['model'])
+                                    ? route('companies.show', $company['model'])
+                                    : null;
+                            @endphp
+                            <x-tables.clickable-row :url="$companyShowUrl" :label="'Открыть компанию '.$company['name']">
                                 <td>
                                     @can('view', $company['model'])
                                         <a href="{{ route('companies.show', $company['model']) }}"
@@ -149,12 +152,7 @@
                                         @endif
                                     </td>
                                 @endif
-                                <td class="crm-table-actions">
-                                    @can('view', $company['model'])
-                                        <a href="{{ route('companies.show', $company['model']) }}" class="crm-table-action-link">Открыть →</a>
-                                    @endcan
-                                </td>
-                            </tr>
+                            </x-tables.clickable-row>
                         @empty
                             <tr>
                                 <td colspan="{{ $companyColumnCount }}" class="crm-table-empty">

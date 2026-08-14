@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Новый счёт')
+@section('title', 'Новый инвойс')
 
 @section('content')
 @php
@@ -10,13 +10,21 @@
     ])->values();
     $oldCompanyId = (string) old('company_id', '');
     $oldCompanyName = $companies->firstWhere('id', (int) $oldCompanyId)?->name ?? '';
+    $oldLines = collect(old('lines', []))
+        ->filter(fn ($line): bool => is_array($line)
+            && (filled($line['subscription_id'] ?? null) || filled($line['order_id'] ?? null)))
+        ->values()
+        ->all();
     $defaultInvoiceNumber = 'INV-' . strtoupper(substr(uniqid(), -6));
     $defaultIssueDate = now()->toDateString();
 @endphp
 
-<div class="mb-6">
-    <a href="{{ $backUrl }}" class="text-sm text-gray-500 hover:text-gray-700">← Назад</a>
-    <h1 class="mt-2 text-2xl font-bold text-gray-900">Новый счёт</h1>
+<div class="mb-5">
+    <a href="{{ $backUrl }}" class="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-900">
+        <span aria-hidden="true">←</span>
+        Назад к инвойсам
+    </a>
+    <h1 class="mt-3 text-xl font-semibold text-slate-900">Новый инвойс</h1>
 </div>
 
 <form method="POST" action="{{ route('invoices.store') }}"
@@ -25,7 +33,7 @@
         selectedCompanyId: @js($oldCompanyId),
         companyQuery: @js($oldCompanyName),
         selectedContractId: @js((string) old('contract_id', '')),
-        oldLines: @js(array_values(old('lines', []))),
+        oldLines: @js($oldLines),
         invoiceNumber: @js(old('invoice_number', '')),
         issueDate: @js(old('issue_date', '')),
         dueDate: @js(old('due_date', '')),
@@ -39,21 +47,20 @@
     })" x-init="init()" x-on:submit="if (!lines.length) { $event.preventDefault(); linesError = true }">
     @csrf
 
-    <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div class="space-y-4 lg:col-span-2">
-            <section class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                <h2 class="mb-4 font-semibold text-gray-800">Компания и договор</h2>
+    <div data-testid="invoice-create-form-workspace" class="max-w-5xl overflow-visible border-y border-slate-200 bg-white">
+        <section class="px-4 py-5 sm:px-5">
+            <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Основная информация</h2>
 
-                <div class="grid grid-cols-1 gap-4" :class="selectedCompanyId ? 'sm:grid-cols-2' : ''">
-                    <div class="relative" x-on:click.outside="companyOpen = false" x-on:keydown.escape.window="companyOpen = false">
-                        <label class="mb-1 block text-xs font-semibold uppercase text-gray-500">Компания <span class="text-red-500">*</span></label>
+            <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div class="relative" x-on:click.outside="companyOpen = false" x-on:keydown.escape.window="companyOpen = false">
+                        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Компания <span class="text-red-500">*</span></label>
                         <input type="hidden" name="company_id" x-model="selectedCompanyId">
                         <div class="relative">
                             <input type="text" x-model="companyQuery" autocomplete="off" placeholder="Начните вводить название"
                                 x-on:focus="companyOpen = true" x-on:click="companyOpen = true"
                                 x-on:input="companyTyped()"
                                 x-on:keydown.enter.prevent="filteredCompanies.length && selectCompany(filteredCompanies[0])"
-                                class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 pr-16 text-sm text-gray-700 outline-none transition hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                                class="w-full pr-16 @error('company_id') border-red-300 @else border-gray-200 @enderror">
                             <button type="button" x-show="companyQuery" x-cloak x-on:click="clearCompany()"
                                 class="absolute inset-y-0 right-8 flex items-center px-2 text-gray-400 transition hover:text-red-500" aria-label="Очистить компанию">✕</button>
                             <button type="button" x-on:click="companyOpen = !companyOpen"
@@ -64,7 +71,7 @@
                                 </svg>
                             </button>
                         </div>
-                        <div x-show="companyOpen" x-cloak x-transition role="listbox" class="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                        <div x-show="companyOpen" x-cloak x-transition role="listbox" class="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto border border-slate-200 bg-white shadow-lg">
                             <template x-for="company in filteredCompanies" :key="company.id">
                                 <button type="button" x-on:click="selectCompany(company)" class="block w-full px-3 py-2.5 text-left text-sm hover:bg-blue-50">
                                     <span x-text="company.name"></span>
@@ -73,15 +80,15 @@
                             <p x-show="!filteredCompanies.length" class="px-3 py-3 text-sm text-gray-400">Компании не найдены</p>
                         </div>
                         @error('company_id') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
-                    </div>
+                </div>
 
-                    <div x-show="selectedCompanyId" x-cloak data-step="contract" class="relative"
+                <div x-show="selectedCompanyId" x-cloak data-step="contract" class="relative"
                         x-on:click.outside="contractOpen = false" x-on:keydown.escape.window="contractOpen = false">
-                        <label class="mb-1 block text-xs font-semibold uppercase text-gray-500">Договор <span class="text-red-500">*</span></label>
+                        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Договор <span class="text-red-500">*</span></label>
                         <input type="hidden" name="contract_id" x-model="selectedContractId">
                         <button type="button" x-on:click="contractOpen = !contractOpen"
                             :disabled="!selectedCompanyId || loadingContracts"
-                            class="relative w-full rounded-lg border border-gray-200 bg-white px-3 py-2 pr-10 text-left text-sm text-gray-700 outline-none transition hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
+                            class="relative flex min-h-10 w-full items-center rounded-md border bg-white px-3 pr-10 text-left text-sm text-slate-700 outline-none transition hover:border-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 @error('contract_id') border-red-300 @else border-slate-300 @enderror disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-500"
                             aria-haspopup="listbox" x-bind:aria-expanded="contractOpen" aria-label="Выбрать договор">
                             <span x-text="selectedContract ? contractLabel(selectedContract) : (loadingContracts ? 'Загрузка договоров…' : 'Выберите договор')"
                                 :class="selectedContract ? 'text-gray-700' : 'text-gray-400'"></span>
@@ -92,7 +99,7 @@
                             </span>
                         </button>
                         <div x-show="contractOpen" x-cloak x-transition role="listbox"
-                            class="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                            class="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto border border-slate-200 bg-white shadow-lg">
                             <template x-for="contract in contracts" :key="contract.id">
                                 <button type="button" role="option" x-on:click="selectContract(contract)"
                                     x-bind:aria-selected="String(contract.id) === String(selectedContractId)"
@@ -107,109 +114,109 @@
                             Срок действия: <span x-text="contractDates(selectedContract)"></span>
                         </p>
                         @error('contract_id') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
-                    </div>
                 </div>
-            </section>
+            </div>
 
-            <section x-show="selectedContractId" x-cloak data-step="invoice-details" class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                <h2 class="mb-4 font-semibold text-gray-800">Данные счёта</h2>
-                <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div x-show="selectedContractId" x-cloak data-step="invoice-details" class="mt-5 border-t border-slate-200 pt-5">
+                <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
                     <div>
-                        <label class="mb-1 block text-xs font-semibold uppercase text-gray-500">Номер счёта <span class="text-red-500">*</span></label>
+                        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Номер счёта <span class="text-red-500">*</span></label>
                         <input name="invoice_number" x-model="invoiceNumber" required
-                            class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono outline-none focus:border-blue-500">
+                            class="w-full font-mono @error('invoice_number') border-red-300 @else border-gray-200 @enderror">
                         @error('invoice_number') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
                     </div>
                     <div>
-                        <label class="mb-1 block text-xs font-semibold uppercase text-gray-500">Дата выставления <span class="text-red-500">*</span></label>
+                        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Дата выставления <span class="text-red-500">*</span></label>
                         <x-form.date-input name="issue_date" x-model="issueDate" x-on:change="issueDateChanged()" required />
                     </div>
                     <div>
-                        <label class="mb-1 block text-xs font-semibold uppercase text-gray-500">Оплатить до <span class="text-red-500">*</span></label>
+                        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Оплатить до <span class="text-red-500">*</span></label>
                         <x-form.date-input name="due_date" x-model="dueDate" x-on:input="dueDateIsManual = true"
                             dynamic-readonly="hasAutomaticPaymentTerms" required />
                         <p class="mt-1 text-xs text-gray-500" x-text="dueDateHint"></p>
                     </div>
                 </div>
-            </section>
+            </div>
+        </section>
 
-            <section x-show="selectedContractId" x-cloak data-step="invoice-lines" class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                <h2 class="font-semibold text-gray-800">Позиции счёта</h2>
-                <p class="mt-1 text-xs text-gray-500">Выберите услуги по договору или добавьте ручную позицию.</p>
+        <section x-show="selectedContractId" x-cloak data-step="invoice-lines" class="border-t border-slate-200 px-4 py-5 sm:px-5">
+            <div>
+                <h2 class="text-sm font-semibold text-slate-900">Позиции счета</h2>
+                <p class="mt-1 text-xs text-gray-500">Выберите услуги по договору.</p>
+            </div>
 
-                <div class="mt-4">
-                    <div>
-                        <h3 class="mb-2 text-xs font-semibold uppercase text-gray-500">Услуги по договору</h3>
-                        <p x-show="loadingItems" class="text-sm text-gray-500">Загрузка услуг…</p>
-                        <p x-show="!loadingItems && !availableItems.length" class="text-sm text-gray-500">В договоре нет услуг для добавления</p>
-                        <div class="space-y-1">
-                            <template x-for="item in availableItems" :key="itemKey(item)">
-                                <label class="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-gray-50">
-                                    <input type="checkbox" class="mt-1 rounded border-gray-300 text-blue-600" :checked="isSelected(item)" x-on:change="toggleItem(item, $event.target.checked)">
-                                    <span class="min-w-0 flex-1">
-                                        <span class="block text-sm font-medium text-gray-800" x-text="item.description"></span>
-                                        <span class="block text-xs text-gray-500" x-text="itemSubtitle(item)"></span>
-                                    </span>
-                                    <span class="whitespace-nowrap text-sm font-semibold text-gray-800" x-text="money(item.amount)"></span>
-                                </label>
-                            </template>
-                        </div>
-                    </div>
+            <div class="mt-4">
+                <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Услуги по договору</h3>
+                <p x-show="loadingItems" class="text-sm text-gray-500">Загрузка услуг…</p>
+                <p x-show="!loadingItems && !availableItems.length" class="text-sm text-gray-500">В договоре нет услуг для добавления</p>
+                <div class="divide-y divide-slate-100 border-y border-slate-200">
+                    <template x-for="item in availableItems" :key="itemKey(item)">
+                        <label class="flex cursor-pointer items-start gap-3 px-3 py-3 transition hover:bg-slate-50">
+                            <input type="checkbox" class="mt-1 rounded border-gray-300 text-blue-600" :checked="isSelected(item)" x-on:change="toggleItem(item, $event.target.checked)">
+                            <span class="min-w-0 flex-1">
+                                <span class="block text-sm font-medium text-gray-800" x-text="item.description"></span>
+                                <span class="block text-xs text-gray-500" x-text="itemSubtitle(item)"></span>
+                            </span>
+                            <span class="crm-table-numeric whitespace-nowrap text-sm font-semibold text-gray-800" x-text="money(item.amount)"></span>
+                        </label>
+                    </template>
                 </div>
+            </div>
 
-                <button type="button" x-on:click="addManualLine()" class="mt-4 text-sm font-medium text-blue-600 hover:text-blue-800">+ Добавить ручную позицию</button>
-
-                <div x-show="lines.length" x-cloak class="mt-5">
-                    <h3 class="mb-2 text-xs font-semibold uppercase text-gray-500">Добавлено в счёт</h3>
-                    <div class="space-y-3">
-                        <template x-for="(line, index) in lines" :key="line.key">
-                            <div class="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                                <input type="hidden" :name="`lines[${index}][subscription_id]`" :value="line.subscription_id || ''">
-                                <input type="hidden" :name="`lines[${index}][order_id]`" :value="line.order_id || ''">
-                                <input type="hidden" :name="line.subscription_id ? `lines[${index}][period_start]` : null" :value="line.period_start || ''">
-                                <input type="hidden" :name="line.subscription_id ? `lines[${index}][period_end]` : null" :value="line.period_end || ''">
-                                <div class="mb-2 flex items-center justify-between gap-3">
-                                    <div>
-                                        <p class="text-xs font-medium text-gray-500" x-text="lineType(line)"></p>
-                                        <p x-show="line.subscription_id" class="mt-0.5 text-xs text-gray-500">
-                                            Расчётный период: <span x-text="`${formatDate(line.period_start)} — ${formatDate(line.period_end)}`"></span>
-                                        </p>
-                                    </div>
-                                    <button type="button" x-on:click="removeLine(index)" class="text-sm text-red-500 hover:text-red-700" aria-label="Удалить позицию">Удалить</button>
+            <div x-show="lines.length" x-cloak class="mt-5">
+                <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Добавлено в счёт</h3>
+                <div class="border-y border-slate-200">
+                    <template x-for="(line, index) in lines" :key="line.key">
+                        <div class="border-b border-slate-200 px-3 py-4 last:border-b-0">
+                            <input type="hidden" :name="`lines[${index}][subscription_id]`" :value="line.subscription_id || ''">
+                            <input type="hidden" :name="`lines[${index}][order_id]`" :value="line.order_id || ''">
+                            <input type="hidden" :name="line.subscription_id ? `lines[${index}][period_start]` : null" :value="line.period_start || ''">
+                            <input type="hidden" :name="line.subscription_id ? `lines[${index}][period_end]` : null" :value="line.period_end || ''">
+                            <div class="mb-2 flex items-center justify-between gap-3">
+                                <div>
+                                    <p class="text-xs font-medium text-gray-500" x-text="lineType(line)"></p>
+                                    <p x-show="line.subscription_id" class="mt-0.5 text-xs text-gray-500">
+                                        Расчётный период: <span x-text="`${formatDate(line.period_start)} — ${formatDate(line.period_end)}`"></span>
+                                    </p>
                                 </div>
-                                <div class="grid grid-cols-1 gap-3 sm:grid-cols-12">
-                                    <div class="sm:col-span-8">
-                                        <label class="mb-1 block text-xs text-gray-500">Описание</label>
-                                        <input :name="`lines[${index}][description]`" x-model="line.description" required maxlength="255"
-                                            class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500">
-                                    </div>
-                                    <div class="sm:col-span-4">
-                                        <label class="mb-1 block text-xs text-gray-500">Сумма (₼)</label>
-                                        <input type="number" :name="`lines[${index}][amount]`" x-model="line.amount" min="0.01" step="0.01" required
-                                            class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500">
-                                    </div>
+                                <button type="button" x-on:click="removeLine(index)" class="text-xs font-semibold text-red-600 transition hover:text-red-700" aria-label="Удалить позицию">Удалить</button>
+                            </div>
+                            <div class="grid grid-cols-1 gap-3 sm:grid-cols-12">
+                                <div class="sm:col-span-8">
+                                    <label class="mb-1 block text-xs font-medium text-slate-500">Описание</label>
+                                    <input :name="`lines[${index}][description]`" x-model="line.description" required maxlength="255"
+                                        class="w-full border-gray-200">
+                                </div>
+                                <div class="sm:col-span-4">
+                                    <label class="mb-1 block text-xs font-medium text-slate-500">Сумма (₼)</label>
+                                    <p class="py-2 font-mono text-sm font-semibold text-slate-900" x-text="money(line.amount)"></p>
                                 </div>
                             </div>
-                        </template>
-                    </div>
+                        </div>
+                    </template>
                 </div>
-                <p x-show="linesError" class="mt-3 text-sm text-red-600">Добавьте хотя бы одну позицию счёта.</p>
-                @error('lines') <p class="mt-3 text-sm text-red-600">{{ $message }}</p> @enderror
-            </section>
+            </div>
+            <p x-show="linesError" class="mt-3 text-sm text-red-600">Добавьте хотя бы одну позицию счёта.</p>
+            @error('lines') <p class="mt-3 text-sm text-red-600">{{ $message }}</p> @enderror
+        </section>
 
-            <section x-show="selectedContractId" x-cloak data-step="invoice-comment" class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                <label class="mb-1 block text-xs font-semibold uppercase text-gray-500">Комментарий</label>
-                <textarea name="comment" rows="3" x-model="comment" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500"></textarea>
-                @error('comment') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
-            </section>
+        <section x-show="selectedContractId" x-cloak data-step="invoice-comment" class="border-t border-slate-200 px-4 py-5 sm:px-5">
+            <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Дополнительно</h2>
+            <label for="comment" class="sr-only">Комментарий</label>
+            <textarea name="comment" id="comment" rows="3" x-model="comment" class="mt-4 w-full border-gray-200"></textarea>
+            @error('comment') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+        </section>
+
+        <div x-show="selectedContractId" x-cloak class="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 px-4 py-4 sm:px-5">
+            <div class="text-sm text-slate-600">
+                <span class="mr-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Итого</span>
+                <span class="font-semibold text-slate-900" x-text="money(total)">0.00 ₼</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+                <button type="submit" :disabled="!selectedCompanyId || !selectedContractId || !lines.length" class="bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50">Сохранить черновик</button>
+                <a href="{{ $backUrl }}" class="border border-gray-200">Отмена</a>
+            </div>
         </div>
-
-        <aside class="h-fit rounded-xl border border-gray-200 bg-white p-5 shadow-sm lg:sticky lg:top-6">
-            <h2 class="font-semibold text-gray-800">Итог</h2>
-            <div class="mt-4 flex justify-between text-sm text-gray-600"><span>Позиции:</span><span x-text="lines.length">0</span></div>
-            <div class="mt-3 flex justify-between border-t border-gray-100 pt-3 font-semibold text-gray-900"><span>Итого:</span><span x-text="money(total)">0.00 ₼</span></div>
-            <button type="submit" :disabled="!selectedCompanyId || !selectedContractId || !lines.length" class="mt-5 w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">Сохранить черновик</button>
-        </aside>
     </div>
 </form>
 
@@ -344,12 +351,11 @@ document.addEventListener('alpine:init', () => {
             }
         },
         mergeOldMetadata() { this.lines.forEach(line => { const item = this.availableItems.find(i => this.itemKey(i) === line.key); if (item) { line.billing_period = item.billing_period || null; line.payment_terms = item.payment_terms ?? null } }) },
-        normaliseOldLine(line, i) { const type = line.subscription_id ? 'subscription' : (line.order_id ? 'order' : 'manual'); const id = line.subscription_id || line.order_id || i; return { key: type === 'manual' ? `manual-old-${i}` : `${type}-${id}`, description: line.description || '', amount: line.amount || '', subscription_id: line.subscription_id || null, order_id: line.order_id || null, period_start: line.period_start || null, period_end: line.period_end || null, billing_period: line.billing_period || null, payment_terms: null } },
+        normaliseOldLine(line) { const type = line.subscription_id ? 'subscription' : 'order'; const id = line.subscription_id || line.order_id; return { key: `${type}-${id}`, description: line.description || '', amount: line.amount || '', subscription_id: line.subscription_id || null, order_id: line.order_id || null, period_start: line.period_start || null, period_end: line.period_end || null, billing_period: line.billing_period || null, payment_terms: null } },
         itemKey(item) { return `${item.type}-${item.id}` }, isSelected(item) { return this.lines.some(line => line.key === this.itemKey(item)) },
         toggleItem(item, checked) { const key = this.itemKey(item); if (checked && !this.lines.some(line => line.key === key)) this.lines.push(this.lineFromItem(item)); else if (!checked) this.lines = this.lines.filter(line => line.key !== key); this.afterLinesChanged() },
         lineFromItem(item) { const period = item.type === 'subscription' ? this.subscriptionPeriod(item) : [null, null]; return { key: this.itemKey(item), description: item.description, amount: item.amount, subscription_id: item.type === 'subscription' ? item.id : null, order_id: item.type === 'order' ? item.id : null, period_start: period[0], period_end: period[1], billing_period: item.billing_period || null, payment_terms: item.payment_terms ?? null } },
         subscriptionPeriod(item) { if (!item.next_billing_date || !item.start_date) return [null, null]; const start = this.parseDate(item.next_billing_date); const anchor = this.parseDate(item.start_date); const next = new Date(start); if (item.billing_period === 'custom' && item.custom_interval_unit === 'day') { next.setDate(next.getDate() + Number(item.custom_interval_value)); } else { const standardMonths = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12 }; const months = item.billing_period === 'custom' ? Number(item.custom_interval_value) * (item.custom_interval_unit === 'year' ? 12 : 1) : standardMonths[item.billing_period]; if (!months) return [null, null]; const anchorIsEom = anchor.getDate() === new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0).getDate(); next.setDate(1); next.setMonth(next.getMonth() + months); const targetLastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate(); next.setDate(anchorIsEom ? targetLastDay : Math.min(anchor.getDate(), targetLastDay)); } const end = new Date(next); end.setDate(end.getDate() - 1); return [this.inputDate(start), this.inputDate(end)] },
-        addManualLine() { this.lines.push({ key: `manual-${Date.now()}-${Math.random()}`, description: '', amount: '', subscription_id: null, order_id: null, period_start: null, period_end: null, billing_period: null, payment_terms: null }); this.afterLinesChanged() },
         removeLine(index) { this.lines.splice(index, 1); this.afterLinesChanged() },
         afterLinesChanged() { this.linesError = false; this.recalculateDueDate() },
         issueDateChanged() { if (this.hasAutomaticPaymentTerms) this.recalculateDueDate() },
@@ -357,7 +363,7 @@ document.addEventListener('alpine:init', () => {
         contractLabel(c) { return `№ ${c.contract_number}` },
         contractDates(c) { return c.end_date ? `${this.formatDate(c.start_date)} — ${this.formatDate(c.end_date)}` : `с ${this.formatDate(c.start_date)}, бессрочный` },
         itemSubtitle(item) { if (item.type === 'order') return 'Разовая услуга'; return `Подписка · ${{ monthly: 'ежемесячно', quarterly: 'ежеквартально', semiannual: 'раз в полгода', annual: 'ежегодно', custom: 'индивидуальный период' }[item.billing_period] || 'индивидуальный период'}` },
-        lineType(line) { return line.subscription_id ? 'Подписка' : (line.order_id ? 'Разовая услуга' : 'Ручная позиция') },
+        lineType(line) { return line.subscription_id ? 'Подписка' : 'Разовая услуга' },
         money(value) { return `${(Number.parseFloat(value) || 0).toFixed(2)} ₼` },
         parseDate(value) { const [y, m, d] = value.split('-').map(Number); return new Date(y, m - 1, d) },
         inputDate(date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` },

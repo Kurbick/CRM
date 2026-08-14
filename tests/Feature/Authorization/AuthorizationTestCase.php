@@ -396,6 +396,8 @@ abstract class AuthorizationTestCase extends TestCase
     /** @return array<string, mixed> */
     protected function invoiceStorePayload(Company $company, Contract $contract): array
     {
+        $order = $this->subjectOrder($contract);
+
         return [
             'company_id' => $company->id,
             'contract_id' => $contract->id,
@@ -407,7 +409,7 @@ abstract class AuthorizationTestCase extends TestCase
                 'description' => 'Authorization new invoice line',
                 'amount' => '120.00',
                 'subscription_id' => null,
-                'order_id' => null,
+                'order_id' => $order->id,
                 'period_start' => null,
                 'period_end' => null,
             ]],

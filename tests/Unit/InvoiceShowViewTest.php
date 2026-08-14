@@ -162,6 +162,7 @@ class InvoiceShowViewTest extends TestCase
         $this->assertStringNotContainsString('<div class="mt-3 rounded-lg border border-red-100 bg-red-50 p-3">', $source);
         $this->assertSame(1, substr_count($source, "\$paymentSource['credit_balance_applied_minor'] > 0"));
         $this->assertSame(1, substr_count($source, "Из баланса: {{ \$formatMoney(\$paymentSource['credit_balance_applied_amount']) }}"));
+        $this->assertStringContainsString('class="w-64 text-right text-xs font-medium text-blue-700"', $source);
         $this->assertStringNotContainsString('Частично из баланса', $source);
         $this->assertStringContainsString("\$paymentSource['credit_balance_payment_ids']", $source);
         $this->assertStringNotContainsString('Оплата из Credit Balance', $source);
