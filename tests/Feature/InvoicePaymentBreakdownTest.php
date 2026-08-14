@@ -94,7 +94,7 @@ class InvoicePaymentBreakdownTest extends TestCase
 
         $response->assertOk();
         $this->assertSame(1, substr_count($response->getContent(), 'Из баланса: 10,00 ₼'));
-        $this->assertSame(2, substr_count($response->getContent(), 'Из баланса'));
+        $this->assertSame(3, substr_count($response->getContent(), 'Из баланса'));
         $response->assertDontSee('Частично из баланса')
             ->assertDontSee('Оплата из Credit Balance');
     }
@@ -183,8 +183,8 @@ class InvoicePaymentBreakdownTest extends TestCase
 
         $response->assertOk()
             ->assertSee('Платежи')
-            ->assertSee('Детали')
-            ->assertDontSee('Открыть историю')
+            ->assertSee('Открыть историю платежей')
+            ->assertDontSee('Детали')
             ->assertSee('Подтверждён')
             ->assertSee('Ожидает')
             ->assertSee('Всего платежей: 7')

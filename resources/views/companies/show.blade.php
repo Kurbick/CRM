@@ -584,6 +584,7 @@
                                 <th>Дата платежа</th>
                                 <th>Счет (Инвойс)</th>
                                 <th>Сумма платежа</th>
+                                <th>Способ</th>
                                 <th>Статус</th>
                                 <th>Транзакция / Описание</th>
                             </tr>
@@ -611,6 +612,14 @@
                                     <td class="crm-table-numeric font-semibold text-green-600">
                                         + {{ number_format($payment->amount, 2) }} ₼
                                     </td>
+                                    <td class="text-sm text-slate-700">
+                                        {{ match ($payment->payment_method) {
+                                            'transfer' => 'Безналичный',
+                                            'card' => 'Карта',
+                                            'cash' => 'Наличные',
+                                            default => $payment->payment_method,
+                                        } }}
+                                    </td>
                                     <td>
                                         @include('partials.badge', ['status' => $payment->status])
                                     </td>
@@ -623,7 +632,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="5" class="crm-table-empty">Платежи отсутствуют.</td>
+                                    <td colspan="6" class="crm-table-empty">Платежи отсутствуют.</td>
                                 </tr>
                             @endforelse
                         </tbody>

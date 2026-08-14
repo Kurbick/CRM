@@ -38,7 +38,9 @@ class InvoicePaymentSourceDisplayTest extends TestCase
         $response = $this->get(route('invoices.show', $invoice))->assertOk();
 
         $this->assertSame(1, substr_count($response->getContent(), 'Из баланса: 500,00 ₼'));
-        $this->assertSame(2, substr_count($response->getContent(), 'Из баланса'));
+        $this->assertSame(3, substr_count($response->getContent(), 'Из баланса'));
+        $response->assertSee('data-testid="invoice-payment-source-balance"', false)
+            ->assertSee('data-testid="payment-source-balance-history"', false);
         $response->assertDontSee('Частично из баланса')
             ->assertDontSee('Оплата из Credit Balance');
     }
@@ -60,7 +62,7 @@ class InvoicePaymentSourceDisplayTest extends TestCase
 
         $content = $response->getContent();
         $this->assertSame(1, substr_count($content, 'Из баланса: 20,00 ₼'));
-        $this->assertSame(2, substr_count($content, 'Из баланса'));
+        $this->assertSame(3, substr_count($content, 'Из баланса'));
     }
 
     public function test_only_applied_balance_money_is_full_even_with_remaining_invoice_debt(): void

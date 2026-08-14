@@ -94,6 +94,8 @@ class CompanyFinancialAuthorizationTest extends AuthorizationTestCase
 
         $response->assertSee('VISIBLE-PAYMENT-DETAIL')
             ->assertSee('Платежи (1)')
+            ->assertSee('Способ')
+            ->assertSee('Безналичный')
             ->assertDontSee($invoice->invoice_number)
             ->assertDontSee(route('invoices.show', $invoice), false);
 

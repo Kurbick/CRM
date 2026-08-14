@@ -135,8 +135,8 @@ class InvoiceShowViewTest extends TestCase
         $source = file_get_contents(resource_path('views/invoices/show.blade.php'));
 
         $this->assertStringContainsString("{{ \$paymentBreakdown['payments_count'] }}", $source);
-        $this->assertStringContainsString('Детали', $source);
-        $this->assertStringNotContainsString('Открыть историю', $source);
+        $this->assertStringContainsString('Открыть историю платежей', $source);
+        $this->assertStringNotContainsString('>Детали<', $source);
         $this->assertStringContainsString('paymentHistoryOpen:', $source);
         $this->assertStringContainsString('x-show="paymentHistoryOpen" x-cloak', $source);
         $this->assertStringContainsString('id="payment-history-drawer"', $source);

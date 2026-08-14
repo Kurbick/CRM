@@ -302,6 +302,13 @@
                                 <h2 class="text-sm font-semibold text-slate-900">Платежи</h2>
                                 <span class="text-xs tabular-nums text-slate-500">{{ $paymentBreakdown['payments_count'] }}</span>
                             </div>
+
+                            @if ($paymentBreakdown['payments_count'] > 0)
+                                <button type="button" x-ref="paymentHistoryTrigger" @click="$dispatch('open-payment-history')"
+                                    class="ml-auto crm-table-action-link">
+                                    Открыть историю платежей
+                                </button>
+                            @endif
                         </div>
 
                         @if ($paymentBreakdown['payments_count'] > 0)
@@ -309,10 +316,9 @@
                                 <table class="crm-table min-w-[620px] table-fixed">
                                     <colgroup>
                                         <col class="w-[20%]">
-                                        <col class="w-[20%]">
-                                        <col class="w-[24%]">
                                         <col class="w-[22%]">
-                                        <col class="w-[14%]">
+                                        <col class="w-[34%]">
+                                        <col class="w-[24%]">
                                     </colgroup>
                                     <thead>
                                         <tr>
@@ -330,13 +336,17 @@
                                                     {{ $paymentRow['payment_date'] ? \Illuminate\Support\Carbon::parse($paymentRow['payment_date'])->format('d/m/Y') : '—' }}
                                                 </td>
                                                 <td class="crm-table-numeric font-semibold text-slate-900">{{ $formatMoney($paymentRow['amount']) }}</td>
-                                                <td>{{ $paymentRow['payment_method_label'] }}</td>
+                                                <td>
+                                                    <span>{{ $paymentRow['payment_method_label'] }}</span>
+                                                    @if (in_array($paymentRow['id'], $paymentSource['credit_balance_payment_ids'], true))
+                                                        <span data-testid="invoice-payment-source-balance"
+                                                            class="mt-1 inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+                                                            Из баланса
+                                                        </span>
+                                                    @endif
+                                                </td>
                                                 <td>
                                                     @include('partials.badge', ['status' => $paymentRow['status']])
-                                                </td>
-                                                <td class="crm-table-actions">
-                                                    <button type="button" x-ref="paymentHistoryTrigger" @click="$dispatch('open-payment-history')"
-                                                        class="crm-table-action-link">Детали</button>
                                                 </td>
                                             </tr>
                                         @endforeach
@@ -642,6 +652,9 @@
                                 <div>
                                     <h3 id="payment-history-title" class="font-bold text-gray-900">История платежей</h3>
                                     <p class="mt-0.5 text-xs text-gray-500">Счёт {{ $invoice->invoice_number }}</p>
+                                    @if ($invoice->company)
+                                        <p class="mt-0.5 text-xs text-gray-500">{{ $invoice->company->name }}</p>
+                                    @endif
                                     <p class="mt-1 text-xs text-gray-400">Всего платежей: {{ $paymentBreakdown['payments_count'] }}</p>
                                 </div>
                                 <button type="button" x-ref="paymentHistoryClose" @click="closePaymentHistory()"
@@ -706,7 +719,7 @@
                             </div>
 
                             @if ($isCreditBalancePayment)
-                                <div
+                                <div data-testid="payment-source-balance-history"
                                     class="mt-2 inline-flex items-center rounded-md bg-blue-50 px-2 py-1
                                            text-[11px] font-medium text-blue-700">
 
