@@ -66,6 +66,7 @@ class DashboardAuthorizationTest extends AuthorizationTestCase
 
         $capture['result']
             ->assertOk()
+            ->assertSee('data-testid="dashboard-neutral-fallback"', false)
             ->assertSee('Для просмотра показателей у вас нет необходимых прав')
             ->assertDontSee(self::COMPANY_NAME)
             ->assertDontSee(self::CONTRACT_NUMBER)

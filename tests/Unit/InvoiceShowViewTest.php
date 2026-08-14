@@ -158,6 +158,11 @@ class InvoiceShowViewTest extends TestCase
         $this->assertStringContainsString("document.body.style.overflow = ''", $source);
         $this->assertStringContainsString('$refs.paymentHistoryClose.focus()', $source);
         $this->assertStringContainsString('$refs.paymentHistoryTrigger?.focus()', $source);
+        $this->assertStringContainsString('trapPaymentHistoryFocus(event)', $source);
+        $this->assertStringContainsString('x-ref="paymentHistoryDrawer"', $source);
+        $this->assertStringContainsString('x-on:keydown.tab="trapPaymentHistoryFocus($event)"', $source);
+        $this->assertStringContainsString('document.activeElement === first', $source);
+        $this->assertStringContainsString('document.activeElement === last', $source);
         $this->assertStringContainsString('class="invoice-payment-history crm-print-hide print:hidden"', $source);
         $this->assertStringNotContainsString('<div class="mt-3 rounded-lg border border-red-100 bg-red-50 p-3">', $source);
         $this->assertSame(1, substr_count($source, "\$paymentSource['credit_balance_applied_minor'] > 0"));

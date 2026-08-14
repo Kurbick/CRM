@@ -39,6 +39,17 @@ class UserAdministrationUiTest extends UserAdministrationTestCase
             ->assertDontSee('data-accordion-section=', false)->assertDontSee('aria-controls="user-', false)->assertDontSee('value="Strong', false);
     }
 
+    public function test_empty_last_login_uses_the_same_copy_as_the_users_index(): void
+    {
+        $viewer = $this->actorWithPermissions(['users.view']);
+        $target = User::factory()->create(['last_login_at' => null]);
+
+        $this->actingAs($viewer)->get(route('admin.users.edit', $target))
+            ->assertOk()
+            ->assertSee('Не входил')
+            ->assertDontSee('Никогда');
+    }
+
     public function test_read_only_and_self_explanations_are_rendered(): void
     {
         $readOnly = $this->actorWithPermissions(['users.view']);

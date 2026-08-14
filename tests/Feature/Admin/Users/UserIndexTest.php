@@ -7,13 +7,13 @@ use Illuminate\Support\Carbon;
 
 class UserIndexTest extends UserAdministrationTestCase
 {
-    public function test_index_displays_user_role_status_and_never(): void
+    public function test_index_displays_user_role_status_and_never_logged_in_state(): void
     {
         $actor = $this->actorWithPermissions(['users.view']);
         $target = User::factory()->inactive()->create(['name' => 'Иван Тестовый', 'email' => 'ivan@example.test', 'last_login_at' => null]);
         $target->assignRole('viewer');
         $this->actingAs($actor)->get(route('admin.users.index'))
-            ->assertOk()->assertSee('Иван Тестовый')->assertSee('ivan@example.test')->assertSee('Только просмотр')->assertSee('Отключён')->assertSee('Никогда');
+            ->assertOk()->assertSee('Иван Тестовый')->assertSee('ivan@example.test')->assertSee('Только просмотр')->assertSee('Отключён')->assertSee('Не входил')->assertDontSee('Никогда');
     }
 
     public function test_last_login_is_displayed_in_baku_timezone_on_index_and_detail(): void

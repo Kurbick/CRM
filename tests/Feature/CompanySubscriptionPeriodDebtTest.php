@@ -157,6 +157,23 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
             ->assertDontSee('invoice_mode');
     }
 
+    public function test_company_show_keeps_the_global_footer_in_the_application_column(): void
+    {
+        $response = $this->get(route('companies.show', $this->company('Layout Company')))
+            ->assertOk();
+
+        $document = new \DOMDocument;
+        $previousLibxmlErrors = libxml_use_internal_errors(true);
+        $document->loadHTML($response->getContent());
+        libxml_clear_errors();
+        libxml_use_internal_errors($previousLibxmlErrors);
+        $xpath = new \DOMXPath($document);
+        $footer = $xpath->query('//*[contains(concat(" ", normalize-space(@class), " "), " crm-global-footer ")]')->item(0);
+
+        $this->assertNotNull($footer);
+        $this->assertStringContainsString('flex-col', $footer->parentNode->getAttribute('class'));
+    }
+
     public function test_one_time_debt_remains_visible_when_subscription_is_fully_paid(): void
     {
         $company = $this->company();
@@ -232,10 +249,13 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
         $contractId = $this->contract($company, 'TARGET-CONTRACT');
         $this->contract($other, 'OTHER-CONTRACT');
 
+        $contractUrl = route('contracts.show', ['contract' => $contractId, 'origin' => 'company', 'tab' => 'contracts']);
+
         $this->get(route('companies.show', $company))
             ->assertOk()
             ->assertSee('TARGET-CONTRACT')
-            ->assertSee(route('contracts.show', ['contract' => $contractId, 'origin' => 'company', 'tab' => 'contracts']))
+            ->assertSee($contractUrl)
+            ->assertSee('data-row-url="'.e($contractUrl).'"', false)
             ->assertDontSee('OTHER-CONTRACT')
             ->assertSee('Предметы договора');
     }
@@ -256,6 +276,7 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
     {
         $company = $this->company();
         $period = $this->period($company, dueDate: '2099-05-11');
+        $invoiceUrl = route('invoices.show', ['invoice' => $period['invoice_id'], 'origin' => 'company', 'tab' => 'invoices']);
 
         $this->get(route('companies.show', $company))
             ->assertOk()
@@ -263,7 +284,8 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
             ->assertSee('К оплате')
             ->assertSee('По подпискам')
             ->assertSee('INV-DEBT-1')
-            ->assertSee(route('invoices.show', ['invoice' => $period['invoice_id'], 'origin' => 'company', 'tab' => 'invoices']));
+            ->assertSee($invoiceUrl)
+            ->assertSee('data-row-url="'.e($invoiceUrl).'"', false);
     }
 
     public function test_partial_confirmed_allocation_shows_allocated_remaining_and_partial_status(): void
@@ -438,14 +460,17 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
     public function test_debt_tables_use_consistent_compact_table_primitive(): void
     {
         $view = file_get_contents(resource_path('views/companies/show.blade.php'));
-        preg_match_all('/<table class="crm-table min-w-\[940px\] table-fixed">.*?<\/table>/s', $view, $matches);
+        preg_match_all('/<table data-testid="company-debt-table" class="crm-table min-w-\[940px\] table-fixed">.*?<\/table>/s', $view, $matches);
 
         $this->assertCount(2, $matches[0]);
+        $this->assertStringContainsString("\$companyDebtColumnWidths = ['w-[22%]', 'w-[13%]', 'w-[12%]', 'w-[12%]', 'w-[12%]', 'w-[14%]', 'w-[15%]'];", $view);
         foreach ($matches[0] as $table) {
             $this->assertStringNotContainsString('text-right', $table);
             $this->assertStringNotContainsString('text-center', $table);
             $this->assertStringContainsString('<th>Статус</th>', $table);
             $this->assertStringContainsString('class="crm-table-number', $table);
+            $this->assertStringContainsString('<x-tables.clickable-row :url=', $table);
+            $this->assertStringContainsString('@foreach ($companyDebtColumnWidths as $width)', $table);
         }
     }
 

@@ -191,7 +191,9 @@ class InvoicePaymentBreakdownTest extends TestCase
             ->assertSee('Отменённый 1')
             ->assertSee('Отменённый 5')
             ->assertSee('Ожидающий')
-            ->assertSee('Подтверждённый');
+            ->assertSee('Подтверждённый')
+            ->assertDontSeeText('element.offsetParent !== null')
+            ->assertDontSeeText('event.preventDefault()');
         $this->assertSame(7, $breakdown['payments_count']);
         $this->assertSame(1, $breakdown['pending_payments_count']);
         $this->assertSame(1, $breakdown['confirmed_payments_count']);

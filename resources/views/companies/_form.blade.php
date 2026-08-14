@@ -45,7 +45,7 @@
             </div>
 
             <div>
-                <label for="email" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">E-mail</label>
+                <label for="email" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Email</label>
                 <input type="email" name="email" id="email" value="{{ old('email', $company?->email) }}"
                     class="w-full @error('email') border-red-300 @else border-gray-200 @enderror"
                     placeholder="info@client.com">
@@ -139,7 +139,7 @@
             </div>
 
             <div>
-                <label for="bank_code" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Код банка (Kod)</label>
+                <label for="bank_code" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Код банка</label>
                 <input type="text" name="bank_code" id="bank_code" value="{{ old('bank_code', $company?->bank_code) }}"
                     class="w-full font-mono @error('bank_code') border-red-300 @else border-gray-200 @enderror"
                     placeholder="123456">

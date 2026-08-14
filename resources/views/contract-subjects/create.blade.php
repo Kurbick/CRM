@@ -3,42 +3,41 @@
 @section('title', 'Добавить предмет договора')
 
 @section('content')
-    <div class="mb-6">
+    <div class="mb-5">
         <a href="{{ $backUrl }}"
-            class="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 transition">
-            ← Назад
+            class="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-900">
+            <span aria-hidden="true">←</span>
+            Назад к договору
         </a>
 
-        <h1 class="text-2xl font-bold text-gray-900 mt-3">
-            Добавить предмет договора
-        </h1>
+        <h1 class="mt-3 text-xl font-semibold text-slate-900">Добавить предмет договора</h1>
 
-        <p class="text-sm text-gray-500 mt-1">
-            Договор <span class="font-mono font-medium text-gray-700">{{ $contract->contract_number }}</span>
-            <span class="mx-1 text-gray-300">•</span>
+        <p class="mt-1 text-sm text-slate-500">
+            Договор <span class="font-mono font-medium text-slate-700">{{ $contract->contract_number }}</span>
+            <span class="mx-1 text-slate-300">·</span>
             {{ $contract->company->name }}
         </p>
     </div>
 
-    <div class="w-full max-w-2xl rounded-lg border border-gray-200 bg-white">
-        <div class="border-b border-gray-100 px-5 py-4">
-            <h2 class="font-semibold text-gray-800">Выберите тип предмета</h2>
+    <section data-testid="contract-subject-selector" class="max-w-4xl border-y border-slate-200 bg-white">
+        <div class="border-b border-slate-200 px-4 py-4 sm:px-5">
+            <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Тип предмета</h2>
         </div>
 
-        <div class="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
+        <div class="grid grid-cols-1 divide-y divide-slate-200 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
             @if ($canCreateOrder)
                 <a href="{{ route('contracts.orders.create', $contract) }}"
-                    class="flex min-h-16 items-center rounded-lg border border-slate-200 bg-slate-50/40 px-4 py-3 transition-colors hover:border-blue-300 hover:bg-blue-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
-                    <span class="font-semibold text-gray-900">Разовая услуга</span>
+                    class="px-4 py-4 text-sm font-medium text-slate-900 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 sm:px-5">
+                    Разовая услуга
                 </a>
             @endif
 
             @if ($canCreateSubscription)
                 <a href="{{ route('contracts.subscriptions.create', $contract) }}"
-                    class="flex min-h-16 items-center rounded-lg border border-slate-200 bg-slate-50/40 px-4 py-3 transition-colors hover:border-blue-300 hover:bg-blue-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
-                    <span class="font-semibold text-gray-900">Подписка</span>
+                    class="px-4 py-4 text-sm font-medium text-slate-900 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 sm:px-5">
+                    Подписка
                 </a>
             @endif
         </div>
-    </div>
+    </section>
 @endsection

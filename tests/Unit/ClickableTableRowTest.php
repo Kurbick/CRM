@@ -49,4 +49,26 @@ class ClickableTableRowTest extends TestCase
         $this->assertStringContainsString("route('companies.show'", $invoices);
         $this->assertStringNotContainsString("route('invoices.edit'", $invoices);
     }
+
+    public function test_company_invoice_rows_use_the_shared_clickable_row_without_a_redundant_open_action(): void
+    {
+        $companyShow = file_get_contents(resource_path('views/companies/show.blade.php'));
+
+        $this->assertStringContainsString('<x-tables.clickable-row :url=', $companyShow);
+        $this->assertStringContainsString("'origin' => 'company', 'tab' => 'invoices'", $companyShow);
+        $this->assertStringContainsString('class="crm-table-primary-link">{{ $invoice->invoice_number }}</a>', $companyShow);
+        $this->assertStringNotContainsString('Открыть →', $companyShow);
+    }
+
+    public function test_company_contract_and_debt_rows_use_the_shared_clickable_row_with_contextual_inline_links(): void
+    {
+        $companyShow = file_get_contents(resource_path('views/companies/show.blade.php'));
+
+        $this->assertStringContainsString("route('contracts.show', ['contract' => \$contract, 'origin' => 'company', 'tab' => 'contracts'])", $companyShow);
+        $this->assertStringContainsString('class="crm-table-primary-link">{{ $contract->contract_number }}</a>', $companyShow);
+        $this->assertStringContainsString("'Открыть инвойс '.\$period['invoice_number']", $companyShow);
+        $this->assertStringContainsString("'Открыть инвойс '.\$line['invoice_number']", $companyShow);
+        $this->assertStringContainsString("['invoice' => \$period['invoice_id'], 'origin' => 'company', 'tab' => 'invoices']", $companyShow);
+        $this->assertStringContainsString("['invoice' => \$line['invoice_id'], 'origin' => 'company', 'tab' => 'invoices']", $companyShow);
+    }
 }

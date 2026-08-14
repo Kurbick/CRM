@@ -624,6 +624,27 @@
                         this.paymentHistoryOpen = false;
                         document.body.style.overflow = '';
                         this.$nextTick(() => this.$refs.paymentHistoryTrigger?.focus());
+                    },
+                    trapPaymentHistoryFocus(event) {
+                        const focusable = [...this.$refs.paymentHistoryDrawer.querySelectorAll(
+                            `a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])`
+                        )].filter(element => element.offsetParent !== null);
+
+                        if (focusable.length === 0) {
+                            event.preventDefault();
+                            return;
+                        }
+
+                        const first = focusable[0];
+                        const last = focusable[focusable.length - 1];
+
+                        if (event.shiftKey && document.activeElement === first) {
+                            event.preventDefault();
+                            last.focus();
+                        } else if (! event.shiftKey && document.activeElement === last) {
+                            event.preventDefault();
+                            first.focus();
+                        }
                     }
                 }"
                 x-init="if (paymentHistoryOpen) { document.body.style.overflow = 'hidden'; $nextTick(() => $refs.paymentHistoryClose.focus()); }"
@@ -635,7 +656,8 @@
                     {{-- Drawer с дополнительными деталями платежей --}}
                     <div x-show="paymentHistoryOpen" x-cloak id="payment-history-drawer"
                         class="payment-history-drawer crm-print-hide fixed inset-0 z-50 print:hidden"
-                        role="dialog" aria-modal="true" aria-labelledby="payment-history-title">
+                        role="dialog" aria-modal="true" aria-labelledby="payment-history-title"
+                        x-ref="paymentHistoryDrawer" x-on:keydown.tab="trapPaymentHistoryFocus($event)">
                         <div x-show="paymentHistoryOpen" x-transition.opacity
                             class="payment-history-backdrop crm-print-hide absolute inset-0 bg-gray-900/40 print:hidden" @click="closePaymentHistory()"></div>
 

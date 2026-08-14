@@ -41,6 +41,15 @@ class ContractSubjectFormWorkspaceTest extends AuthorizationTestCase
             ->assertSee('data-testid="contract-form-workspace"', false);
 
         $selectorUrl = route('contracts.subjects.create', $contract);
+        $this->get($selectorUrl)
+            ->assertOk()
+            ->assertSee('Назад к договору')
+            ->assertSee('data-testid="contract-subject-selector"', false)
+            ->assertSee(route('contracts.orders.create', $contract))
+            ->assertSee(route('contracts.subscriptions.create', $contract))
+            ->assertDontSee('w-full max-w-2xl rounded-lg border border-gray-200 bg-white', false)
+            ->assertDontSee('min-h-16 items-center rounded-lg', false);
+
         $this->get(route('contracts.orders.create', $contract))
             ->assertOk()
             ->assertSee('Разовая услуга')

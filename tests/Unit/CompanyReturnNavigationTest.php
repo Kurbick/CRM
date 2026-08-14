@@ -50,6 +50,16 @@ class CompanyReturnNavigationTest extends TestCase
         $this->assertStringNotContainsString('return_url', $edit);
     }
 
+    public function test_company_show_does_not_close_the_application_layout_container(): void
+    {
+        $show = file_get_contents(resource_path('views/companies/show.blade.php'));
+
+        preg_match_all('/<div(?:\s[^>]*)?>/', $show, $openingDivs);
+        preg_match_all('/<\/div>/', $show, $closingDivs);
+
+        $this->assertCount(count($openingDivs[0]), $closingDivs[0]);
+    }
+
     public function test_safe_return_context_preserves_internal_query_and_rejects_external_host(): void
     {
         $method = new ReflectionMethod(CompanyController::class, 'companyReturnContext');

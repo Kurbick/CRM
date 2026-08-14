@@ -9,9 +9,10 @@
     </div>
 
     @unless ($hasDomainBlocks)
-        <div class="rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
-            <p class="text-sm text-gray-600">Для просмотра показателей у вас нет необходимых прав</p>
-        </div>
+        <section data-testid="dashboard-neutral-fallback" class="border-y border-slate-200 bg-white px-4 py-5 sm:px-5">
+            <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Доступ</h2>
+            <p class="mt-3 text-sm text-slate-500">Для просмотра показателей у вас нет необходимых прав</p>
+        </section>
     @endunless
 
     @if ($hasDomainBlocks)

@@ -4,6 +4,10 @@
 
 @section('content')
 
+    @php
+        $companyDebtColumnWidths = ['w-[22%]', 'w-[13%]', 'w-[12%]', 'w-[12%]', 'w-[12%]', 'w-[14%]', 'w-[15%]'];
+    @endphp
+
     {{-- Компактный заголовок сущности --}}
     <div data-testid="company-entity-header" class="mb-5">
         <a href="{{ $returnContext['url'] }}"
@@ -134,8 +138,12 @@
                         </div>
 
                         <div class="crm-table-scroll">
-                            <table class="crm-table min-w-[940px] table-fixed">
-                                <colgroup><col class="w-[15%]"><col class="w-[13%]"><col class="w-[12%]"><col class="w-[12%]"><col class="w-[12%]"><col class="w-[14%]"><col class="w-[22%]"></colgroup>
+                            <table data-testid="company-debt-table" class="crm-table min-w-[940px] table-fixed">
+                                <colgroup>
+                                    @foreach ($companyDebtColumnWidths as $width)
+                                        <col class="{{ $width }}">
+                                    @endforeach
+                                </colgroup>
                                 <thead>
                                     <tr>
                                         <th>Период</th>
@@ -149,7 +157,7 @@
                                 </thead>
                                 <tbody>
                                     @foreach ($subscriptionDebt['periods'] as $period)
-                                        <tr>
+                                        <x-tables.clickable-row :url="route('invoices.show', ['invoice' => $period['invoice_id'], 'origin' => 'company', 'tab' => 'invoices'])" :label="'Открыть инвойс '.$period['invoice_number']">
                                             <td class="crm-table-primary whitespace-nowrap">{{ $period['period_label'] }}</td>
                                             <td class="whitespace-nowrap font-mono text-xs">
                                                 <a href="{{ route('invoices.show', ['invoice' => $period['invoice_id'], 'origin' => 'company', 'tab' => 'invoices']) }}"
@@ -176,7 +184,7 @@
                                                     </span>
                                                 @endif
                                             </td>
-                                        </tr>
+                                        </x-tables.clickable-row>
                                     @endforeach
                                 </tbody>
                             </table>
@@ -192,8 +200,12 @@
                         <p class="text-sm text-slate-500">Задолженностей нет.</p>
                     @else
                         <div class="crm-table-scroll">
-                            <table class="crm-table min-w-[940px] table-fixed">
-                                <colgroup><col class="w-[22%]"><col class="w-[13%]"><col class="w-[12%]"><col class="w-[12%]"><col class="w-[12%]"><col class="w-[14%]"><col class="w-[15%]"></colgroup>
+                            <table data-testid="company-debt-table" class="crm-table min-w-[940px] table-fixed">
+                                <colgroup>
+                                    @foreach ($companyDebtColumnWidths as $width)
+                                        <col class="{{ $width }}">
+                                    @endforeach
+                                </colgroup>
                                 <thead><tr>
                                     <th>Услуга</th><th>Инвойс</th>
                                     <th>Сумма</th><th>Оплачено</th>
@@ -202,7 +214,7 @@
                                 </tr></thead>
                                 <tbody>
                                 @foreach ($oneTimeServiceDebtLines as $line)
-                                    <tr>
+                                    <x-tables.clickable-row :url="route('invoices.show', ['invoice' => $line['invoice_id'], 'origin' => 'company', 'tab' => 'invoices'])" :label="'Открыть инвойс '.$line['invoice_number']">
                                         <td class="crm-table-primary">{{ $line['service_title'] }}</td>
                                         <td class="whitespace-nowrap font-mono text-xs"><a class="text-blue-600 hover:underline" href="{{ route('invoices.show', ['invoice' => $line['invoice_id'], 'origin' => 'company', 'tab' => 'invoices']) }}">{{ $line['invoice_number'] }}</a></td>
                                         <td class="crm-table-number">{{ $line['total'] }} ₼</td>
@@ -215,7 +227,7 @@
                                                 @include('partials.badge', ['status' => 'partially_paid'])
                                             @else <span class="inline-flex rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700">К оплате</span> @endif
                                         </td>
-                                    </tr>
+                                    </x-tables.clickable-row>
                                 @endforeach
                                 </tbody>
                             </table>
@@ -478,7 +490,7 @@
                         </thead>
                         <tbody>
                             @forelse($company->contracts as $contract)
-                                <tr>
+                                <x-tables.clickable-row :url="route('contracts.show', ['contract' => $contract, 'origin' => 'company', 'tab' => 'contracts'])" :label="'Открыть договор '.$contract->contract_number">
                                     <td class="crm-table-number"><a href="{{ route('contracts.show', ['contract' => $contract, 'origin' => 'company', 'tab' => 'contracts']) }}" class="crm-table-primary-link">{{ $contract->contract_number }}</a>
                                     </td>
                                     <td class="crm-table-date">{{ $contract->start_date?->format('d/m/Y') ?? '—' }}</td>
@@ -490,7 +502,7 @@
                                         ])
                                     </td>
                                     <td class="crm-table-number">{{ $contract->orders_count + $contract->subscriptions_count }}</td>
-                                </tr>
+                                </x-tables.clickable-row>
                             @empty
                                 <tr>
                                     <td colspan="5" class="crm-table-empty">
@@ -517,12 +529,11 @@
                                 <th>Сумма</th>
                                 <th>Оплачено / Остаток</th>
                                 <th>Статус</th>
-                                <th class="crm-table-actions"></th>
                             </tr>
                         </thead>
                         <tbody>
                             @forelse($company->invoices as $invoice)
-                                <tr>
+                                <x-tables.clickable-row :url="route('invoices.show', ['invoice' => $invoice, 'origin' => 'company', 'tab' => 'invoices'])" :label="'Открыть инвойс '.$invoice->invoice_number">
                                     <td class="crm-table-number">
                                         <a href="{{ route('invoices.show', ['invoice' => $invoice, 'origin' => 'company', 'tab' => 'invoices']) }}" class="crm-table-primary-link">{{ $invoice->invoice_number }}</a>
                                     </td>
@@ -554,16 +565,10 @@
                                     <td>
                                         @include('partials.badge', ['status' => $invoice->status])
                                     </td>
-                                    <td class="crm-table-actions">
-                                        <a href="{{ route('invoices.show', ['invoice' => $invoice, 'origin' => 'company', 'tab' => 'invoices']) }}"
-                                            class="crm-table-action-link">
-                                            Открыть →
-                                        </a>
-                                    </td>
-                                </tr>
+                                </x-tables.clickable-row>
                             @empty
                                 <tr>
-                                    <td colspan="6" class="crm-table-empty">У компании пока нет инвойсов.</td>
+                                    <td colspan="5" class="crm-table-empty">У компании пока нет инвойсов.</td>
                                 </tr>
                             @endforelse
                         </tbody>
@@ -643,7 +648,5 @@
             @endcan
 
         </div>
-
-    </div>
 
 @endsection
