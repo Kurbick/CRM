@@ -14,10 +14,10 @@ use App\Support\Access\PermissionName;
 use App\Support\Access\SystemRole;
 use App\Support\Navigation\AuthorizedLandingPage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Spatie\Permission\PermissionRegistrar;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Tests\TestCase;
+use Spatie\Permission\PermissionRegistrar;
 use Tests\Support\DomainQueryRecorder;
+use Tests\TestCase;
 
 class AuthorizedLandingPageTest extends TestCase
 {
@@ -198,11 +198,16 @@ class AuthorizedLandingPageTest extends TestCase
             $response->assertDontSee($marker, false);
         }
         $response
+            ->assertSee('data-testid="home-fallback"', false)
+            ->assertSeeText('Добро пожаловать в CRM.')
+            ->assertSeeText('Ваша учётная запись активна, но для неё пока нет доступных рабочих разделов.')
+            ->assertSeeText('Обратитесь к администратору, если вам требуется дополнительный доступ.')
             ->assertSee('action="'.route('logout').'"', false)
             ->assertSee('href="'.route('home').'" class="flex items-center gap-2"', false)
             ->assertDontSee(route('companies.index'), false)
             ->assertDontSee(route('contracts.index'), false)
-            ->assertDontSee(route('invoices.index'), false);
+            ->assertDontSee(route('invoices.index'), false)
+            ->assertDontSee('shadow-sm', false);
         $this->assertSame([], $capture['records']);
         $this->get(route('home'))->assertOk();
     }
