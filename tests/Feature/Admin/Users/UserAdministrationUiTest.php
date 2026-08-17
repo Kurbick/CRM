@@ -23,7 +23,8 @@ class UserAdministrationUiTest extends UserAdministrationTestCase
         $this->actingAs($creator)->get(route('admin.users.index'))->assertSee('Добавить пользователя');
         $this->get(route('admin.users.create'))
             ->assertSee('data-user-create-form', false)->assertSee('type="password"', false)->assertSee('autocomplete="new-password"', false)
-            ->assertSeeText('Основная информация')->assertSeeText('Доступ')->assertSeeText('Не менее 12 символов')->assertDontSee('value="Strong', false);
+            ->assertSeeText('Основная информация')->assertSeeText('Доступ')->assertSeeText('Не менее 12 символов')->assertDontSee('value="Strong', false)
+            ->assertSee('href="'.route('admin.users.index').'"', false);
     }
 
     public function test_edit_has_separate_forms_methods_and_no_delete(): void
@@ -36,7 +37,8 @@ class UserAdministrationUiTest extends UserAdministrationTestCase
             ->assertSee(route('admin.users.update', $target))->assertSee(route('admin.users.role.update', $target))->assertSee(route('admin.users.deactivate', $target))->assertSee(route('admin.users.password.update', $target))
             ->assertSee('name="_method" value="PUT"', false)->assertSee('name="_method" value="PATCH"', false)->assertDontSee('Удалить пользователя')
             ->assertSee('data-user-details', false)->assertSee('data-user-role', false)->assertSee('data-user-status', false)->assertSee('data-user-security', false)
-            ->assertDontSee('data-accordion-section=', false)->assertDontSee('aria-controls="user-', false)->assertDontSee('value="Strong', false);
+            ->assertDontSee('data-accordion-section=', false)->assertDontSee('aria-controls="user-', false)->assertDontSee('value="Strong', false)
+            ->assertSee('href="'.route('admin.users.edit', $target).'"', false);
     }
 
     public function test_empty_last_login_uses_the_same_copy_as_the_users_index(): void

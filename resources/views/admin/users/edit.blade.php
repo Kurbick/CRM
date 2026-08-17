@@ -58,6 +58,7 @@
                         @include('admin.users._form', [
                             'mode' => 'edit',
                             'action' => route('admin.users.update', $user),
+                            'cancelUrl' => route('admin.users.edit', $user),
                             'user' => $user,
                             'roles' => $roles,
                         ])

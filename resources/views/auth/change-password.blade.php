@@ -30,6 +30,10 @@
         </button>
     </form>
 
+    @unless (auth()->user()->mustChangePassword())
+        <a href="{{ $returnUrl }}" class="mt-3 block w-full rounded-lg border border-gray-300 px-4 py-2.5 text-center text-sm font-medium text-gray-700 hover:bg-gray-50">← Вернуться в CRM</a>
+    @endunless
+
     <form method="POST" action="{{ route('logout') }}" class="mt-4 text-center">
         @csrf
         <button type="submit" class="text-sm font-medium text-gray-500 hover:text-gray-800">Выйти</button>

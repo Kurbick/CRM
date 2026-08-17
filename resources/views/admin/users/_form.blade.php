@@ -59,7 +59,7 @@
     @endif
 
     <div class="flex flex-wrap items-center justify-end gap-3 pt-1">
-        <a href="{{ route('admin.users.index') }}" class="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">Отмена</a>
+        <a href="{{ $cancelUrl }}" class="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">Отмена</a>
         <button class="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700">{{ $isCreate ? 'Добавить пользователя' : 'Сохранить данные' }}</button>
     </div>
 </form>

@@ -48,6 +48,7 @@ class AuthenticationUiTest extends TestCase
         $this->assertSame(3, substr_count($html, 'x-data="{ visible: false }"'));
         $this->assertSame(3, substr_count($html, "visible ? 'Скрыть пароль' : 'Показать пароль'"));
         $this->assertStringContainsString('Не менее 12 символов, включая заглавную и строчную буквы, цифру и специальный символ.', $html);
+        $response->assertSee('href="'.route('home').'"', false)->assertSeeText('Вернуться в CRM');
         $this->assertStringNotContainsString('name="password" value=', $html);
         $this->assertStringNotContainsString('name="password_confirmation" value=', $html);
     }

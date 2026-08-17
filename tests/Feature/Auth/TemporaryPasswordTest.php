@@ -25,7 +25,10 @@ class TemporaryPasswordTest extends TestCase
         $this->get(route('password.change'))
             ->assertOk()
             ->assertSee('Для продолжения работы')
-            ->assertDontSee('name="current_password"', false);
+            ->assertDontSee('name="current_password"', false)
+            ->assertDontSeeText('Вернуться в CRM')
+            ->assertDontSeeText('Отмена')
+            ->assertSeeText('Выйти');
         $this->post(route('logout'))->assertRedirect(route('login'));
     }
 

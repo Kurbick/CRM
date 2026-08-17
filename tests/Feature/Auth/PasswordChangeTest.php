@@ -170,6 +170,19 @@ class PasswordChangeTest extends TestCase
         $this->get(route('home'))->assertOk();
     }
 
+    public function test_voluntary_password_change_uses_authorized_landing_redirect(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->put(route('user-password.update'), [
+            'current_password' => 'password',
+            'password' => 'Strong!Password12',
+            'password_confirmation' => 'Strong!Password12',
+        ])->assertRedirect(route('home'))->assertSessionHas('success');
+
+        $this->assertFalse($user->fresh()->mustChangePassword());
+    }
+
     #[DataProvider('intendedUrlProvider')]
     public function test_password_update_always_discards_intended_url(
         string $intended,

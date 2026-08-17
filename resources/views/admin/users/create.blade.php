@@ -13,6 +13,7 @@
             @include('admin.users._form', [
                 'mode' => 'create',
                 'action' => route('admin.users.store'),
+                'cancelUrl' => route('admin.users.index'),
                 'user' => null,
                 'roles' => $roles,
             ])

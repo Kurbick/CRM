@@ -17,6 +17,8 @@ use App\Http\Controllers\Web\PaymentController;
 use App\Http\Controllers\Web\SubscriptionController;
 use App\Models\Company as CompanyModel;
 use App\Models\Invoice as InvoiceModel;
+use App\Support\Navigation\AuthorizedLandingPage;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::get('login', fn () => view('auth.login'))
@@ -24,7 +26,11 @@ Route::get('login', fn () => view('auth.login'))
     ->name('login');
 
 Route::middleware(['auth', 'active'])->group(function (): void {
-    Route::get('password/change', fn () => view('auth.change-password'))
+    Route::get('password/change', function (Request $request, AuthorizedLandingPage $landingPage) {
+        return view('auth.change-password', [
+            'returnUrl' => $landingPage->url($request->user()),
+        ]);
+    })
         ->name('password.change');
 });
 
