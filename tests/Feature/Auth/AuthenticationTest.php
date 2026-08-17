@@ -5,7 +5,10 @@ namespace Tests\Feature\Auth;
 use App\Models\User;
 use App\Services\AccessControlSynchronizer;
 use App\Support\Access\PermissionName;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
@@ -19,14 +22,24 @@ class AuthenticationTest extends TestCase
         $updatedAt = $user->updated_at;
 
         $this->get(route('login'))->assertOk()->assertSee('>Вход</h1>', false);
-        $this->post(route('login.store'), [
-            'email' => 'user@example.com',
-            'password' => 'password',
-        ])->assertRedirect(route('home'));
+        $loginAt = CarbonImmutable::create(2031, 2, 3, 8, 9, 10, 'UTC');
+        Carbon::setTestNow($loginAt);
+        try {
+            $this->post(route('login.store'), [
+                'email' => 'user@example.com',
+                'password' => 'password',
+            ])->assertRedirect(route('home'));
+        } finally {
+            Carbon::setTestNow();
+        }
 
         $this->assertAuthenticatedAs($user);
         $this->assertNotNull($user->fresh()->last_login_at);
         $this->assertTrue($updatedAt->equalTo($user->fresh()->updated_at));
+        $this->assertSame(
+            $loginAt->getTimestamp(),
+            (int) DB::selectOne('SELECT UNIX_TIMESTAMP(last_login_at) AS epoch FROM users WHERE id = ?', [$user->getKey()])->epoch,
+        );
     }
 
     public function test_unknown_bad_password_and_inactive_user_share_generic_failure(): void

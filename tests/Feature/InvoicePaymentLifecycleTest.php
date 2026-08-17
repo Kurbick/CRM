@@ -7,7 +7,9 @@ use App\Actions\Payments\CreateConfirmedPayment;
 use App\Models\CreditBalance;
 use App\Models\Invoice;
 use App\Models\Payment;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Tests\Feature\FinancialTestCase as TestCase;
 
@@ -59,16 +61,26 @@ class InvoicePaymentLifecycleTest extends TestCase
         $invoice = $this->invoice();
         $payment = $this->payment($invoice, 'pending', 40);
 
-        $this->patch(route('payments.cancel', $payment), [
-            'cancel_payment_id' => $payment->id,
-            'cancel_reason' => 'Платёж создан ошибочно',
-        ])->assertRedirect(route('invoices.show', $invoice));
+        $cancelledAt = CarbonImmutable::create(2031, 2, 3, 8, 9, 10, 'UTC');
+        Carbon::setTestNow($cancelledAt);
+        try {
+            $this->patch(route('payments.cancel', $payment), [
+                'cancel_payment_id' => $payment->id,
+                'cancel_reason' => 'Платёж создан ошибочно',
+            ])->assertRedirect(route('invoices.show', $invoice));
+        } finally {
+            Carbon::setTestNow();
+        }
 
         $this->assertDatabaseHas('payments', [
             'id' => $payment->id,
             'status' => 'cancelled',
             'cancel_reason' => 'Платёж создан ошибочно',
         ]);
+        $this->assertSame(
+            $cancelledAt->getTimestamp(),
+            (int) DB::selectOne('SELECT UNIX_TIMESTAMP(cancelled_at) AS epoch FROM payments WHERE id = ?', [$payment->id])->epoch,
+        );
         $this->assertNotNull($payment->fresh()->cancelled_at);
         $this->assertSame('issued', $invoice->fresh()->status);
         $this->assertSame(0.0, $invoice->fresh()->paid_amount);
