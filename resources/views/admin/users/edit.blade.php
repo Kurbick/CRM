@@ -5,6 +5,7 @@
 @section('content')
     @php
         $isSelf = auth()->id() === $user->id;
+        $displayDateTime = app(\App\Support\DisplayDateTime::class);
         $currentRole = $user->roles->first();
         $openUser = count($errors->getBag('updateUser')->all()) > 0 || old('_section') === 'user';
         $openRole = count($errors->getBag('updateRole')->all()) > 0 || old('_section') === 'role';
@@ -49,7 +50,7 @@
                     </div>
                     <div>
                         <dt class="text-gray-500">Последний вход</dt>
-                        <dd class="mt-1 font-medium text-gray-900">{{ $user->last_login_at?->copy()->setTimezone('Asia/Baku')->translatedFormat('d.m.Y H:i') ?? 'Не входил' }}</dd>
+                        <dd class="mt-1 font-medium text-gray-900">{{ $displayDateTime->format($user->last_login_at, 'd.m.Y H:i') ?? 'Не входил' }}</dd>
                     </div>
                 </dl>
 

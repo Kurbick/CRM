@@ -5,6 +5,7 @@
 @section('content')
     @php
         $filtersActive = $search !== '' || $status !== '' || $role !== '';
+        $displayDateTime = app(\App\Support\DisplayDateTime::class);
         $sortUrl = fn (string $column) => route('admin.users.index', array_filter([
             'search' => $search, 'status' => $status, 'role' => $role, 'sort' => $column,
             'direction' => $sort === $column && $direction === 'asc' ? 'desc' : 'asc',
@@ -78,7 +79,7 @@
                             <td><div class="crm-table-primary">{{ $user->name }}</div><div class="crm-table-secondary">{{ $user->email }}</div></td>
                             <td><x-admin.users.role-badge :role="$user->roles->first()" /></td>
                             <td><x-admin.users.status-badge :active="$user->is_active" /></td>
-                            <td class="crm-table-date">{{ $user->last_login_at?->copy()->setTimezone('Asia/Baku')->translatedFormat('d.m.Y H:i') ?? 'Не входил' }}</td>
+                            <td class="crm-table-date">{{ $displayDateTime->format($user->last_login_at, 'd.m.Y H:i') ?? 'Не входил' }}</td>
                         </x-tables.clickable-row>
                     @empty
                         <tr>

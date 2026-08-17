@@ -60,6 +60,13 @@ class InvoicePaymentLifecycleTest extends TestCase
     {
         $invoice = $this->invoice();
         $payment = $this->payment($invoice, 'pending', 40);
+        DB::table('invoice_lines')->insert([
+            'invoice_id' => $invoice->id,
+            'description' => 'Payment display line',
+            'amount' => '100.00',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
 
         $cancelledAt = CarbonImmutable::create(2031, 2, 3, 8, 9, 10, 'UTC');
         Carbon::setTestNow($cancelledAt);
@@ -71,6 +78,8 @@ class InvoicePaymentLifecycleTest extends TestCase
         } finally {
             Carbon::setTestNow();
         }
+
+        $this->get(route('invoices.show', $invoice))->assertOk()->assertSee('03/02/2031 12:09');
 
         $this->assertDatabaseHas('payments', [
             'id' => $payment->id,

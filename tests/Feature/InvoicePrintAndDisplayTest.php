@@ -72,6 +72,8 @@ class InvoicePrintAndDisplayTest extends TestCase
             ->assertSee('Работа по договору')
             ->assertSee('1 350,00 ₼')
             ->assertSee('Дата выставления:')
+            ->assertSee('01/07/2026')
+            ->assertSee('31/07/2026')
             ->assertSee('Срок оплаты:')
             ->assertSee('invoice-totals', false)
             ->assertSee('Выставить счёт');

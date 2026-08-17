@@ -4,6 +4,7 @@
 
 @section('content')
     @php
+        $displayDateTime = app(\App\Support\DisplayDateTime::class);
         $formatMoney = static function ($amount): string {
             $value = round((float) $amount, 2);
 
@@ -837,7 +838,7 @@
                                 <div class="mt-2 space-y-1 border-t border-red-100 pt-2 text-xs text-red-600">
                                     @if ($payment->cancelled_at)
                                         <p>
-                                            Отменён: {{ \Illuminate\Support\Carbon::parse($payment->cancelled_at)->format('d/m/Y H:i') }}
+                                            Отменён: {{ $displayDateTime->format($payment->cancelled_at, 'd/m/Y H:i') }}
                                         </p>
                                     @endif
 

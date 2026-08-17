@@ -5,6 +5,7 @@
 @section('content')
 
     @php
+        $displayDateTime = app(\App\Support\DisplayDateTime::class);
         $periods = [
             'monthly' => 'Ежемесячно',
             'quarterly' => 'Ежеквартально',
@@ -376,7 +377,7 @@
                                                         {{ $documentTypes[$document->document_type] ?? 'Другой документ' }}
                                                     </span>
                                                 </td>
-                                                <td class="crm-table-date">{{ $document->created_at->format('d/m/Y H:i') }}</td>
+                                                <td class="crm-table-date">{{ $displayDateTime->format($document->created_at, 'd/m/Y H:i') }}</td>
                                                 <td class="crm-table-number">{{ $documentSize ?? '—' }}</td>
                                                 <td class="crm-table-actions">
                                                     <div class="inline-flex items-center gap-3">
