@@ -472,6 +472,19 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
             $this->assertStringContainsString('<x-tables.clickable-row :url=', $table);
             $this->assertStringContainsString('@foreach ($companyDebtColumnWidths as $width)', $table);
         }
+
+        $this->assertStringContainsString(
+            'class="crm-table-number font-semibold text-red-600">{{ $period[\'remaining\'] }} ₼</td>',
+            $matches[0][0]
+        );
+        $this->assertStringContainsString(
+            'class="crm-table-number font-semibold text-red-600">{{ $line[\'remaining\'] }} ₼</td>',
+            $matches[0][1]
+        );
+        $this->assertStringNotContainsString(
+            'Остаток: {{ $subscriptionDebt[\'totals\'][\'remaining\'] }} ₼',
+            $view
+        );
     }
 
     private function company(string $name = 'Debt Company', array $attributes = []): Company

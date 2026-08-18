@@ -129,12 +129,11 @@
                                     Неоплаченных периодов: {{ $subscriptionDebt['totals']['unpaid_period_count'] }}
                                 </p>
                             </div>
-                            <div class="text-xs sm:text-right">
-                                <p class="font-semibold tabular-nums text-slate-700">Остаток: {{ $subscriptionDebt['totals']['remaining'] }} ₼</p>
-                                @if ($subscriptionDebt['totals']['overdue_remaining'] !== '0.00')
+                            @if ($subscriptionDebt['totals']['overdue_remaining'] !== '0.00')
+                                <div class="text-xs sm:text-right">
                                     <p class="font-semibold text-red-600 mt-0.5">Просрочено: {{ $subscriptionDebt['totals']['overdue_remaining'] }} ₼</p>
-                                @endif
-                            </div>
+                                </div>
+                            @endif
                         </div>
 
                         <div class="crm-table-scroll">
@@ -167,7 +166,7 @@
                                             </td>
                                             <td class="crm-table-number">{{ $period['total'] }} ₼</td>
                                             <td class="crm-table-number text-green-700">{{ $period['allocated'] }} ₼</td>
-                                            <td class="crm-table-number font-semibold {{ $period['is_overdue'] ? 'text-red-600' : 'text-slate-900' }}">{{ $period['remaining'] }} ₼</td>
+                                            <td class="crm-table-number font-semibold text-red-600">{{ $period['remaining'] }} ₼</td>
                                             <td class="whitespace-nowrap">
                                                 {{ $period['due_date_label'] }}
                                             </td>
@@ -219,7 +218,7 @@
                                         <td class="whitespace-nowrap font-mono text-xs"><a class="text-blue-600 hover:underline" href="{{ route('invoices.show', ['invoice' => $line['invoice_id'], 'origin' => 'company', 'tab' => 'invoices']) }}">{{ $line['invoice_number'] }}</a></td>
                                         <td class="crm-table-number">{{ $line['total'] }} ₼</td>
                                         <td class="crm-table-number text-green-700">{{ $line['allocated'] }} ₼</td>
-                                        <td class="crm-table-number font-semibold {{ $line['is_overdue'] ? 'text-red-600' : 'text-slate-900' }}">{{ $line['remaining'] }} ₼</td>
+                                        <td class="crm-table-number font-semibold text-red-600">{{ $line['remaining'] }} ₼</td>
                                         <td class="whitespace-nowrap">{{ $line['due_date_label'] }}</td>
                                         <td class="whitespace-nowrap">
                                             @if ($line['is_overdue']) <span class="inline-flex rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700">Просрочено на {{ $line['days_overdue'] }} дн.</span>

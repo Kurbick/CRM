@@ -53,15 +53,27 @@ class InvoiceShowViewTest extends TestCase
         $this->assertStringNotContainsString('{{ $line->order_id }}', $source);
     }
 
-    public function test_issue_action_is_single_and_placed_after_totals_outside_print(): void
+    public function test_issue_action_is_single_compact_right_aligned_action_after_totals(): void
     {
         $source = file_get_contents(resource_path('views/invoices/show.blade.php'));
         $issueRoute = "route('invoices.issue', \$invoice)";
 
         $this->assertSame(1, substr_count($source, $issueRoute));
         $this->assertGreaterThan(strpos($source, 'invoice-totals'), strpos($source, $issueRoute));
-        $this->assertStringContainsString('class="crm-print-hide mt-5 border-t border-slate-200 pt-4 print:hidden"', $source);
-        $this->assertStringContainsString('class="w-full rounded bg-blue-600', $source);
+        $this->assertStringContainsString('data-testid="invoice-issue-action-area"', $source);
+        $this->assertStringContainsString(
+            'class="crm-print-hide mt-5 flex justify-end border-t border-slate-200 pt-4 print:hidden"',
+            $source
+        );
+        $this->assertStringContainsString(
+            'method="POST" class="w-full sm:w-auto">',
+            substr($source, strpos($source, $issueRoute))
+        );
+        $this->assertStringContainsString(
+            'class="inline-flex w-full items-center justify-center rounded bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-700 sm:w-auto"',
+            $source
+        );
+        $this->assertStringNotContainsString('class="w-full rounded bg-blue-600', $source);
         $this->assertStringContainsString("route('invoices.edit', \$invoice)", $source);
         $this->assertStringContainsString("route('invoices.destroy', \$invoice)", $source);
         $this->assertStringContainsString("@method('DELETE')", $source);

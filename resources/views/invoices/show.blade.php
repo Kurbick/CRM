@@ -412,11 +412,12 @@
 
                 @can('issue', $invoice)
                     @if ($invoice->status === 'draft')
-                        <div class="crm-print-hide mt-5 border-t border-slate-200 pt-4 print:hidden">
-                            <form action="{{ route('invoices.issue', $invoice) }}" method="POST">
+                        <div data-testid="invoice-issue-action-area"
+                            class="crm-print-hide mt-5 flex justify-end border-t border-slate-200 pt-4 print:hidden">
+                            <form action="{{ route('invoices.issue', $invoice) }}" method="POST" class="w-full sm:w-auto">
                                 @csrf
                                 <button type="submit"
-                                    class="w-full rounded bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-700">
+                                    class="inline-flex w-full items-center justify-center rounded bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-700 sm:w-auto">
                                     Выставить счёт
                                 </button>
                             </form>
