@@ -11,6 +11,12 @@ use InvalidArgumentException;
 
 final class SubscriptionBillingSchedule
 {
+    /**
+     * A deliberately small ceiling for a single logical subscription selection.
+     * It is an occurrence count, not a number of calendar months.
+     */
+    public const MAX_OCCURRENCES_PER_INVOICE = 24;
+
     public function intervalFor(Subscription $subscription): BillingInterval
     {
         $period = SubscriptionBillingPeriod::tryFrom((string) $subscription->billing_period);
@@ -64,6 +70,36 @@ final class SubscriptionBillingSchedule
             $periodStart->toDateString(),
             $periodEnd->toDateString(),
         ]));
+    }
+
+    /**
+     * @return list<array{period_start: CarbonImmutable, period_end: CarbonImmutable, billing_occurrence_key: string}>
+     */
+    public function occurrenceChain(
+        Subscription $subscription,
+        CarbonImmutable $firstOccurrenceStart,
+        int $count,
+    ): array {
+        if ($count < 1 || $count > self::MAX_OCCURRENCES_PER_INVOICE) {
+            throw new InvalidArgumentException('The subscription occurrence count is outside the allowed range.');
+        }
+
+        $anchorDate = CarbonImmutable::parse($subscription->start_date)->startOfDay();
+        $interval = $this->intervalFor($subscription);
+        $start = $firstOccurrenceStart->startOfDay();
+        $occurrences = [];
+
+        for ($index = 0; $index < $count; $index++) {
+            $end = $this->periodEnd($start, $anchorDate, $interval);
+            $occurrences[] = [
+                'period_start' => $start,
+                'period_end' => $end,
+                'billing_occurrence_key' => $this->occurrenceKey((int) $subscription->id, $start, $end),
+            ];
+            $start = $this->nextOccurrenceStart($start, $anchorDate, $interval);
+        }
+
+        return $occurrences;
     }
 
     private function customIntervalFor(Subscription $subscription): BillingInterval

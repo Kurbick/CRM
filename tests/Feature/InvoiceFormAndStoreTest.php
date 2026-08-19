@@ -96,6 +96,25 @@ class InvoiceFormAndStoreTest extends TestCase
             ->assertJsonFragment(['id' => $orderId, 'type' => 'order']);
     }
 
+    public function test_contract_items_expose_server_calculated_occurrence_preview_for_subscription_period_count(): void
+    {
+        [$companyId, $contractId] = $this->companyAndContract();
+        $subscriptionId = $this->subscription($contractId, '600.00');
+
+        $this->get(route('ajax.items', ['contract' => $contractId]))
+            ->assertOk()
+            ->assertJsonPath('subscriptions.0.id', $subscriptionId)
+            ->assertJsonPath('subscriptions.0.selectable', true)
+            ->assertJsonPath('subscriptions.0.available_occurrences.0.period_start', '2026-07-01')
+            ->assertJsonPath('subscriptions.0.available_occurrences.4.period_end', '2026-11-30');
+
+        $this->get(route('invoices.create'))
+            ->assertSee('Расчётные периоды', false)
+            ->assertSee('expected_period_start', false)
+            ->assertSee('available_occurrences', false)
+            ->assertSee('lineTotal(line)', false);
+    }
+
     public function test_old_input_wins_over_query_prefill_after_validation_failure(): void
     {
         [$queryCompanyId, $queryContractId] = $this->companyAndContract('Query company', 'QUERY', 'QUERY-CONTRACT');
@@ -216,6 +235,17 @@ class InvoiceFormAndStoreTest extends TestCase
         $invoice = Invoice::query()->sole();
         $this->assertSame('1200.00', $invoice->lines()->sole()->amount);
         $this->assertSame('1200.00', $invoice->total_amount);
+    }
+
+    public function test_web_store_does_not_allow_an_order_to_be_multiplied_by_period_count(): void
+    {
+        [$companyId, $contractId] = $this->companyAndContract();
+        $payload = $this->basePayload($companyId, $contractId, '200.00');
+        $payload['lines'][0]['period_count'] = 5;
+
+        $this->post(route('invoices.store'), $payload)
+            ->assertSessionHasErrors('lines.0.period_count');
+        $this->assertDatabaseCount('invoices', 0);
     }
 
     public function test_web_store_creates_a_subject_backed_line_without_an_amount_field(): void

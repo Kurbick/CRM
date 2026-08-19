@@ -76,16 +76,18 @@ class DateInputComponentTest extends TestCase
         $this->assertStringContainsString('Boolean(!active)', $html);
     }
 
-    public function test_invoice_custom_periods_use_read_only_server_compatible_preview(): void
+    public function test_invoice_subscription_period_preview_uses_server_occurrences_without_browser_schedule_math(): void
     {
         $source = file_get_contents(resource_path('views/invoices/create.blade.php'));
 
-        $this->assertStringContainsString('line.subscription_id ? `lines[${index}][period_start]` : null', $source);
-        $this->assertStringContainsString('line.subscription_id ? `lines[${index}][period_end]` : null', $source);
-        $this->assertStringContainsString("item.custom_interval_unit === 'day'", $source);
-        $this->assertStringContainsString('anchorIsEom', $source);
+        $this->assertStringContainsString('expected_period_start', $source);
+        $this->assertStringContainsString('available_occurrences', $source);
+        $this->assertStringContainsString('subscriptionRange(line)', $source);
+        $this->assertStringNotContainsString('subscriptionPeriod(item)', $source);
+        $this->assertStringNotContainsString("item.custom_interval_unit === 'day'", $source);
+        $this->assertStringNotContainsString('anchorIsEom', $source);
         $this->assertStringNotContainsString('isCustomLine(line)', $source);
-        $this->assertStringNotContainsString('dynamic-name="`lines[${index}][period_start]`"', $source);
+        $this->assertStringNotContainsString('dynamic-name="`lines[${index}][expected_period_start]`"', $source);
     }
 
     public function test_invoice_uses_accessible_custom_company_and_contract_dropdowns(): void

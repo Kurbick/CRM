@@ -258,12 +258,67 @@ class InvoiceController extends Controller
             $backLabel = 'Назад к инвойсам';
         }
 
+        $oldContractId = $this->validFilterId(old('contract_id'), Contract::class);
+        $oldCompanyId = $this->validFilterId(old('company_id'), Company::class);
+        $oldSubscriptionIds = collect(old('lines', []))
+            ->filter(fn (mixed $line): bool => is_array($line))
+            ->pluck('subscription_id')
+            ->filter(fn (mixed $id): bool => is_numeric($id))
+            ->map(fn (mixed $id): int => (int) $id)
+            ->unique()
+            ->values();
+
+        $oldSubscriptions = collect();
+        if ($oldContractId !== null && $oldCompanyId !== null && $oldSubscriptionIds->isNotEmpty()) {
+            $oldSubscriptions = Subscription::query()
+                ->whereIn('id', $oldSubscriptionIds)
+                ->where('contract_id', $oldContractId)
+                ->whereHas('contract', fn ($query) => $query->where('company_id', $oldCompanyId))
+                ->where('status', 'active')
+                ->get()
+                ->keyBy('id');
+        }
+        $oldSubscriptionAmounts = $oldSubscriptions->pluck('amount', 'id');
+        $oldSubscriptionOccurrences = collect(old('lines', []))
+            ->filter(fn (mixed $line): bool => is_array($line) && is_numeric($line['subscription_id'] ?? null))
+            ->mapWithKeys(function (array $line) use ($oldSubscriptions): array {
+                $subscription = $oldSubscriptions->get((int) $line['subscription_id']);
+                $periodCount = filter_var($line['period_count'] ?? 1, FILTER_VALIDATE_INT);
+
+                if (! $subscription
+                    || $periodCount === false
+                    || $periodCount < 1
+                    || $periodCount > SubscriptionBillingSchedule::MAX_OCCURRENCES_PER_INVOICE
+                    || empty($line['expected_period_start'])) {
+                    return [];
+                }
+
+                try {
+                    $occurrences = $this->billingSchedule->occurrenceChain(
+                        $subscription,
+                        CarbonImmutable::parse($line['expected_period_start'])->startOfDay(),
+                        $periodCount,
+                    );
+                } catch (\Throwable) {
+                    return [];
+                }
+
+                return [(int) $subscription->id => collect($occurrences)
+                    ->map(fn (array $occurrence): array => [
+                        'period_start' => $occurrence['period_start']->toDateString(),
+                        'period_end' => $occurrence['period_end']->toDateString(),
+                    ])
+                    ->all()];
+            });
+
         return view('invoices.create', compact(
             'companies',
             'backUrl',
             'backLabel',
             'prefilledCompany',
             'prefilledContract',
+            'oldSubscriptionAmounts',
+            'oldSubscriptionOccurrences',
         ));
     }
 
@@ -301,9 +356,19 @@ class InvoiceController extends Controller
             'lines.*.amount' => ['nullable', 'numeric', 'min:0.01'],
             'lines.*.subscription_id' => ['nullable', 'exists:subscriptions,id'],
             'lines.*.order_id' => ['nullable', 'exists:orders,id'],
+            'lines.*.period_count' => ['nullable', 'integer', 'min:1', 'max:'.SubscriptionBillingSchedule::MAX_OCCURRENCES_PER_INVOICE],
+            'lines.*.expected_period_start' => ['nullable', 'date_format:Y-m-d'],
             'lines.*.period_start' => ['nullable', 'date'],
             'lines.*.period_end' => ['nullable', 'date'],
         ]);
+
+        foreach ($validated['lines'] as $index => $line) {
+            if (empty($line['subscription_id']) && array_key_exists('period_count', $line) && $line['period_count'] !== null) {
+                throw ValidationException::withMessages([
+                    "lines.{$index}.period_count" => 'Расчётные периоды доступны только для подписок.',
+                ]);
+            }
+        }
 
         $company = Company::findOrFail($validated['company_id']);
         $contract = Contract::query()
@@ -512,9 +577,14 @@ class InvoiceController extends Controller
             'lines.*.order_id' => ['nullable', 'integer'],
             'lines.*.period_start' => ['nullable', 'date'],
             'lines.*.period_end' => ['nullable', 'date'],
+            'subscription_period_counts' => ['nullable', 'array'],
+            'subscription_period_counts.*.subscription_id' => ['required', 'integer'],
+            'subscription_period_counts.*.period_count' => ['required', 'integer', 'min:1', 'max:'.SubscriptionBillingSchedule::MAX_OCCURRENCES_PER_INVOICE],
         ]);
         $lines = array_values($validated['lines']);
+        $subscriptionPeriodCounts = array_values($validated['subscription_period_counts'] ?? []);
         unset($validated['lines']);
+        unset($validated['subscription_period_counts']);
 
         try {
             $this->updateInvoice->execute(
@@ -522,6 +592,7 @@ class InvoiceController extends Controller
                 $validated,
                 $lines,
                 preserveSubjectAmounts: true,
+                subscriptionPeriodCounts: $subscriptionPeriodCounts,
             );
         } catch (ValidationException $exception) {
             $errors = $exception->errors();
@@ -606,178 +677,47 @@ class InvoiceController extends Controller
 
             $nextBillingDates = [];
             $occurrenceKeys = [];
-            $seenSubscriptions = [];
 
-            foreach ($lines as $index => $line) {
-                /*
-             * Разовые и ручные позиции
-             * не изменяют next_billing_date.
-             */
-                if (! $line->subscription_id) {
-                    continue;
+            foreach ($lines->whereNotNull('subscription_id')->groupBy('subscription_id') as $subscriptionId => $group) {
+                $subscription = $subscriptions->get($subscriptionId);
+                if (! $subscription || (int) $subscription->contract_id !== (int) $invoice->contract_id) {
+                    throw ValidationException::withMessages(['issue' => 'Одна из подписок не принадлежит договору инвойса.']);
+                }
+                if ($subscription->status !== 'active' || ! $subscription->next_billing_date) {
+                    throw ValidationException::withMessages(['issue' => "Подписка «{$group->first()->description}» больше не доступна для выставления."]);
                 }
 
-                if (isset($seenSubscriptions[$line->subscription_id])) {
-                    throw ValidationException::withMessages([
-                        'issue' => 'Одна подписка не может быть добавлена в инвойс несколько раз.',
-                    ]);
-                }
-
-                $seenSubscriptions[$line->subscription_id] = true;
-
-                $subscription = $subscriptions->get(
-                    $line->subscription_id
-                );
-
-                if (! $subscription) {
-                    throw ValidationException::withMessages([
-                        'issue' => 'Одна из подписок больше не существует.',
-                    ]);
-                }
-
-                if (
-                    (int) $subscription->contract_id
-                    !== (int) $invoice->contract_id
-                ) {
-                    throw ValidationException::withMessages([
-                        'issue' => 'Одна из подписок не принадлежит договору инвойса.',
-                    ]);
-                }
-
-                if ($subscription->status !== 'active') {
-                    throw ValidationException::withMessages([
-                        'issue' => "Подписка «{$line->description}» больше не активна.",
-                    ]);
-                }
-
-                if (! $line->period_start || ! $line->period_end) {
-                    throw ValidationException::withMessages([
-                        'issue' => "У позиции «{$line->description}» не указан расчётный период.",
-                    ]);
-                }
-
-                $periodStart = Carbon::parse(
-                    $line->period_start
-                )->startOfDay();
-
-                $periodEnd = Carbon::parse(
-                    $line->period_end
-                )->startOfDay();
-
-                if ($periodEnd->lt($periodStart)) {
-                    throw ValidationException::withMessages([
-                        'issue' => "У позиции «{$line->description}» неверный расчётный период.",
-                    ]);
-                }
-
-                $subscriptionStart = Carbon::parse(
-                    $subscription->start_date
-                )->startOfDay();
-
-                if ($periodStart->lt($subscriptionStart)) {
-                    throw ValidationException::withMessages([
-                        'issue' => "Период позиции «{$line->description}» начинается раньше подписки.",
-                    ]);
-                }
-
-                $contractStart = Carbon::parse(
-                    $contract->start_date
-                )->startOfDay();
-
-                if ($periodStart->lt($contractStart)) {
-                    throw ValidationException::withMessages([
-                        'issue' => "Период позиции «{$line->description}» начинается раньше договора.",
-                    ]);
-                }
-
-                if ($contract->end_date) {
-                    $contractEnd = Carbon::parse(
-                        $contract->end_date
-                    )->startOfDay();
-
-                    if ($periodEnd->gt($contractEnd)) {
-                        throw ValidationException::withMessages([
-                            'issue' => "Период позиции «{$line->description}» выходит за срок договора.",
-                        ]);
-                    }
-                }
-
-                /*
-             * Проверяем, что другой non-cancelled инвойс
-             * не содержит reservation этой подписки за тот же период.
-             */
-                $periodAlreadyInvoiced = InvoiceLine::query()
-                    ->where('subscription_id', $subscription->id)
-                    ->where('invoice_id', '!=', $invoice->id)
-                    ->whereDate(
-                        'period_start',
-                        $periodStart->toDateString()
-                    )
-                    ->whereDate(
-                        'period_end',
-                        $periodEnd->toDateString()
-                    )
-                    ->whereHas('invoice', fn ($query) => $query->where('status', '!=', 'cancelled'))
-                    ->exists();
-
-                if ($periodAlreadyInvoiced) {
-                    throw ValidationException::withMessages([
-                        'issue' => "По подписке «{$line->description}» уже есть инвойс за этот период.",
-                    ]);
-                }
-
+                $ordered = $group->sortBy([['period_start', 'asc'], ['id', 'asc']])->values();
+                $expectedStart = CarbonImmutable::parse($subscription->next_billing_date)->startOfDay();
                 try {
-                    $interval = $this->billingSchedule->intervalFor($subscription);
-                } catch (\InvalidArgumentException) {
-                    throw ValidationException::withMessages([
-                        'issue' => "У подписки «{$line->description}» не заполнен корректный интервал биллинга.",
-                    ]);
+                    $expected = $this->billingSchedule->occurrenceChain($subscription, $expectedStart, $ordered->count());
+                } catch (\Throwable) {
+                    throw ValidationException::withMessages(['issue' => "У подписки «{$group->first()->description}» не заполнен корректный интервал биллинга."]);
                 }
 
-                if (! $subscription->next_billing_date) {
-                    throw ValidationException::withMessages([
-                        'issue' => "У подписки «{$line->description}» не указана следующая дата выставления.",
-                    ]);
+                foreach ($ordered as $index => $line) {
+                    $occurrence = $expected[$index];
+                    if (! $line->period_start || ! $line->period_end
+                        || ! CarbonImmutable::parse($line->period_start)->startOfDay()->equalTo($occurrence['period_start'])
+                        || ! CarbonImmutable::parse($line->period_end)->startOfDay()->equalTo($occurrence['period_end'])) {
+                        throw ValidationException::withMessages(['issue' => "Расчётные периоды позиции «{$line->description}» больше не соответствуют графику подписки."]);
+                    }
+                    if ($occurrence['period_start']->lt(CarbonImmutable::parse($subscription->start_date)->startOfDay())
+                        || $occurrence['period_start']->lt(CarbonImmutable::parse($contract->start_date)->startOfDay())
+                        || ($contract->end_date && $occurrence['period_end']->gt(CarbonImmutable::parse($contract->end_date)->startOfDay()))) {
+                        throw ValidationException::withMessages(['issue' => "Период позиции «{$line->description}» выходит за срок подписки или договора."]);
+                    }
+                    if ($line->billing_occurrence_key !== null && $line->billing_occurrence_key !== $occurrence['billing_occurrence_key']) {
+                        throw ValidationException::withMessages(['issue' => "Ключ расчётного периода позиции «{$line->description}» не соответствует её периоду."]);
+                    }
+                    if (InvoiceLine::query()->where('billing_occurrence_key', $occurrence['billing_occurrence_key'])->where('invoice_id', '!=', $invoice->id)->whereHas('invoice', fn ($query) => $query->where('status', '!=', 'cancelled'))->exists()) {
+                        throw ValidationException::withMessages(['issue' => "По подписке «{$line->description}» уже есть инвойс за этот период."]);
+                    }
+                    $occurrenceKeys[$line->id] = $occurrence['billing_occurrence_key'];
                 }
 
-                $expectedPeriodStart = CarbonImmutable::parse(
-                    $subscription->next_billing_date
-                )->startOfDay();
-
-                $anchorDate = CarbonImmutable::parse($subscription->start_date)->startOfDay();
-                $expectedPeriodEnd = $this->billingSchedule->periodEnd(
-                    $expectedPeriodStart,
-                    $anchorDate,
-                    $interval,
-                );
-
-                if (! $periodStart->equalTo($expectedPeriodStart)) {
-                    throw ValidationException::withMessages([
-                        'issue' => "Начало периода позиции «{$line->description}» больше не соответствует графику подписки.",
-                    ]);
-                }
-
-                if (! $periodEnd->equalTo($expectedPeriodEnd)) {
-                    throw ValidationException::withMessages([
-                        'issue' => "Окончание периода позиции «{$line->description}» не соответствует графику подписки.",
-                    ]);
-                }
-
-                $expectedKey = $this->billingSchedule->occurrenceKey(
-                    (int) $subscription->id,
-                    $expectedPeriodStart,
-                    $expectedPeriodEnd,
-                );
-                if ($line->billing_occurrence_key !== null
-                    && $line->billing_occurrence_key !== $expectedKey) {
-                    throw ValidationException::withMessages([
-                        'issue' => "Occurrence key позиции «{$line->description}» не соответствует её периоду.",
-                    ]);
-                }
-
-                $occurrenceKeys[$line->id] = $expectedKey;
                 $nextBillingDates[$subscription->id] = $this->billingSchedule
-                    ->nextOccurrenceStart($expectedPeriodStart, $anchorDate, $interval)
+                    ->nextOccurrenceStart($expected[count($expected) - 1]['period_start'], CarbonImmutable::parse($subscription->start_date)->startOfDay(), $this->billingSchedule->intervalFor($subscription))
                     ->toDateString();
             }
 
@@ -891,77 +831,62 @@ class InvoiceController extends Controller
          */
             $rollbackDates = [];
 
-            foreach ($subscriptionLines->groupBy('subscription_id') as $subscriptionId => $lines) {
-                $subscription = $subscriptions->get(
-                    $subscriptionId
-                );
-
+            foreach ($subscriptionLines->groupBy('subscription_id') as $subscriptionId => $group) {
+                $subscription = $subscriptions->get($subscriptionId);
                 if (! $subscription) {
-                    throw ValidationException::withMessages([
-                        'cancel' => 'Одна из подписок больше не существует.',
-                    ]);
+                    throw ValidationException::withMessages(['cancel' => 'Одна из подписок больше не существует.']);
                 }
 
-                if ($lines->count() > 1) {
-                    throw ValidationException::withMessages([
-                        'cancel' => 'Нельзя автоматически восстановить график: '
-                            .'инвойс содержит несколько периодов одной подписки.',
-                    ]);
+                $ordered = $group->sortBy([['period_start', 'asc'], ['id', 'asc']])->values();
+                $first = $ordered->first();
+                if (! $first?->period_start || ! $subscription->start_date) {
+                    throw ValidationException::withMessages(['cancel' => 'У позиции подписки отсутствует расчётный период.']);
                 }
 
-                $line = $lines->first();
-
-                if (! $line->period_start || ! $line->period_end) {
-                    throw ValidationException::withMessages([
-                        'cancel' => "У позиции «{$line->description}» отсутствует расчётный период.",
-                    ]);
+                try {
+                    $expected = $this->billingSchedule->occurrenceChain(
+                        $subscription,
+                        CarbonImmutable::parse($first->period_start)->startOfDay(),
+                        $ordered->count(),
+                    );
+                } catch (\Throwable) {
+                    throw ValidationException::withMessages(['cancel' => "Нельзя восстановить график подписки «{$first->description}»: некорректный интервал биллинга."]);
                 }
 
-                /*
-                 * Если после отменяемого периода уже существует
-                 * другая non-cancelled reservation, откатывать дату нельзя.
-             */
-                $hasLaterPeriod = InvoiceLine::query()
+                foreach ($ordered as $index => $line) {
+                    $occurrence = $expected[$index];
+                    $isLegacySingleOccurrence = $ordered->count() === 1 && $line->billing_occurrence_key === null;
+                    if (! $line->period_start || ! $line->period_end
+                        || (! $isLegacySingleOccurrence && ! CarbonImmutable::parse($line->period_start)->startOfDay()->equalTo($occurrence['period_start']))
+                        || (! $isLegacySingleOccurrence && ! CarbonImmutable::parse($line->period_end)->startOfDay()->equalTo($occurrence['period_end']))
+                        || ($line->billing_occurrence_key !== null
+                            && $line->billing_occurrence_key !== $occurrence['billing_occurrence_key'])) {
+                        throw ValidationException::withMessages(['cancel' => "Нельзя восстановить график подписки «{$line->description}»: периоды не образуют корректную последовательность."]);
+                    }
+                }
+
+                $last = $expected[count($expected) - 1];
+                $expectedCurrentDate = $ordered->count() === 1 && $ordered->first()->billing_occurrence_key === null
+                    ? CarbonImmutable::parse($ordered->first()->period_end)->addDay()->toDateString()
+                    : $this->billingSchedule->nextOccurrenceStart(
+                        $last['period_start'],
+                        CarbonImmutable::parse($subscription->start_date)->startOfDay(),
+                        $this->billingSchedule->intervalFor($subscription),
+                    )->toDateString();
+                if ($subscription->next_billing_date?->toDateString() !== $expectedCurrentDate) {
+                    throw ValidationException::withMessages(['cancel' => "Нельзя восстановить график подписки «{$first->description}»: следующая дата выставления уже была изменена."]);
+                }
+
+                if (InvoiceLine::query()
                     ->where('subscription_id', $subscription->id)
                     ->where('invoice_id', '!=', $invoice->id)
-                    ->whereDate(
-                        'period_start',
-                        '>',
-                        Carbon::parse($line->period_start)
-                            ->toDateString()
-                    )
+                    ->whereDate('period_start', '>', $last['period_start']->toDateString())
                     ->whereHas('invoice', fn ($query) => $query->where('status', '!=', 'cancelled'))
-                    ->exists();
-
-                if ($hasLaterPeriod) {
-                    throw ValidationException::withMessages([
-                        'cancel' => "Нельзя отменить позицию «{$line->description}»: "
-                            .'по подписке уже существует более поздний выставленный инвойс.',
-                    ]);
+                    ->exists()) {
+                    throw ValidationException::withMessages(['cancel' => "Нельзя отменить позицию «{$first->description}»: по подписке уже существует более поздний выставленный инвойс."]);
                 }
 
-                /*
-                 * issue() устанавливает дату на следующий день после period_end.
-                 * Если дата уже изменена, отмена не должна затирать чужое изменение.
-                 */
-                $expectedCurrentDate = Carbon::parse($line->period_end)
-                    ->addDay()
-                    ->toDateString();
-
-                $currentDate = $subscription->next_billing_date
-                    ? Carbon::parse($subscription->next_billing_date)->toDateString()
-                    : null;
-
-                if ($currentDate !== $expectedCurrentDate) {
-                    throw ValidationException::withMessages([
-                        'cancel' => "Нельзя восстановить график подписки «{$line->description}»: "
-                            .'следующая дата выставления уже была изменена.',
-                    ]);
-                }
-
-                $rollbackDates[$subscription->id] = Carbon::parse(
-                    $line->period_start
-                )->toDateString();
+                $rollbackDates[$subscription->id] = $expected[0]['period_start']->toDateString();
             }
 
             /*
@@ -1093,7 +1018,9 @@ class InvoiceController extends Controller
             ->where('status', 'active')
             ->with('serviceType')
             ->get()
-            ->map(function ($subscription) {
+            ->map(function ($subscription) use ($contract) {
+                $preview = $this->subscriptionOccurrencePreview($subscription, $contract);
+
                 return [
                     'id' => $subscription->id,
                     'type' => 'subscription',
@@ -1115,6 +1042,10 @@ class InvoiceController extends Controller
                     'next_billing_date' => $subscription->next_billing_date
                         ? Carbon::parse($subscription->next_billing_date)->format('Y-m-d')
                         : null,
+
+                    'available_occurrences' => $preview['occurrences'],
+                    'selectable' => $preview['selectable'],
+                    'unavailable_reason' => $preview['reason'],
 
                     'payment_terms' => $subscription->payment_terms,
                 ];
@@ -1138,6 +1069,38 @@ class InvoiceController extends Controller
             'orders' => $orders,
             'subscriptions' => $subscriptions,
         ]);
+    }
+
+    /** @return array{selectable: bool, reason: ?string, occurrences: list<array{period_start: string, period_end: string}>} */
+    private function subscriptionOccurrencePreview(Subscription $subscription, Contract $contract): array
+    {
+        if (! $subscription->next_billing_date || ! $subscription->start_date) {
+            return ['selectable' => false, 'reason' => 'Не заполнен график биллинга.', 'occurrences' => []];
+        }
+
+        try {
+            $chain = $this->billingSchedule->occurrenceChain(
+                $subscription,
+                CarbonImmutable::parse($subscription->next_billing_date)->startOfDay(),
+                SubscriptionBillingSchedule::MAX_OCCURRENCES_PER_INVOICE,
+            );
+        } catch (\Throwable) {
+            return ['selectable' => false, 'reason' => 'Не заполнен корректный интервал биллинга.', 'occurrences' => []];
+        }
+
+        $contractEnd = $contract->end_date?->startOfDay();
+        $occurrences = collect($chain)
+            ->takeWhile(fn (array $occurrence): bool => $contractEnd === null || $occurrence['period_end']->lte($contractEnd))
+            ->map(fn (array $occurrence): array => [
+                'period_start' => $occurrence['period_start']->toDateString(),
+                'period_end' => $occurrence['period_end']->toDateString(),
+            ])
+            ->values()
+            ->all();
+
+        return $occurrences === []
+            ? ['selectable' => false, 'reason' => 'Следующий расчётный период выходит за срок договора.', 'occurrences' => []]
+            : ['selectable' => true, 'reason' => null, 'occurrences' => $occurrences];
     }
 
     private function invoiceCompanyContext(Request $request, Invoice $invoice): array

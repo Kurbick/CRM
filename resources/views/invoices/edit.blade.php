@@ -5,6 +5,21 @@
 @section('content')
 @php
     $storedLines = $invoice->lines->keyBy('id');
+    $persistedSubscriptionCounts = $invoice->lines
+        ->whereNotNull('subscription_id')
+        ->countBy('subscription_id');
+    $oldSubscriptionPeriodCounts = collect(old('subscription_period_counts', []))
+        ->mapWithKeys(function ($value, $key) {
+            if (! is_array($value) || ! isset($value['period_count'])) {
+                return [];
+            }
+
+            $subscriptionId = $value['subscription_id'] ?? $key;
+
+            return is_numeric($subscriptionId)
+                ? [(int) $subscriptionId => $value['period_count']]
+                : [];
+        });
     $defaultLines = $invoice->lines->map(fn ($line) => [
         'id' => $line->id,
         'description' => $line->description,
@@ -13,15 +28,25 @@
         'order_id' => $line->order_id,
         'period_start' => $line->period_start?->toDateString(),
         'period_end' => $line->period_end?->toDateString(),
+        'period_count' => $line->subscription_id
+            ? ($persistedSubscriptionCounts->get($line->subscription_id) ?? 1)
+            : null,
     ])->all();
     $editLines = collect(array_values(old('lines', $defaultLines)))
-        ->map(function ($line) use ($storedLines) {
+        ->map(function ($line) use ($storedLines, $persistedSubscriptionCounts, $oldSubscriptionPeriodCounts) {
             $storedLine = !empty($line['id'])
                 ? $storedLines->get((int) $line['id'])
                 : null;
 
             $line['payment_terms'] = $storedLine?->subscription?->payment_terms
                 ?? $storedLine?->order?->payment_terms;
+            if (! empty($line['subscription_id'])) {
+                $subscriptionId = (int) $line['subscription_id'];
+                $line['period_count'] = $oldSubscriptionPeriodCounts->get($subscriptionId)
+                    ?? $line['period_count']
+                    ?? $persistedSubscriptionCounts->get($subscriptionId)
+                    ?? 1;
+            }
 
             return $line;
         })
@@ -56,7 +81,15 @@
     removeLine(index) { this.lines.splice(index, 1); this.recalculateDueDate() },
     issueDateChanged() { if (this.hasAutomaticPaymentTerms) this.recalculateDueDate() },
     recalculateDueDate() { if (!this.hasAutomaticPaymentTerms) { if (this.dueDateWasAutomatic) this.dueDate = ''; this.dueDateWasAutomatic = false; return } this.dueDateWasAutomatic = true; if (!this.issueDate) { this.dueDate = ''; return } const date = this.parseDate(this.issueDate); date.setDate(date.getDate() + this.minimumPaymentTerms); this.dueDate = this.inputDate(date) },
-    total() { return this.lines.reduce((sum, line) => sum + (Number.parseFloat(line.amount) || 0), 0) },
+    subscriptionGroup(line) { return this.lines.filter(candidate => candidate.subscription_id && candidate.subscription_id === line.subscription_id).sort((a, b) => String(a.period_start).localeCompare(String(b.period_start)) || Number(a.id) - Number(b.id)) },
+    isSubscriptionLeader(line) { return !line.subscription_id || this.subscriptionGroup(line)[0]?.id === line.id },
+    periodCount(line) { return Number(this.subscriptionGroup(line)[0]?.period_count || this.subscriptionGroup(line).length || 1) },
+    normalisePeriodCount(line) { if (!line.subscription_id) return; const leader = this.subscriptionGroup(line)[0]; leader.period_count = Math.max(1, Math.min(24, Number.parseInt(leader.period_count, 10) || 1)); this.recalculateDueDate() },
+    syncSubscriptionDescription(line) { this.subscriptionGroup(line).forEach(candidate => candidate.description = line.description) },
+    subscriptionRange(line) { const group = this.subscriptionGroup(line); const count = this.periodCount(line); return [group[0]?.period_start, group[Math.min(count, group.length) - 1]?.period_end || group[group.length - 1]?.period_end] },
+    lineTotal(line) { return (Number.parseFloat(line.amount) || 0) * (line.subscription_id ? this.periodCount(line) : 1) },
+    periodSummary(line) { const count = this.periodCount(line); const noun = count === 1 ? 'расчётный период' : (count >= 2 && count <= 4 ? 'расчётных периода' : 'расчётных периодов'); return count === 1 ? `1 ${noun} · ${this.money(line.amount)}` : `${count} ${noun} × ${this.money(line.amount)} = ${this.money(this.lineTotal(line))}` },
+    total() { return this.lines.filter(line => this.isSubscriptionLeader(line)).reduce((sum, line) => sum + this.lineTotal(line), 0) },
     money(value) { return `${(Number.parseFloat(value) || 0).toFixed(2)} ₼` },
     type(line) { return line.subscription_id ? 'Подписка' : (line.order_id ? 'Разовая услуга' : 'Ручная позиция') },
     parseDate(value) { const [y, m, d] = value.split('-').map(Number); return new Date(y, m - 1, d) },
@@ -68,6 +101,15 @@
     @endif
     @csrf
     @method('PUT')
+
+    @if ($invoice->status === 'draft')
+        <template x-for="line in lines.filter(line => line.subscription_id && isSubscriptionLeader(line))" :key="`period-count-${line.subscription_id}`">
+            <span>
+                <input type="hidden" :name="`subscription_period_counts[${line.subscription_id}][subscription_id]`" :value="line.subscription_id">
+                <input type="hidden" :name="`subscription_period_counts[${line.subscription_id}][period_count]`" :value="periodCount(line)">
+            </span>
+        </template>
+    @endif
 
     <div data-testid="invoice-edit-form-workspace" class="max-w-5xl overflow-hidden border-y border-slate-200 bg-white">
         <section class="px-4 py-5 sm:px-5">
@@ -114,8 +156,8 @@
                     <p class="mt-1 text-xs text-gray-500">Измените описание или сумму ручных позиций.</p>
             </div>
             <div x-show="lines.length" class="mt-4 border-y border-slate-200">
-                <template x-for="(line, index) in lines" :key="line.id ?? `new-${index}`">
-                    <div class="border-b border-slate-200 px-3 py-4 last:border-b-0">
+                    <template x-for="(line, index) in lines" :key="line.id ?? `new-${index}`">
+                    <div x-show="!line.subscription_id || isSubscriptionLeader(line)" class="border-b border-slate-200 px-3 py-4 last:border-b-0">
                         <input type="hidden" :name="`lines[${index}][id]`" :value="line.id || ''">
                         <input type="hidden" :name="`lines[${index}][subscription_id]`" :value="line.subscription_id || ''">
                         <input type="hidden" :name="`lines[${index}][order_id]`" :value="line.order_id || ''">
@@ -124,25 +166,29 @@
                         <div class="mb-2 flex items-center justify-between gap-3">
                             <div>
                                 <p class="text-xs font-medium text-gray-500" x-text="type(line)"></p>
-                                <p x-show="line.subscription_id" class="mt-0.5 text-xs text-gray-500">Расчётный период: <span x-text="`${formatDate(line.period_start)} — ${formatDate(line.period_end)}`"></span></p>
+                                <p x-show="line.subscription_id" class="mt-0.5 text-xs text-gray-500">Расчётные периоды: <span x-text="`${formatDate(subscriptionRange(line)[0])} — ${formatDate(subscriptionRange(line)[1])}`"></span></p>
                             </div>
                             <button type="button" x-show="@js($invoice->status !== 'issued') || (!line.subscription_id && !line.order_id)"
-                                x-on:click="removeLine(index)" class="text-xs font-semibold text-red-600 transition hover:text-red-700">Удалить</button>
+                                x-on:click="line.subscription_id ? lines = lines.filter(candidate => candidate.subscription_id !== line.subscription_id) : removeLine(index)" class="text-xs font-semibold text-red-600 transition hover:text-red-700">Удалить</button>
                         </div>
                         <div class="grid grid-cols-1 gap-3 sm:grid-cols-12">
                             <div class="sm:col-span-8">
                                 <label class="mb-1 block text-xs font-medium text-slate-500">Описание</label>
-                                <input :name="`lines[${index}][description]`" x-model="line.description" required maxlength="255" class="w-full border-gray-200">
+                                <input :name="`lines[${index}][description]`" x-model="line.description" x-on:input="syncSubscriptionDescription(line)" required maxlength="255" class="w-full border-gray-200">
                             </div>
                             <div class="sm:col-span-4">
                                 <label class="mb-1 block text-xs font-medium text-slate-500">Сумма (₼)</label>
                                 <template x-if="line.order_id || line.subscription_id">
-                                    <p class="py-2 font-mono text-sm font-semibold text-slate-900" x-text="money(line.amount)"></p>
+                                    <p class="py-2 font-mono text-sm font-semibold text-slate-900" x-text="money(lineTotal(line))"></p>
                                 </template>
                                 <template x-if="!line.order_id && !line.subscription_id">
                                     <input type="number" :name="`lines[${index}][amount]`" x-model="line.amount" required min="0.01" step="0.01" class="w-full font-mono border-gray-200">
                                 </template>
                             </div>
+                        </div>
+                        <div x-show="line.subscription_id" class="mt-3 flex items-center gap-3 text-xs text-slate-600">
+                            <label class="font-medium">Расчётные периоды <input type="number" min="1" max="24" x-model.number="line.period_count" x-bind:value="periodCount(line)" x-on:change="normalisePeriodCount(line)" @disabled($invoice->status !== 'draft') class="ml-2 w-16 border-gray-200 py-1 text-sm"></label>
+                            <span x-text="periodSummary(line)"></span>
                         </div>
                     </div>
                 </template>

@@ -116,4 +116,5 @@ class SubscriptionBillingScheduleTest extends TestCase
         $this->assertSame('2026-01-31', $current->toDateString());
         $this->assertSame('2026-01-31', $anchor->toDateString());
     }
+
 }

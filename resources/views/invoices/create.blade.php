@@ -4,6 +4,7 @@
 
 @section('content')
 @php
+    $oldSubscriptionOccurrences = $oldSubscriptionOccurrences ?? collect();
     $companyOptions = $companies->map(fn ($company) => [
         'id' => (string) $company->id,
         'name' => $company->name,
@@ -14,8 +15,28 @@
     $oldLines = collect(old('lines', []))
         ->filter(fn ($line): bool => is_array($line)
             && (filled($line['subscription_id'] ?? null) || filled($line['order_id'] ?? null)))
+        ->map(function (array $line) use ($oldSubscriptionAmounts, $oldSubscriptionOccurrences): array {
+            $subscriptionId = $line['subscription_id'] ?? null;
+
+            if (is_numeric($subscriptionId) && $oldSubscriptionAmounts->has((int) $subscriptionId)) {
+                // Display only: persistence still canonicalizes the amount in CreateInvoice.
+                $line['amount'] = $oldSubscriptionAmounts->get((int) $subscriptionId);
+                $line['stale_occurrences'] = $oldSubscriptionOccurrences->get((int) $subscriptionId, []);
+            }
+
+            return $line;
+        })
         ->values()
         ->all();
+    $lineErrors = collect($errors->getMessages())
+        ->filter(fn ($messages, $key): bool => preg_match('/^lines\.\d+\.(?:period_count|subscription_id)$/', $key) === 1)
+        ->map(fn (array $messages): string => $messages[0])
+        ->all();
+    $formErrors = collect($errors->getMessages())
+        ->reject(fn ($messages, $key): bool => preg_match('/^lines\.\d+\.(?:period_count|subscription_id)$/', $key) === 1)
+        ->flatten()
+        ->unique()
+        ->values();
     $defaultInvoiceNumber = 'INV-' . strtoupper(substr(uniqid(), -6));
     $defaultIssueDate = now()->toDateString();
 @endphp
@@ -35,6 +56,7 @@
         companyQuery: @js($oldCompanyName),
         selectedContractId: @js($oldContractId),
         oldLines: @js($oldLines),
+        lineErrors: @js($lineErrors),
         invoiceNumber: @js(old('invoice_number', '')),
         issueDate: @js(old('issue_date', '')),
         dueDate: @js(old('due_date', '')),
@@ -153,7 +175,7 @@
                 <div class="divide-y divide-slate-100 border-y border-slate-200">
                     <template x-for="item in availableItems" :key="itemKey(item)">
                         <label class="flex cursor-pointer items-start gap-3 px-3 py-3 transition hover:bg-slate-50">
-                            <input type="checkbox" class="mt-1 rounded border-gray-300 text-blue-600" :checked="isSelected(item)" x-on:change="toggleItem(item, $event.target.checked)">
+                            <input type="checkbox" class="mt-1 rounded border-gray-300 text-blue-600" :checked="isSelected(item)" :disabled="item.type === 'subscription' && !item.selectable" x-on:change="toggleItem(item, $event.target.checked)">
                             <span class="min-w-0 flex-1">
                                 <span class="block text-sm font-medium text-gray-800" x-text="item.description"></span>
                                 <span class="block text-xs text-gray-500" x-text="itemSubtitle(item)"></span>
@@ -171,13 +193,13 @@
                         <div class="border-b border-slate-200 px-3 py-4 last:border-b-0">
                             <input type="hidden" :name="`lines[${index}][subscription_id]`" :value="line.subscription_id || ''">
                             <input type="hidden" :name="`lines[${index}][order_id]`" :value="line.order_id || ''">
-                            <input type="hidden" :name="line.subscription_id ? `lines[${index}][period_start]` : null" :value="line.period_start || ''">
-                            <input type="hidden" :name="line.subscription_id ? `lines[${index}][period_end]` : null" :value="line.period_end || ''">
+                            <input type="hidden" :name="line.subscription_id ? `lines[${index}][period_count]` : null" :value="line.period_count || 1">
+                            <input type="hidden" :name="line.subscription_id ? `lines[${index}][expected_period_start]` : null" :value="line.expected_period_start || ''">
                             <div class="mb-2 flex items-center justify-between gap-3">
                                 <div>
                                     <p class="text-xs font-medium text-gray-500" x-text="lineType(line)"></p>
                                     <p x-show="line.subscription_id" class="mt-0.5 text-xs text-gray-500">
-                                        Расчётный период: <span x-text="`${formatDate(line.period_start)} — ${formatDate(line.period_end)}`"></span>
+                                        <span x-text="`${formatDate(subscriptionRange(line)[0])} — ${formatDate(subscriptionRange(line)[1])}`"></span>
                                     </p>
                                 </div>
                                 <button type="button" x-on:click="removeLine(index)" class="text-xs font-semibold text-red-600 transition hover:text-red-700" aria-label="Удалить позицию">Удалить</button>
@@ -190,15 +212,28 @@
                                 </div>
                                 <div class="sm:col-span-4">
                                     <label class="mb-1 block text-xs font-medium text-slate-500">Сумма (₼)</label>
-                                    <p class="py-2 font-mono text-sm font-semibold text-slate-900" x-text="money(line.amount)"></p>
+                                    <p class="py-2 font-mono text-sm font-semibold text-slate-900" x-text="money(lineTotal(line))"></p>
                                 </div>
                             </div>
+                            <div x-show="line.subscription_id" class="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-600">
+                                <label class="font-medium">Расчётные периоды
+                                    <input type="number" min="1" :max="maximumPeriodCount(line)" x-model.number="line.period_count" x-on:change="normalisePeriodCount(line)" class="ml-2 w-16 border-gray-200 py-1 text-sm">
+                                </label>
+                                <span x-text="periodSummary(line)"></span>
+                            </div>
+                            <p x-show="lineError(index, 'period_count') || lineError(index, 'subscription_id')" class="mt-2 text-xs text-red-600" role="alert" x-text="lineError(index, 'period_count') || lineError(index, 'subscription_id')"></p>
                         </div>
                     </template>
                 </div>
             </div>
             <p x-show="linesError" class="mt-3 text-sm text-red-600">Добавьте хотя бы одну позицию счёта.</p>
-            @error('lines') <p class="mt-3 text-sm text-red-600">{{ $message }}</p> @enderror
+            @if ($formErrors->isNotEmpty())
+                <div class="mt-3 space-y-1 text-sm text-red-600" role="alert">
+                    @foreach ($formErrors as $message)
+                        <p>{{ $message }}</p>
+                    @endforeach
+                </div>
+            @endif
         </section>
 
         <section x-show="selectedContractId" x-cloak data-step="invoice-comment" class="border-t border-slate-200 px-4 py-5 sm:px-5">
@@ -229,7 +264,7 @@ document.addEventListener('alpine:init', () => {
         dueDateIsManual: config.hasOldInput && config.hasOldDueDate, dueDateWasAutomatic: false, restoring: true, previousContractId: config.selectedContractId,
         get filteredCompanies() { const q = this.companyQuery.trim().toLocaleLowerCase(); return q ? this.companies.filter(c => c.name.toLocaleLowerCase().startsWith(q)) : this.companies },
         get selectedContract() { return this.contracts.find(c => String(c.id) === String(this.selectedContractId)) || null },
-        get total() { return this.lines.reduce((sum, line) => sum + (Number.parseFloat(line.amount) || 0), 0) },
+        get total() { return this.lines.reduce((sum, line) => sum + this.lineTotal(line), 0) },
         get paymentTerms() { return this.lines.filter(line => line.order_id || line.subscription_id).map(line => line.payment_terms).filter(terms => terms !== null && terms !== '').map(Number).filter(terms => Number.isInteger(terms) && terms >= 0 && terms <= 3650) },
         get hasAutomaticPaymentTerms() { return this.paymentTerms.length > 0 },
         get minimumPaymentTerms() { return this.hasAutomaticPaymentTerms ? Math.min(...this.paymentTerms) : null },
@@ -352,19 +387,24 @@ document.addEventListener('alpine:init', () => {
                 if (requestId === this.itemsRequestId) this.loadingItems = false;
             }
         },
-        mergeOldMetadata() { this.lines.forEach(line => { const item = this.availableItems.find(i => this.itemKey(i) === line.key); if (item) { line.billing_period = item.billing_period || null; line.payment_terms = item.payment_terms ?? null } }) },
-        normaliseOldLine(line) { const type = line.subscription_id ? 'subscription' : 'order'; const id = line.subscription_id || line.order_id; return { key: `${type}-${id}`, description: line.description || '', amount: line.amount || '', subscription_id: line.subscription_id || null, order_id: line.order_id || null, period_start: line.period_start || null, period_end: line.period_end || null, billing_period: line.billing_period || null, payment_terms: null } },
+        mergeOldMetadata() { this.lines.forEach(line => { const item = this.availableItems.find(i => this.itemKey(i) === line.key); if (item) { line.amount = item.amount; line.billing_period = item.billing_period || null; line.payment_terms = item.payment_terms ?? null; line.available_occurrences = item.available_occurrences || []; line.expected_period_start = line.expected_period_start || line.available_occurrences[0]?.period_start || null; this.normalisePeriodCount(line) } }) },
+        normaliseOldLine(line) { const type = line.subscription_id ? 'subscription' : 'order'; const id = line.subscription_id || line.order_id; return { key: `${type}-${id}`, description: line.description || '', amount: line.amount || '', subscription_id: line.subscription_id || null, order_id: line.order_id || null, period_count: Number(line.period_count || 1), expected_period_start: line.expected_period_start || null, available_occurrences: [], stale_occurrences: line.stale_occurrences || [], billing_period: line.billing_period || null, payment_terms: null } },
         itemKey(item) { return `${item.type}-${item.id}` }, isSelected(item) { return this.lines.some(line => line.key === this.itemKey(item)) },
+        lineError(index, field) { return this.lineErrors[`lines.${index}.${field}`] || null },
         toggleItem(item, checked) { const key = this.itemKey(item); if (checked && !this.lines.some(line => line.key === key)) this.lines.push(this.lineFromItem(item)); else if (!checked) this.lines = this.lines.filter(line => line.key !== key); this.afterLinesChanged() },
-        lineFromItem(item) { const period = item.type === 'subscription' ? this.subscriptionPeriod(item) : [null, null]; return { key: this.itemKey(item), description: item.description, amount: item.amount, subscription_id: item.type === 'subscription' ? item.id : null, order_id: item.type === 'order' ? item.id : null, period_start: period[0], period_end: period[1], billing_period: item.billing_period || null, payment_terms: item.payment_terms ?? null } },
-        subscriptionPeriod(item) { if (!item.next_billing_date || !item.start_date) return [null, null]; const start = this.parseDate(item.next_billing_date); const anchor = this.parseDate(item.start_date); const next = new Date(start); if (item.billing_period === 'custom' && item.custom_interval_unit === 'day') { next.setDate(next.getDate() + Number(item.custom_interval_value)); } else { const standardMonths = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12 }; const months = item.billing_period === 'custom' ? Number(item.custom_interval_value) * (item.custom_interval_unit === 'year' ? 12 : 1) : standardMonths[item.billing_period]; if (!months) return [null, null]; const anchorIsEom = anchor.getDate() === new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0).getDate(); next.setDate(1); next.setMonth(next.getMonth() + months); const targetLastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate(); next.setDate(anchorIsEom ? targetLastDay : Math.min(anchor.getDate(), targetLastDay)); } const end = new Date(next); end.setDate(end.getDate() - 1); return [this.inputDate(start), this.inputDate(end)] },
+        lineFromItem(item) { return { key: this.itemKey(item), description: item.description, amount: item.amount, subscription_id: item.type === 'subscription' ? item.id : null, order_id: item.type === 'order' ? item.id : null, period_count: 1, expected_period_start: item.type === 'subscription' ? item.available_occurrences?.[0]?.period_start || null : null, available_occurrences: item.available_occurrences || [], billing_period: item.billing_period || null, payment_terms: item.payment_terms ?? null } },
+        maximumPeriodCount(line) { return Math.max(line.available_occurrences?.length || 0, line.stale_occurrences?.length || 0, 1) },
+        normalisePeriodCount(line) { if (!line.subscription_id) return; const maximum = this.maximumPeriodCount(line); line.period_count = Math.max(1, Math.min(maximum, Number.parseInt(line.period_count, 10) || 1)); this.afterLinesChanged() },
+        subscriptionRange(line) { const occurrences = line.stale_occurrences?.length ? line.stale_occurrences : (line.available_occurrences || []); const count = Math.max(1, Math.min(Number(line.period_count) || 1, occurrences.length)); return occurrences.length ? [occurrences[0].period_start, occurrences[count - 1].period_end] : [null, null] },
+        lineTotal(line) { return (Number.parseFloat(line.amount) || 0) * (line.subscription_id ? (Number(line.period_count) || 1) : 1) },
+        periodSummary(line) { const count = Number(line.period_count) || 1; const noun = count === 1 ? 'расчётный период' : (count >= 2 && count <= 4 ? 'расчётных периода' : 'расчётных периодов'); return count === 1 ? `1 ${noun} · ${this.money(line.amount)}` : `${count} ${noun} × ${this.money(line.amount)} = ${this.money(this.lineTotal(line))}` },
         removeLine(index) { this.lines.splice(index, 1); this.afterLinesChanged() },
         afterLinesChanged() { this.linesError = false; this.recalculateDueDate() },
         issueDateChanged() { if (this.hasAutomaticPaymentTerms) this.recalculateDueDate() },
         recalculateDueDate() { if (!this.hasAutomaticPaymentTerms) { if (this.dueDateWasAutomatic) this.dueDate = ''; this.dueDateWasAutomatic = false; this.dueDateIsManual = true; return } this.dueDateIsManual = false; this.dueDateWasAutomatic = true; if (!this.issueDate) { this.dueDate = ''; return } const date = this.parseDate(this.issueDate); date.setDate(date.getDate() + this.minimumPaymentTerms); this.dueDate = this.inputDate(date) },
         contractLabel(c) { return `№ ${c.contract_number}` },
         contractDates(c) { return c.end_date ? `${this.formatDate(c.start_date)} — ${this.formatDate(c.end_date)}` : `с ${this.formatDate(c.start_date)}, бессрочный` },
-        itemSubtitle(item) { if (item.type === 'order') return 'Разовая услуга'; return `Подписка · ${{ monthly: 'ежемесячно', quarterly: 'ежеквартально', semiannual: 'раз в полгода', annual: 'ежегодно', custom: 'индивидуальный период' }[item.billing_period] || 'индивидуальный период'}` },
+        itemSubtitle(item) { if (item.type === 'order') return 'Разовая услуга'; if (!item.selectable) return item.unavailable_reason || 'Недоступна для выставления'; return `Подписка · ${{ monthly: 'ежемесячно', quarterly: 'ежеквартально', semiannual: 'раз в полгода', annual: 'ежегодно', custom: 'индивидуальный период' }[item.billing_period] || 'индивидуальный период'}` },
         lineType(line) { return line.subscription_id ? 'Подписка' : 'Разовая услуга' },
         money(value) { return `${(Number.parseFloat(value) || 0).toFixed(2)} ₼` },
         parseDate(value) { const [y, m, d] = value.split('-').map(Number); return new Date(y, m - 1, d) },

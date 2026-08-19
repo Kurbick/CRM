@@ -4,9 +4,12 @@ namespace App\Actions\Invoices;
 
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
+use App\Models\Subscription;
 use App\Services\InvoiceDueDateCalculator;
 use App\Services\InvoiceEditabilityService;
 use App\Services\InvoicePaymentAvailabilityService;
+use App\Services\SubscriptionBillingSchedule;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -17,6 +20,7 @@ final class UpdateInvoice
         private readonly InvoiceDueDateCalculator $dueDateCalculator,
         private readonly InvoiceEditabilityService $editabilityService,
         private readonly InvoicePaymentAvailabilityService $paymentAvailabilityService,
+        private readonly SubscriptionBillingSchedule $billingSchedule,
     ) {}
 
     /**
@@ -28,8 +32,9 @@ final class UpdateInvoice
         array $attributes,
         ?array $lines = null,
         bool $preserveSubjectAmounts = false,
+        array $subscriptionPeriodCounts = [],
     ): Invoice {
-        return DB::transaction(function () use ($invoice, $attributes, $lines, $preserveSubjectAmounts): Invoice {
+        return DB::transaction(function () use ($invoice, $attributes, $lines, $preserveSubjectAmounts, $subscriptionPeriodCounts): Invoice {
             $lockedInvoice = Invoice::query()
                 ->whereKey($invoice->getKey())
                 ->lockForUpdate()
@@ -52,6 +57,7 @@ final class UpdateInvoice
                     'invoice_lines.amount',
                     'invoice_lines.period_start',
                     'invoice_lines.period_end',
+                    'invoice_lines.billing_occurrence_key',
                 ])
                 ->orderBy('invoice_lines.id')
                 ->lockForUpdate()
@@ -65,6 +71,19 @@ final class UpdateInvoice
 
                 return $lockedInvoice->fresh();
             }
+
+            if ($subscriptionPeriodCounts !== [] && $lockedInvoice->status !== 'draft') {
+                throw ValidationException::withMessages([
+                    'invoice' => 'Изменять количество расчётных периодов можно только в черновике.',
+                ]);
+            }
+
+            $lines = $this->resizeSubscriptionGroups(
+                $lockedInvoice,
+                $lockedLines,
+                $lines,
+                $subscriptionPeriodCounts,
+            );
 
             if ($preserveSubjectAmounts) {
                 $lines = $this->preserveExistingSubjectAmounts($lines, $lockedLines->keyBy('id'));
@@ -153,6 +172,20 @@ final class UpdateInvoice
                     continue;
                 }
 
+                if (! empty($line['__subscription_resize_append'])) {
+                    $lockedInvoice->lines()->create([
+                        'description' => $line['description'],
+                        'amount' => $line['amount'],
+                        'subscription_id' => $line['subscription_id'],
+                        'order_id' => null,
+                        'period_start' => $line['period_start'],
+                        'period_end' => $line['period_end'],
+                        'billing_occurrence_key' => $line['billing_occurrence_key'],
+                    ]);
+
+                    continue;
+                }
+
                 if (
                     ! empty($line['subscription_id'])
                     || ! empty($line['order_id'])
@@ -191,6 +224,132 @@ final class UpdateInvoice
 
             return $lockedInvoice->fresh();
         });
+    }
+
+    /**
+     * Resize only complete, existing subscription groups. New linked positions
+     * are manufactured here from the locked draft snapshot, never accepted from
+     * the browser as ordinary lines.
+     *
+     * @param list<array<string, mixed>> $lines
+     * @param array<int, array<string, mixed>> $periodCounts
+     * @return list<array<string, mixed>>
+     */
+    private function resizeSubscriptionGroups(
+        Invoice $invoice,
+        Collection $lockedLines,
+        array $lines,
+        array $periodCounts,
+    ): array {
+        $targets = [];
+        foreach ($periodCounts as $index => $entry) {
+            $subscriptionId = filter_var($entry['subscription_id'] ?? null, FILTER_VALIDATE_INT);
+            $count = filter_var($entry['period_count'] ?? null, FILTER_VALIDATE_INT);
+            if ($subscriptionId === false || $count === false || $count < 1 || $count > SubscriptionBillingSchedule::MAX_OCCURRENCES_PER_INVOICE || isset($targets[$subscriptionId])) {
+                throw ValidationException::withMessages([
+                    "subscription_period_counts.{$index}" => 'Некорректное изменение количества расчётных периодов.',
+                ]);
+            }
+            $targets[(int) $subscriptionId] = (int) $count;
+        }
+
+        $submittedById = collect($lines)
+            ->filter(fn (array $line): bool => ! empty($line['id']))
+            ->keyBy(fn (array $line): int => (int) $line['id']);
+        $subscriptionGroups = $lockedLines->whereNotNull('subscription_id')->groupBy('subscription_id');
+
+        foreach ($targets as $subscriptionId => $target) {
+            if (! $subscriptionGroups->has($subscriptionId)) {
+                throw ValidationException::withMessages([
+                    'subscription_period_counts' => 'Нельзя изменить периоды подписки, которой нет в черновике.',
+                ]);
+            }
+        }
+
+        foreach ($subscriptionGroups as $subscriptionId => $group) {
+            $existing = $group->sortBy([['period_start', 'asc'], ['id', 'asc']])->values();
+            $submitted = $existing->filter(fn (InvoiceLine $line): bool => $submittedById->has($line->id));
+            if ($submitted->isNotEmpty() && $submitted->count() !== $existing->count()) {
+                throw ValidationException::withMessages([
+                    'lines' => 'Нельзя удалить средний расчётный период подписки.',
+                ]);
+            }
+            if ($submitted->isEmpty()) {
+                if (isset($targets[(int) $subscriptionId])) {
+                    throw ValidationException::withMessages([
+                        'subscription_period_counts' => 'Нельзя изменить количество периодов у удалённой подписки.',
+                    ]);
+                }
+                continue;
+            }
+
+            $target = $targets[(int) $subscriptionId] ?? $existing->count();
+            if ($target < $existing->count()) {
+                $trailingIds = $existing->slice($target)->pluck('id')->all();
+                $lines = array_values(array_filter($lines, fn (array $line): bool => ! in_array((int) ($line['id'] ?? 0), $trailingIds, true)));
+                continue;
+            }
+            if ($target === $existing->count()) {
+                continue;
+            }
+
+            $subscription = Subscription::query()
+                ->whereKey($subscriptionId)
+                ->where('contract_id', $invoice->contract_id)
+                ->where('status', 'active')
+                ->lockForUpdate()
+                ->first();
+            if (! $subscription || ! $existing->first()->period_start) {
+                throw ValidationException::withMessages(['subscription_period_counts' => 'Подписка больше недоступна для изменения периодов.']);
+            }
+
+            try {
+                $chain = $this->billingSchedule->occurrenceChain(
+                    $subscription,
+                    CarbonImmutable::parse($existing->first()->period_start)->startOfDay(),
+                    $target,
+                );
+            } catch (\Throwable) {
+                throw ValidationException::withMessages(['subscription_period_counts' => 'У подписки не заполнен корректный интервал биллинга.']);
+            }
+            foreach ($existing as $index => $line) {
+                $occurrence = $chain[$index];
+                if (! $line->period_start || ! $line->period_end
+                    || ! CarbonImmutable::parse($line->period_start)->startOfDay()->equalTo($occurrence['period_start'])
+                    || ! CarbonImmutable::parse($line->period_end)->startOfDay()->equalTo($occurrence['period_end'])) {
+                    throw ValidationException::withMessages(['subscription_period_counts' => 'Существующие периоды подписки не образуют корректную последовательность.']);
+                }
+            }
+
+            $contractEnd = $invoice->contract?->end_date?->startOfDay();
+            $contractStart = $invoice->contract?->start_date?->startOfDay();
+            $snapshotLine = $submittedById->get($existing->first()->id);
+            for ($index = $existing->count(); $index < $target; $index++) {
+                $occurrence = $chain[$index];
+                if ($contractEnd && $occurrence['period_end']->gt($contractEnd)) {
+                    throw ValidationException::withMessages(['subscription_period_counts' => 'Расчётный период выходит за срок договора.']);
+                }
+                if ($occurrence['period_start']->lt(CarbonImmutable::parse($subscription->start_date)->startOfDay())
+                    || ($contractStart && $occurrence['period_start']->lt($contractStart))) {
+                    throw ValidationException::withMessages(['subscription_period_counts' => 'Расчётный период начинается раньше подписки или договора.']);
+                }
+                if (InvoiceLine::query()->where('billing_occurrence_key', $occurrence['billing_occurrence_key'])->where('invoice_id', '!=', $invoice->id)->whereHas('invoice', fn ($query) => $query->where('status', '!=', 'cancelled'))->exists()) {
+                    throw ValidationException::withMessages(['subscription_period_counts' => 'Один из добавляемых расчётных периодов уже зарезервирован.']);
+                }
+                $lines[] = [
+                    '__subscription_resize_append' => true,
+                    'description' => $snapshotLine['description'],
+                    'amount' => $existing->first()->amount,
+                    'subscription_id' => $subscription->id,
+                    'order_id' => null,
+                    'period_start' => $occurrence['period_start']->toDateString(),
+                    'period_end' => $occurrence['period_end']->toDateString(),
+                    'billing_occurrence_key' => $occurrence['billing_occurrence_key'],
+                ];
+            }
+        }
+
+        return $lines;
     }
 
     /**
