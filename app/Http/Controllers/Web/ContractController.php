@@ -253,7 +253,7 @@ class ContractController extends Controller
         $canReadDocumentMetadata = Gate::allows(PermissionName::ContractDocumentsDownload->value)
             || Gate::allows(PermissionName::ContractDocumentsDelete->value);
         $relations = [
-            'company:id,name',
+            'company:id,name,status',
             'orders' => fn ($query) => $query
                 ->with('serviceType')
                 ->withExists('invoiceLines'),

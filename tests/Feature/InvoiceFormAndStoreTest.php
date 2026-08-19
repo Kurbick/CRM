@@ -56,6 +56,86 @@ class InvoiceFormAndStoreTest extends TestCase
             ->assertDontSee('Позиции ещё не выбраны');
     }
 
+    public function test_plain_create_has_no_prefilled_company_or_contract(): void
+    {
+        $this->get(route('invoices.create'))
+            ->assertOk()
+            ->assertSee("selectedCompanyId: ''", false)
+            ->assertSee("selectedContractId: ''", false)
+            ->assertSee(route('invoices.index'), false)
+            ->assertSee('Назад к инвойсам');
+    }
+
+    public function test_company_context_prefills_only_the_company_and_returns_to_its_invoices_tab(): void
+    {
+        [$companyId] = $this->companyAndContract('Context company');
+
+        $this->get(route('invoices.create', ['company_id' => $companyId]))
+            ->assertOk()
+            ->assertSee("selectedCompanyId: '{$companyId}'", false)
+            ->assertSee("selectedContractId: ''", false)
+            ->assertSee(route('companies.show', ['company' => $companyId, 'tab' => 'invoices']), false)
+            ->assertSee('Назад к Context company');
+    }
+
+    public function test_contract_context_derives_company_initialises_defaults_and_keeps_contract_items_available(): void
+    {
+        [$companyId, $contractId] = $this->companyAndContract('Contract context company');
+        $orderId = $this->order($contractId);
+
+        $this->get(route('invoices.create', ['contract_id' => $contractId]))
+            ->assertOk()
+            ->assertSee("selectedCompanyId: '{$companyId}'", false)
+            ->assertSee("selectedContractId: '{$contractId}'", false)
+            ->assertSee(route('contracts.show', $contractId), false)
+            ->assertSee('Назад к договору CONTRACT')
+            ->assertSee('if (!this.hasOldInput) this.initialiseNewInvoice();', false);
+
+        $this->get(route('ajax.items', ['contract' => $contractId]))
+            ->assertOk()
+            ->assertJsonFragment(['id' => $orderId, 'type' => 'order']);
+    }
+
+    public function test_old_input_wins_over_query_prefill_after_validation_failure(): void
+    {
+        [$queryCompanyId, $queryContractId] = $this->companyAndContract('Query company', 'QUERY', 'QUERY-CONTRACT');
+        [$oldCompanyId, $oldContractId] = $this->companyAndContract('Old company', 'OLD', 'OLD-CONTRACT');
+
+        $this->withSession(['_old_input' => [
+            'company_id' => (string) $oldCompanyId,
+            'contract_id' => (string) $oldContractId,
+            'invoice_number' => 'INV-OLD-CONTEXT',
+            'issue_date' => '2026-07-06',
+            'due_date' => '2026-08-05',
+            'comment' => 'Preserved old input',
+        ]])->get(route('invoices.create', ['company_id' => $queryCompanyId, 'contract_id' => $queryContractId]))
+            ->assertOk()
+            ->assertSee("selectedCompanyId: '{$oldCompanyId}'", false)
+            ->assertSee("selectedContractId: '{$oldContractId}'", false)
+            ->assertSee("invoiceNumber: 'INV-OLD-CONTEXT'", false)
+            ->assertSee("comment: 'Preserved old input'", false);
+    }
+
+    public function test_contract_context_is_authoritative_and_invalid_context_degrades_safely(): void
+    {
+        [$firstCompanyId] = $this->companyAndContract('First company', 'FIRST', 'FIRST-CONTRACT');
+        [$secondCompanyId, $secondContractId] = $this->companyAndContract('Second company', 'SECOND', 'SECOND-CONTRACT');
+
+        $this->get(route('invoices.create', ['company_id' => $firstCompanyId, 'contract_id' => $secondContractId]))
+            ->assertOk()
+            ->assertSee("selectedCompanyId: '{$secondCompanyId}'", false)
+            ->assertSee("selectedContractId: '{$secondContractId}'", false);
+
+        DB::table('contracts')->where('id', $secondContractId)->update(['status' => 'terminated']);
+
+        $this->get(route('invoices.create', ['contract_id' => $secondContractId, 'return_url' => 'https://evil.test']))
+            ->assertOk()
+            ->assertSee("selectedCompanyId: ''", false)
+            ->assertSee("selectedContractId: ''", false)
+            ->assertSee(route('invoices.index'), false)
+            ->assertDontSee('https://evil.test', false);
+    }
+
     public function test_create_form_declares_strict_company_contract_visibility_cascade(): void
     {
         $this->get(route('invoices.create'))

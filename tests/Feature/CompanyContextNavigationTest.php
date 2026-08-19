@@ -6,8 +6,10 @@ use App\Models\Company;
 use App\Models\CompanyContact;
 use App\Models\Contract;
 use App\Models\Invoice;
+use App\Models\User;
 use App\Support\Access\PermissionName;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\PermissionRegistrar;
 use Tests\Feature\FinancialTestCase as TestCase;
 
 class CompanyContextNavigationTest extends TestCase
@@ -24,6 +26,8 @@ class CompanyContextNavigationTest extends TestCase
             PermissionName::CompanyContactsUpdate->value,
             PermissionName::ContractsView->value,
             PermissionName::ContractsUpdate->value,
+            PermissionName::CompaniesFinancialsView->value,
+            PermissionName::InvoicesView->value,
         ]);
     }
 
@@ -90,6 +94,54 @@ class CompanyContextNavigationTest extends TestCase
         $this->assertSame($company->id, $contract->company_id);
     }
 
+    public function test_company_invoice_create_action_uses_the_shared_create_route_only_with_permission(): void
+    {
+        [$company] = $this->companyAndContract();
+        $url = route('invoices.create', ['company_id' => $company]);
+        $this->actingAs($this->invoiceViewer());
+
+        $this->get(route('companies.show', ['company' => $company, 'tab' => 'invoices']))
+            ->assertOk()
+            ->assertDontSee($url, false);
+
+        $this->actingAs($this->invoiceCreator());
+
+        $this->get(route('companies.show', ['company' => $company, 'tab' => 'invoices']))
+            ->assertOk()
+            ->assertSee($url, false)
+            ->assertSee('Выставить счёт');
+    }
+
+    public function test_contract_invoice_create_action_uses_the_shared_create_route_only_for_selectable_contracts(): void
+    {
+        [$company, $contract] = $this->companyAndContract();
+        $url = route('invoices.create', ['contract_id' => $contract->id]);
+
+        $this->actingAs($this->invoiceViewer())
+            ->get(route('contracts.show', $contract))
+            ->assertOk()
+            ->assertDontSee($url, false);
+
+        $this->actingAs($this->invoiceCreator())
+            ->get(route('contracts.show', $contract))
+            ->assertOk()
+            ->assertSee($url, false)
+            ->assertSeeInOrder(['Выставить счёт', 'Редактировать']);
+
+        $contract->update(['status' => 'terminated']);
+
+        $this->get(route('contracts.show', $contract))
+            ->assertOk()
+            ->assertDontSee($url, false);
+
+        $contract->update(['status' => 'active']);
+        $company->update(['status' => 'suspended']);
+
+        $this->get(route('contracts.show', $contract))
+            ->assertOk()
+            ->assertDontSee($url, false);
+    }
+
     /** @return array{Company, Contract} */
     private function companyAndContract(): array
     {
@@ -97,5 +149,37 @@ class CompanyContextNavigationTest extends TestCase
         $contract = Contract::create(['company_id' => $company->id, 'contract_number' => 'CTX-1', 'start_date' => '2026-01-01', 'status' => 'active']);
 
         return [$company, $contract];
+    }
+
+    private function invoiceCreator(): User
+    {
+        return $this->invoiceActor(true);
+    }
+
+    private function invoiceViewer(): User
+    {
+        return $this->invoiceActor(false);
+    }
+
+    private function invoiceActor(bool $canCreate): User
+    {
+        $user = User::factory()->create([
+            'is_active' => true,
+            'must_change_password' => false,
+        ]);
+        $user->givePermissionTo([
+            PermissionName::CompaniesView->value,
+            PermissionName::CompaniesFinancialsView->value,
+            PermissionName::ContractsView->value,
+            PermissionName::ContractsUpdate->value,
+            PermissionName::InvoicesView->value,
+        ]);
+        if ($canCreate) {
+            $user->givePermissionTo(PermissionName::InvoicesCreate->value);
+        }
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+        $user->unsetRelation('permissions')->unsetRelation('roles');
+
+        return $user;
     }
 }

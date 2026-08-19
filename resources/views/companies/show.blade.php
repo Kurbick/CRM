@@ -399,6 +399,17 @@
                             </a>
                         @endcan
                     @endcan
+                    @if ($company->status === 'active')
+                        @can(\App\Support\Access\PermissionName::InvoicesCreate->value)
+                            <a x-show="tab === 'invoices'" x-cloak href="{{ route('invoices.create', ['company_id' => $company]) }}"
+                                class="crm-light-action">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
+                                </svg>
+                                Выставить счёт
+                            </a>
+                        @endcan
+                    @endif
                 </div>
             </div>
 

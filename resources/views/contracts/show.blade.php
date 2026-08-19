@@ -129,7 +129,20 @@
             </div>
 
             <div class="flex shrink-0 flex-wrap items-center gap-1">
+                @if ($contract->status === 'active' && $contract->company->status === 'active')
+                    @can(\App\Support\Access\PermissionName::InvoicesCreate->value)
+                        <a href="{{ route('invoices.create', ['contract_id' => $contract]) }}" class="crm-light-action">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
+                            </svg>
+                            Выставить счёт
+                        </a>
+                    @endcan
+                @endif
                 @can('update', $contract)
+                    @if ($contract->status === 'active' && $contract->company->status === 'active' && auth()->user()?->can(\App\Support\Access\PermissionName::InvoicesCreate->value))
+                        <span aria-hidden="true" class="text-slate-300">|</span>
+                    @endif
                     <a href="{{ route('contracts.edit', ['contract' => $contract, 'edit_origin' => 'show', ...$companyContext['query']]) }}"
                         class="crm-light-action">
                         Редактировать

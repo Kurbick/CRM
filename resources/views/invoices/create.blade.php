@@ -8,8 +8,9 @@
         'id' => (string) $company->id,
         'name' => $company->name,
     ])->values();
-    $oldCompanyId = (string) old('company_id', '');
+    $oldCompanyId = (string) old('company_id', $prefilledCompany?->id ?? '');
     $oldCompanyName = $companies->firstWhere('id', (int) $oldCompanyId)?->name ?? '';
+    $oldContractId = (string) old('contract_id', $prefilledContract?->id ?? '');
     $oldLines = collect(old('lines', []))
         ->filter(fn ($line): bool => is_array($line)
             && (filled($line['subscription_id'] ?? null) || filled($line['order_id'] ?? null)))
@@ -22,7 +23,7 @@
 <div class="mb-5">
     <a href="{{ $backUrl }}" class="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-900">
         <span aria-hidden="true">←</span>
-        Назад к инвойсам
+        {{ $backLabel }}
     </a>
     <h1 class="mt-3 text-xl font-semibold text-slate-900">Новый инвойс</h1>
 </div>
@@ -32,7 +33,7 @@
         companies: @js($companyOptions),
         selectedCompanyId: @js($oldCompanyId),
         companyQuery: @js($oldCompanyName),
-        selectedContractId: @js((string) old('contract_id', '')),
+        selectedContractId: @js($oldContractId),
         oldLines: @js($oldLines),
         invoiceNumber: @js(old('invoice_number', '')),
         issueDate: @js(old('issue_date', '')),
@@ -314,6 +315,7 @@ document.addEventListener('alpine:init', () => {
                 this.contracts = contracts;
                 if (restore && this.selectedContractId && this.contracts.some(c => String(c.id) === String(this.selectedContractId))) {
                     this.previousContractId = this.selectedContractId;
+                    if (!this.hasOldInput) this.initialiseNewInvoice();
                     await this.loadItems();
                 } else if (this.selectedContractId) {
                     this.resetInvoiceState();

@@ -210,18 +210,61 @@ class InvoiceController extends Controller
     /**
      * Show the form for creating a new resource.
      */
-    public function create()
+    public function create(Request $request)
     {
         Gate::authorize('create', Invoice::class);
 
         $companies = Company::where('status', 'active')
             ->orderBy('name')
             ->get();
-        $backUrl = Gate::allows('viewAny', Invoice::class)
-            ? route('invoices.index')
-            : $this->landingUrl();
 
-        return view('invoices.create', compact('companies', 'backUrl'));
+        $prefilledCompany = null;
+        $prefilledContract = null;
+
+        $contractId = $this->validFilterId($request->query('contract_id'), Contract::class);
+        if ($contractId !== null) {
+            $prefilledContract = Contract::query()
+                ->whereKey($contractId)
+                ->where('status', 'active')
+                ->whereHas('company', fn ($query) => $query->where('status', 'active'))
+                ->first();
+
+            if ($prefilledContract !== null) {
+                $prefilledCompany = $companies->firstWhere('id', $prefilledContract->company_id);
+            }
+        }
+
+        if ($prefilledCompany === null) {
+            $companyId = $this->validFilterId($request->query('company_id'), Company::class);
+            if ($companyId !== null) {
+                $prefilledCompany = $companies->firstWhere('id', $companyId);
+            }
+        }
+
+        if ($prefilledContract !== null && $prefilledCompany === null) {
+            $prefilledContract = null;
+        }
+
+        if ($prefilledContract !== null) {
+            $backUrl = route('contracts.show', $prefilledContract);
+            $backLabel = 'Назад к договору '.$prefilledContract->contract_number;
+        } elseif ($prefilledCompany !== null) {
+            $backUrl = route('companies.show', ['company' => $prefilledCompany, 'tab' => 'invoices']);
+            $backLabel = 'Назад к '.$prefilledCompany->name;
+        } else {
+            $backUrl = Gate::allows('viewAny', Invoice::class)
+                ? route('invoices.index')
+                : $this->landingUrl();
+            $backLabel = 'Назад к инвойсам';
+        }
+
+        return view('invoices.create', compact(
+            'companies',
+            'backUrl',
+            'backLabel',
+            'prefilledCompany',
+            'prefilledContract',
+        ));
     }
 
     /**
