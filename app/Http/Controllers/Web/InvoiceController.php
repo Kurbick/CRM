@@ -15,6 +15,7 @@ use App\Models\InvoiceLine;
 use App\Models\Payment;
 use App\Models\Subscription;
 use App\Services\InvoiceDueDateCalculator;
+use App\Services\InvoiceBillingPeriodPresenter;
 use App\Services\InvoiceEditabilityService;
 use App\Services\InvoicePaymentAvailabilityService;
 use App\Services\InvoicePaymentBreakdownPresenter;
@@ -37,6 +38,7 @@ class InvoiceController extends Controller
     public function __construct(
         private readonly CreateInvoice $createInvoice,
         private readonly InvoiceDueDateCalculator $dueDateCalculator,
+        private readonly InvoiceBillingPeriodPresenter $billingPeriodPresenter,
         private readonly InvoiceEditabilityService $editabilityService,
         private readonly InvoicePaymentAvailabilityService $paymentAvailabilityService,
         private readonly InvoicePaymentBreakdownPresenter $paymentBreakdownPresenter,
@@ -153,6 +155,7 @@ class InvoiceController extends Controller
         $paginationParameters['direction'] = $direction;
 
         $invoices = $query
+            ->with(['lines:id,invoice_id,period_start,period_end'])
             ->orderBy("invoices.{$sort}", $direction)
             ->orderByDesc('invoices.id')
             ->paginate(10)
@@ -177,12 +180,17 @@ class InvoiceController extends Controller
             ->mapWithKeys(fn (Invoice $invoice): array => [
                 $invoice->id => $this->paymentSourceResolver->fromAggregates($invoice),
             ]);
+        $invoiceBillingPeriods = $invoices->getCollection()
+            ->mapWithKeys(fn (Invoice $invoice): array => [
+                $invoice->id => $this->billingPeriodPresenter->present($invoice, $invoice->lines),
+            ]);
 
         return view('invoices.index', compact(
             'invoices',
             'companies',
             'contracts',
             'invoicePaymentSources',
+            'invoiceBillingPeriods',
             'activeStatusFilter',
             'search',
             'activeCompanyId',
@@ -434,6 +442,7 @@ class InvoiceController extends Controller
 
         $companyContext = $this->invoiceCompanyContext($request, $invoice);
         $paymentBreakdown = $this->paymentBreakdownPresenter->present($invoice);
+        $invoiceBillingPeriod = $this->billingPeriodPresenter->present($invoice, $invoice->lines);
         $paymentAvailability = $this->paymentAvailabilityService->evaluate($invoice);
         $editability = $this->editabilityService->evaluate($invoice);
         $hasPayments = $invoice->payments->isNotEmpty();
@@ -459,6 +468,7 @@ class InvoiceController extends Controller
             'invoice',
             'companyContext',
             'paymentBreakdown',
+            'invoiceBillingPeriod',
             'paymentAvailability',
             'editability',
             'hasPayments',

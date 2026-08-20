@@ -535,7 +535,8 @@
                         <thead>
                             <tr>
                                 <th>Номер счета</th>
-                                <th>Выставлен / Срок</th>
+                                <th>Расчётный период</th>
+                                <th>Выставлен / срок</th>
                                 <th>Сумма</th>
                                 <th>Оплачено / Остаток</th>
                                 <th>Статус</th>
@@ -546,6 +547,13 @@
                                 <x-tables.clickable-row :url="route('invoices.show', ['invoice' => $invoice, 'origin' => 'company', 'tab' => 'invoices'])" :label="'Открыть инвойс '.$invoice->invoice_number">
                                     <td class="crm-table-number">
                                         <a href="{{ route('invoices.show', ['invoice' => $invoice, 'origin' => 'company', 'tab' => 'invoices']) }}" class="crm-table-primary-link">{{ $invoice->invoice_number }}</a>
+                                    </td>
+                                    <td>
+                                        @php($billingPeriod = $invoiceBillingPeriods->get($invoice->id))
+                                        <div class="text-xs text-slate-900">{{ $billingPeriod['label'] }}</div>
+                                        @if ($billingPeriod['count_label'])
+                                            <div class="mt-0.5 text-[11px] text-slate-500">{{ $billingPeriod['count_label'] }}</div>
+                                        @endif
                                     </td>
                                     <td>
                                         <div class="text-xs text-slate-900">{{ $invoice->issue_date ? \Illuminate\Support\Carbon::parse($invoice->issue_date)->format('d/m/Y') : '—' }}</div>
@@ -578,7 +586,7 @@
                                 </x-tables.clickable-row>
                             @empty
                                 <tr>
-                                    <td colspan="5" class="crm-table-empty">У компании пока нет инвойсов.</td>
+                                    <td colspan="6" class="crm-table-empty">У компании пока нет инвойсов.</td>
                                 </tr>
                             @endforelse
                         </tbody>

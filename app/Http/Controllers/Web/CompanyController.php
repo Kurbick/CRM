@@ -11,6 +11,7 @@ use App\Models\Invoice;
 use App\Models\InvoiceLine;
 use App\Models\Payment;
 use App\Services\OneTimeServiceDebtCalculator;
+use App\Services\InvoiceBillingPeriodPresenter;
 use App\Services\SubscriptionPeriodDebtCalculator;
 use App\Support\Access\PermissionName;
 use App\Support\CompanyPageContext;
@@ -218,7 +219,8 @@ class CompanyController extends Controller
         Company $company,
         SubscriptionPeriodDebtCalculator $periodDebtCalculator,
         OneTimeServiceDebtCalculator $oneTimeDebtCalculator,
-        DeleteCompany $deleteCompany
+        DeleteCompany $deleteCompany,
+        InvoiceBillingPeriodPresenter $billingPeriodPresenter,
     ) {
         Gate::authorize('view', $company);
 
@@ -307,6 +309,13 @@ class CompanyController extends Controller
         }
 
         if ($canViewInvoices) {
+            $invoiceLinesByInvoice = $invoiceLines->groupBy('invoice_id');
+            $invoiceBillingPeriods = $company->invoices->mapWithKeys(function (Invoice $invoice) use ($invoiceLinesByInvoice, $billingPeriodPresenter): array {
+                $lines = $invoiceLinesByInvoice->get($invoice->id, collect());
+                $invoice->setRelation('lines', $lines);
+
+                return [$invoice->id => $billingPeriodPresenter->present($invoice, $lines)];
+            });
             $subscriptionPeriodDebtGroups = array_values(array_filter(array_map(
                 function (array $subscription): array {
                     $subscription['periods'] = array_values(array_map(
@@ -343,7 +352,8 @@ class CompanyController extends Controller
                 'subscriptionPeriodDebtGroups',
                 'subscriptionPeriodDebtAnomalyCount',
                 'oneTimeServiceDebts',
-                'oneTimeServiceDebtLines'
+                'oneTimeServiceDebtLines',
+                'invoiceBillingPeriods'
             );
         }
 

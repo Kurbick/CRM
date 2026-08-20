@@ -199,11 +199,13 @@
                         <div class="text-sm text-gray-600">
                             <span class="font-medium text-gray-800">Срок оплаты:</span> {{ $invoice->due_date ? \Illuminate\Support\Carbon::parse($invoice->due_date)->format('d/m/Y') : '—' }}
                         </div>
-                        @if ($invoice->period_start && $invoice->period_end)
+                        @if ($invoiceBillingPeriod['kind'] !== 'none')
                             <div class="text-sm text-gray-600">
-                                <span class="font-medium text-gray-800">Расчетный период:</span>
-                                <div class="text-xs text-gray-500 font-mono mt-0.5">{{ \Illuminate\Support\Carbon::parse($invoice->period_start)->format('d/m/Y') }} —
-                                    {{ \Illuminate\Support\Carbon::parse($invoice->period_end)->format('d/m/Y') }}</div>
+                                <span class="font-medium text-gray-800">Расчётный период:</span>
+                                <div class="text-xs text-gray-500 font-mono mt-0.5">{{ $invoiceBillingPeriod['label'] }}</div>
+                                @if ($invoiceBillingPeriod['count_label'])
+                                    <div class="text-xs text-gray-500 mt-0.5">{{ $invoiceBillingPeriod['count_label'] }}</div>
+                                @endif
                             </div>
                         @endif
                     </div>

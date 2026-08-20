@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Invoice;
+use App\Models\InvoiceLine;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\Feature\FinancialTestCase as TestCase;
@@ -141,6 +142,25 @@ class InvoiceIndexTest extends TestCase
             DomainQueryRecorder::count($one['records']),
             DomainQueryRecorder::count($ten['records']),
         );
+    }
+
+    public function test_index_renders_line_derived_periods_without_false_gap_range(): void
+    {
+        $continuous = $this->invoice(['invoice_number' => 'INV-PERIOD-CONTINUOUS']);
+        InvoiceLine::create(['invoice_id' => $continuous->id, 'description' => 'June', 'amount' => 50, 'period_start' => '2026-06-01', 'period_end' => '2026-06-30']);
+        InvoiceLine::create(['invoice_id' => $continuous->id, 'description' => 'July', 'amount' => 50, 'period_start' => '2026-07-01', 'period_end' => '2026-07-31']);
+
+        $disjoint = $this->invoice(['invoice_number' => 'INV-PERIOD-DISJOINT']);
+        InvoiceLine::create(['invoice_id' => $disjoint->id, 'description' => 'June', 'amount' => 50, 'period_start' => '2026-06-01', 'period_end' => '2026-06-30']);
+        InvoiceLine::create(['invoice_id' => $disjoint->id, 'description' => 'August', 'amount' => 50, 'period_start' => '2026-08-01', 'period_end' => '2026-08-31']);
+
+        $this->get(route('invoices.index'))->assertOk()
+            ->assertSee('Расчётный период')
+            ->assertSee('Выставлен / срок')
+            ->assertSee('01/06/2026 — 31/07/2026')
+            ->assertSee('2 расчётных периода')
+            ->assertSee('Несколько расчётных периодов')
+            ->assertDontSee('01/06/2026 — 31/08/2026');
     }
 
     public function test_each_allowed_status_is_applied(): void

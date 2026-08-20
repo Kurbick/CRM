@@ -273,25 +273,19 @@
                         </th>
 
                         <th>
-                            <a href="{{ $sortUrl('issue_date') }}"
-                                class="crm-table-sort"
-                                title="{{ $currentSort === 'issue_date' && $currentDirection === 'desc' ? 'Показать сначала старые даты' : 'Показать сначала новые даты' }}">
-                                <span>Дата выставления</span>
-                                <span class="crm-table-sort-indicator {{ $currentSort === 'issue_date' ? 'crm-table-sort-indicator-active' : '' }}">
-                                    {{ $currentSort === 'issue_date' ? ($currentDirection === 'asc' ? '↑' : '↓') : '↕' }}
-                                </span>
-                            </a>
+                            Расчётный период
                         </th>
 
                         <th>
-                            <a href="{{ $sortUrl('due_date') }}"
-                                class="crm-table-sort"
-                                title="{{ $currentSort === 'due_date' && $currentDirection === 'desc' ? 'Показать сначала ранние сроки' : 'Показать сначала поздние сроки' }}">
-                                <span>Срок оплаты</span>
-                                <span class="crm-table-sort-indicator {{ $currentSort === 'due_date' ? 'crm-table-sort-indicator-active' : '' }}">
-                                    {{ $currentSort === 'due_date' ? ($currentDirection === 'asc' ? '↑' : '↓') : '↕' }}
-                                </span>
-                            </a>
+                            <div class="flex items-center gap-1.5">
+                                <a href="{{ $sortUrl('issue_date') }}" class="crm-table-sort" title="Сортировать по дате выставления" aria-label="Сортировать по дате выставления">
+                                    <span class="crm-table-sort-indicator {{ $currentSort === 'issue_date' ? 'crm-table-sort-indicator-active' : '' }}">{{ $currentSort === 'issue_date' ? ($currentDirection === 'asc' ? '↑' : '↓') : '↕' }}</span>
+                                </a>
+                                <span>Выставлен / срок</span>
+                                <a href="{{ $sortUrl('due_date') }}" class="crm-table-sort" title="Сортировать по сроку оплаты" aria-label="Сортировать по сроку оплаты">
+                                    <span class="crm-table-sort-indicator {{ $currentSort === 'due_date' ? 'crm-table-sort-indicator-active' : '' }}">{{ $currentSort === 'due_date' ? ($currentDirection === 'asc' ? '↑' : '↓') : '↕' }}</span>
+                                </a>
+                            </div>
                         </th>
 
                         <th>
@@ -344,26 +338,25 @@
                             </td>
 
                             {{-- Дата выставления --}}
-                            <td class="crm-table-date">
-                                {{ \Illuminate\Support\Carbon::parse($invoice->issue_date)->format('d/m/Y') }}
+                            <td>
+                                @php($billingPeriod = $invoiceBillingPeriods->get($invoice->id))
+                                <div class="text-xs text-slate-900">{{ $billingPeriod['label'] }}</div>
+                                @if ($billingPeriod['count_label'])
+                                    <div class="mt-0.5 text-[11px] text-slate-500">{{ $billingPeriod['count_label'] }}</div>
+                                @endif
                             </td>
 
-                            {{-- Срок оплаты --}}
-                            <td class="crm-table-date">
-                                <div
-                                    class="{{ $invoice->is_overdue ? 'text-red-600 font-semibold' : 'text-gray-600' }}">
-
-                                    {{ \Illuminate\Support\Carbon::parse($invoice->due_date)->format('d/m/Y') }}
+                            {{-- Выставлен / срок --}}
+                            <td>
+                                <div class="text-xs text-slate-900">
+                                    {{ \Illuminate\Support\Carbon::parse($invoice->issue_date)->format('d/m/Y') }}
                                 </div>
-
-                                @if ($invoice->is_overdue)
-                                    <div
-                                        class="text-[10px] text-red-500 font-medium
-                                                uppercase tracking-wider mt-0.5">
-
-                                        ⚠️ Просрочен
-                                    </div>
-                                @endif
+                                <div class="mt-0.5 flex items-center gap-1 text-xs font-medium {{ $invoice->is_overdue ? 'text-red-600' : 'text-slate-500' }}">
+                                    <span>до {{ \Illuminate\Support\Carbon::parse($invoice->due_date)->format('d/m/Y') }}</span>
+                                    @if ($invoice->is_overdue)
+                                        <span class="crm-badge crm-badge-danger">Просрочен</span>
+                                    @endif
+                                </div>
                             </td>
 
                             {{-- Сумма --}}
