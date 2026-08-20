@@ -11,9 +11,15 @@
         $currentDirection = in_array(request('direction'), ['asc', 'desc'], true)
             ? request('direction')
             : 'desc';
-        $preservedFilters = request()->only(['search', 'company_id', 'contract_id', 'status', 'overdue']);
-        if ($activeStatusFilter === '') {
-            unset($preservedFilters['status']);
+        $preservedFilters = request()->only(['search', 'company_id', 'contract_id']);
+        if ($activeStatuses !== []) {
+            $preservedFilters['statuses'] = $activeStatuses;
+        }
+        if ($activeOverdue) {
+            $preservedFilters['overdue'] = 1;
+        }
+        if ($activeUnpaid) {
+            $preservedFilters['unpaid'] = 1;
         }
 
         $sortUrl = function (string $column) use ($currentSort, $currentDirection, $preservedFilters): string {
@@ -65,7 +71,29 @@
 
     {{-- Фильтры и поиск --}}
     <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm mb-6">
-        <form action="{{ route('invoices.index') }}" method="GET" class="flex flex-col md:flex-row md:items-center gap-4">
+        <form action="{{ route('invoices.index') }}" method="GET" class="flex flex-col md:flex-row md:items-center gap-4" x-data="{
+            open: false,
+            selectedStatuses: @js($activeStatuses),
+            unpaid: @js($activeUnpaid),
+            statuses: [
+                { value: 'draft', label: 'Черновик' },
+                { value: 'issued', label: 'Выставлен' },
+                { value: 'partially_paid', label: 'Частично оплачен' },
+                { value: 'paid', label: 'Оплачен' },
+                { value: 'cancelled', label: 'Отменён' },
+            ],
+            get selectedLabel() {
+                if (this.selectedStatuses.length === 0) return 'Все статусы';
+                if (this.selectedStatuses.length === 1) return this.statuses.find(item => item.value === this.selectedStatuses[0])?.label ?? 'Все статусы';
+                return 'Статусы: ' + this.selectedStatuses.length;
+            },
+            isCompatible(status) {
+                return ['issued', 'partially_paid'].includes(status);
+            },
+            removeIncompatibleStatuses() {
+                if (this.unpaid) this.selectedStatuses = this.selectedStatuses.filter(status => this.isCompatible(status));
+            }
+        }">
 
             <input type="hidden" name="sort" value="{{ $currentSort }}">
             <input type="hidden" name="direction" value="{{ $currentDirection }}">
@@ -158,43 +186,58 @@
             </div>
 
             {{-- Фильтр по договору --}}
-            <div class="w-full md:w-56">
-                <select name="contract_id"
-                    class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition {{ $activeContractId === null ? 'crm-filter-neutral' : '' }}">
-                    <option value="">Все договоры</option>
-                    @foreach ($contracts as $contract)
-                        <option value="{{ $contract->id }}" @selected($activeContractId === (int) $contract->id)>
-                            {{ $contract->contract_number }}
-                        </option>
-                    @endforeach
-                </select>
-            </div>
-
-            {{-- Фильтр по статусу --}}
-            <div class="relative w-full md:w-44" x-data="{
+            <div class="relative w-full md:w-56" x-data="{
                 open: false,
-                selectedStatus: @js($activeStatusFilter),
-                statuses: [
-                    { value: '', label: 'Все статусы' },
-                    { value: 'draft', label: 'Черновик' },
-                    { value: 'partially_paid', label: 'Частично оплачен' },
-                    { value: 'paid', label: 'Оплачен' },
-                    { value: 'cancelled', label: 'Отменён' },
-                ],
+                selectedId: @js((string) ($activeContractId ?? '')),
+                contracts: @js($contracts->map(fn($contract) => ['id' => $contract->id, 'number' => $contract->contract_number])->values()->all()),
                 get selectedLabel() {
-                    return this.statuses.find(item => item.value === this.selectedStatus)?.label ?? 'Все статусы';
+                    return this.contracts.find(contract => String(contract.id) === this.selectedId)?.number ?? 'Все договоры';
                 },
-                selectStatus(status) {
-                    this.selectedStatus = status.value;
+                selectContract(contract) {
+                    this.selectedId = String(contract.id);
                     this.open = false;
-                    this.$nextTick(() => this.$root.closest('form').requestSubmit());
+                },
+                clearContract() {
+                    this.selectedId = '';
+                    this.open = false;
                 }
             }" x-on:click.outside="open = false" x-on:keydown.escape.window="open = false">
-                <input type="hidden" name="status" x-model="selectedStatus">
+                <input type="hidden" name="contract_id" x-model="selectedId">
+
                 <button type="button" x-on:click="open = !open"
-                    class="relative w-full px-3 py-2 pr-10 border border-gray-200 rounded-lg bg-white text-left text-sm text-gray-700 hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition">
+                    class="relative w-full px-3 py-2 pr-10 border border-gray-200 rounded-lg bg-white text-left text-sm text-gray-700 hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition"
+                    aria-haspopup="true" x-bind:aria-expanded="open">
                     <span x-text="selectedLabel"
-                        :class="selectedStatus ? 'crm-filter-selected' : 'crm-filter-neutral'"></span>
+                        :class="selectedId ? 'crm-filter-selected' : 'crm-filter-neutral'"></span>
+                    <span class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
+                        <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </span>
+                </button>
+
+                <div x-show="open" x-cloak x-transition
+                    class="absolute z-30 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                    <button type="button" x-on:click="clearContract()"
+                        class="w-full px-3 py-2.5 text-left text-sm text-gray-600 hover:bg-gray-50 transition">Все договоры</button>
+                    <div class="border-t border-gray-100"></div>
+                    <template x-for="contract in contracts" :key="contract.id">
+                        <button type="button" x-on:click="selectContract(contract)"
+                            class="w-full px-3 py-2.5 text-left text-sm transition hover:bg-blue-50 hover:text-blue-700"
+                            :class="String(contract.id) === selectedId ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'">
+                            <span x-text="contract.number"></span>
+                        </button>
+                    </template>
+                </div>
+            </div>
+
+            {{-- Фильтры по статусу и условиям --}}
+            <div class="relative w-full md:w-44" x-on:click.outside="open = false" x-on:keydown.escape.window="open = false">
+                <button type="button" x-on:click="open = !open"
+                    class="relative w-full px-3 py-2 pr-10 border border-gray-200 rounded-lg bg-white text-left text-sm text-gray-700 hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition"
+                    aria-haspopup="true" x-bind:aria-expanded="open">
+                    <span x-text="selectedLabel"
+                        :class="selectedStatuses.length ? 'crm-filter-selected' : 'crm-filter-neutral'"></span>
                     <span class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
                         <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
@@ -204,31 +247,38 @@
                 <div x-show="open" x-cloak x-transition
                     class="absolute z-30 mt-1 w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
                     <template x-for="status in statuses" :key="status.value">
-                        <button type="button" x-on:click="selectStatus(status)"
-                            class="flex w-full items-center justify-between px-3 py-2.5 text-left text-sm transition hover:bg-blue-50 hover:text-blue-700"
-                            :class="status.value === selectedStatus ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'">
+                        <label class="flex w-full items-center gap-2 px-3 py-2.5 text-sm transition"
+                            :class="unpaid && !isCompatible(status.value) ? 'cursor-not-allowed text-gray-400' : 'cursor-pointer text-gray-700 hover:bg-blue-50 hover:text-blue-700'">
+                            <input type="checkbox" name="statuses[]" x-model="selectedStatuses" :value="status.value"
+                                :disabled="unpaid && !isCompatible(status.value)"
+                                class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
                             <span x-text="status.label"></span>
-                            <svg x-show="status.value === selectedStatus" class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
-                            </svg>
-                        </button>
+                        </label>
                     </template>
                 </div>
             </div>
 
-            {{-- Просроченные --}}
-            <div class="flex items-center gap-2">
-                <input type="checkbox" name="overdue" id="overdue" value="1" onchange="this.form.submit()"
-                    {{ $activeOverdue ? 'checked' : '' }}
-                    class="h-4 w-4 rounded border-gray-300
-                           text-blue-600 focus:ring-blue-500">
+            {{-- Просроченные / неоплаченные --}}
+            <div class="flex flex-col gap-2">
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" name="overdue" id="overdue" value="1"
+                        x-on:change="$el.closest('form').requestSubmit()"
+                        {{ $activeOverdue ? 'checked' : '' }}
+                        class="h-4 w-4 rounded border-gray-300
+                               text-blue-600 focus:ring-blue-500">
 
-                <label for="overdue"
-                    class="text-sm font-medium text-gray-700
-                           cursor-pointer select-none">
-
-                    Просроченные
-                </label>
+                    <label for="overdue"
+                        class="text-sm font-medium text-gray-700
+                               cursor-pointer select-none">
+                        Просроченные
+                    </label>
+                </div>
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" name="unpaid" id="unpaid" value="1" x-model="unpaid"
+                        x-on:change="removeIncompatibleStatuses(); $nextTick(() => $el.closest('form').requestSubmit())"
+                        class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                    <label for="unpaid" class="text-sm font-medium text-gray-700 cursor-pointer select-none">Неоплаченные</label>
+                </div>
             </div>
 
             {{-- Кнопки --}}
@@ -240,7 +290,7 @@
                     Найти
                 </button>
 
-                @if ($search !== '' || $activeStatusFilter !== '' || $activeCompanyId !== null || $activeContractId !== null || $activeOverdue || $currentSort !== 'issue_date' || $currentDirection !== 'desc')
+                @if ($search !== '' || $activeStatuses !== [] || $activeCompanyId !== null || $activeContractId !== null || $activeOverdue || $activeUnpaid || $currentSort !== 'issue_date' || $currentDirection !== 'desc')
                     <a href="{{ route('invoices.index') }}"
                         class="px-4 py-2 border border-gray-200 hover:bg-gray-50
                                text-gray-500 text-sm font-medium rounded-lg
@@ -411,7 +461,7 @@
                             <td colspan="7" class="crm-table-empty">
                                 <span class="crm-table-empty-message">Счетов не найдено.</span>
 
-                                @if ($search !== '' || $activeStatusFilter !== '' || $activeCompanyId !== null || $activeContractId !== null || $activeOverdue || $currentSort !== 'issue_date' || $currentDirection !== 'desc')
+                                @if ($search !== '' || $activeStatuses !== [] || $activeCompanyId !== null || $activeContractId !== null || $activeOverdue || $activeUnpaid || $currentSort !== 'issue_date' || $currentDirection !== 'desc')
                                     <a href="{{ route('invoices.index') }}" class="crm-table-empty-action">
 
                                         Сбросить фильтры

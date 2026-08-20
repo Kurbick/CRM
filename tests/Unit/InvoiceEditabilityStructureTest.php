@@ -59,14 +59,16 @@ class InvoiceEditabilityStructureTest extends TestCase
         }
     }
 
-    public function test_issued_is_absent_from_web_filter_whitelist(): void
+    public function test_web_filter_whitelist_contains_all_lifecycle_statuses(): void
     {
         $source = file_get_contents(app_path('Http/Controllers/Web/InvoiceController.php'));
         $index = $this->methodSource($source, 'public function index(', 'public function create(');
 
-        $this->assertStringContainsString("'draft',\n            'partially_paid',", $index);
-        $this->assertStringNotContainsString("'issued',", $index);
-        $this->assertStringContainsString('unset($paginationParameters[\'status\'])', $index);
+        foreach (['draft', 'issued', 'partially_paid', 'paid', 'cancelled'] as $status) {
+            $this->assertStringContainsString("'{$status}'", $index);
+        }
+        $this->assertStringContainsString('$this->normalizedStatuses($request, $allowedStatuses)', $index);
+        $this->assertStringContainsString('$paginationParameters[\'statuses\']', $index);
     }
 
     public function test_invoice_update_checks_pending_total_under_invoice_lock_before_line_mutations(): void

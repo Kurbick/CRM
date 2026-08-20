@@ -71,6 +71,7 @@ class InvoiceController extends Controller
 
         $allowedStatuses = [
             'draft',
+            'issued',
             'partially_paid',
             'paid',
             'cancelled',
@@ -101,10 +102,9 @@ class InvoiceController extends Controller
             });
         }
 
-        $hasAllowedStatusFilter = in_array($request->input('status'), $allowedStatuses, true);
-        $activeStatusFilter = $hasAllowedStatusFilter ? (string) $request->input('status') : '';
-        if ($hasAllowedStatusFilter) {
-            $query->where('status', $request->input('status'));
+        $activeStatuses = $this->normalizedStatuses($request, $allowedStatuses);
+        if ($activeStatuses !== []) {
+            $query->whereIn('status', $activeStatuses);
         }
 
         if ($activeCompanyId !== null) {
@@ -116,6 +116,10 @@ class InvoiceController extends Controller
         }
 
         $activeOverdue = $request->boolean('overdue');
+        $activeUnpaid = $request->boolean('unpaid');
+        if ($activeUnpaid) {
+            $query->whereIn('status', ['issued', 'partially_paid']);
+        }
         if ($activeOverdue) {
             $query->whereIn('status', ['issued'.'', 'partially_paid'])
                 ->where('due_date', '<', now()->toDateString());
@@ -142,14 +146,14 @@ class InvoiceController extends Controller
         if ($activeContractId !== null) {
             $paginationParameters['contract_id'] = $activeContractId;
         }
-        if ($hasAllowedStatusFilter) {
-            $paginationParameters['status'] = $activeStatusFilter;
+        if ($activeStatuses !== []) {
+            $paginationParameters['statuses'] = $activeStatuses;
         }
         if ($activeOverdue) {
             $paginationParameters['overdue'] = 1;
         }
-        if (! $hasAllowedStatusFilter) {
-            unset($paginationParameters['status']);
+        if ($activeUnpaid) {
+            $paginationParameters['unpaid'] = 1;
         }
         $paginationParameters['sort'] = $sort;
         $paginationParameters['direction'] = $direction;
@@ -191,12 +195,34 @@ class InvoiceController extends Controller
             'contracts',
             'invoicePaymentSources',
             'invoiceBillingPeriods',
-            'activeStatusFilter',
+            'activeStatuses',
             'search',
             'activeCompanyId',
             'activeContractId',
-            'activeOverdue'
+            'activeOverdue',
+            'activeUnpaid'
         ));
+    }
+
+    /** @param list<string> $allowedStatuses @return list<string> */
+    private function normalizedStatuses(Request $request, array $allowedStatuses): array
+    {
+        if ($request->has('statuses')) {
+            $statuses = $request->input('statuses');
+
+            return is_array($statuses)
+                ? array_values(array_unique(array_values(array_filter(
+                    $statuses,
+                    fn (mixed $status): bool => is_string($status) && in_array($status, $allowedStatuses, true)
+                ))))
+                : [];
+        }
+
+        $legacyStatus = $request->input('status');
+
+        return is_string($legacyStatus) && in_array($legacyStatus, $allowedStatuses, true)
+            ? [$legacyStatus]
+            : [];
     }
 
     private function validFilterId(mixed $value, string $modelClass): ?int

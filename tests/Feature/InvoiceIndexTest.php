@@ -163,34 +163,46 @@ class InvoiceIndexTest extends TestCase
             ->assertDontSee('01/06/2026 — 31/08/2026');
     }
 
-    public function test_each_allowed_status_is_applied(): void
+    public function test_status_filters_accept_all_lifecycle_statuses_and_multiple_values(): void
     {
-        $statuses = ['draft', 'partially_paid', 'paid', 'cancelled'];
+        $statuses = ['draft', 'issued', 'partially_paid', 'paid', 'cancelled'];
 
         foreach ($statuses as $status) {
             $this->invoice(['status' => $status, 'invoice_number' => 'INV-'.$status]);
         }
 
+        $this->get(route('invoices.index'))->assertOk()
+            ->assertSee('INV-draft')
+            ->assertSee('INV-issued')
+            ->assertSee('INV-partially_paid')
+            ->assertSee('INV-paid')
+            ->assertSee('INV-cancelled');
+
         foreach ($statuses as $status) {
-            $response = $this->get(route('invoices.index', ['status' => $status]))->assertOk();
+            $response = $this->get(route('invoices.index', ['statuses' => [$status]]))->assertOk();
             $response->assertSee('INV-'.$status);
 
             foreach (array_diff($statuses, [$status]) as $otherStatus) {
                 $response->assertDontSee('INV-'.$otherStatus);
             }
         }
+
+        $this->get(route('invoices.index', ['statuses' => ['paid', 'cancelled']]))->assertOk()
+            ->assertSee('INV-paid')
+            ->assertSee('INV-cancelled')
+            ->assertDontSee('INV-draft');
     }
 
     public function test_invalid_status_is_ignored(): void
     {
         $invoice = $this->invoice(['status' => 'issued']);
 
-        $this->get(route('invoices.index', ['status' => 'not-a-status']))
+        $this->get(route('invoices.index', ['statuses' => ['not-a-status']]))
             ->assertOk()
             ->assertSee($invoice->invoice_number);
     }
 
-    public function test_issued_filter_is_not_offered_and_is_ignored_by_backend(): void
+    public function test_legacy_status_is_compatible_but_canonical_statuses_take_precedence(): void
     {
         $issued = $this->invoice(['status' => 'issued', 'invoice_number' => 'INV-ISSUED']);
         $draft = $this->invoice(['status' => 'draft', 'invoice_number' => 'INV-DRAFT']);
@@ -198,9 +210,47 @@ class InvoiceIndexTest extends TestCase
         $response = $this->get(route('invoices.index', ['status' => 'issued']))->assertOk();
 
         $response->assertSee($issued->invoice_number)
-            ->assertSee($draft->invoice_number)
-            ->assertDontSee("{ value: 'issued', label: 'Выставлен' }", false)
-            ->assertSee('Выставлен');
+            ->assertDontSee($draft->invoice_number);
+
+        $this->get(route('invoices.index', ['status' => 'draft', 'statuses' => ['issued']]))->assertOk()
+            ->assertSee($issued->invoice_number)
+            ->assertDontSee($draft->invoice_number);
+    }
+
+    public function test_unpaid_filters_to_issued_and_partially_paid_and_intersects_statuses(): void
+    {
+        foreach (['draft', 'issued', 'partially_paid', 'paid', 'cancelled'] as $status) {
+            $this->invoice(['status' => $status, 'invoice_number' => 'INV-'.$status]);
+        }
+
+        $this->get(route('invoices.index', ['unpaid' => 1]))->assertOk()
+            ->assertSee('INV-issued')
+            ->assertSee('INV-partially_paid')
+            ->assertDontSee('INV-draft')
+            ->assertDontSee('INV-paid')
+            ->assertDontSee('INV-cancelled');
+
+        $this->get(route('invoices.index', ['unpaid' => 1, 'statuses' => ['issued']]))->assertOk()
+            ->assertSee('INV-issued')
+            ->assertDontSee('INV-partially_paid');
+
+        $this->get(route('invoices.index', ['unpaid' => 1, 'statuses' => ['paid', 'partially_paid']]))->assertOk()
+            ->assertSee('INV-partially_paid')
+            ->assertDontSee('INV-paid');
+    }
+
+    public function test_unpaid_and_overdue_combine_without_leaking_paid_invoices(): void
+    {
+        $this->invoice(['status' => 'issued', 'due_date' => now()->subDay()->toDateString(), 'invoice_number' => 'INV-OVERDUE-ISSUED']);
+        $this->invoice(['status' => 'partially_paid', 'due_date' => now()->subDay()->toDateString(), 'invoice_number' => 'INV-OVERDUE-PARTIAL']);
+        $this->invoice(['status' => 'paid', 'due_date' => now()->subDay()->toDateString(), 'invoice_number' => 'INV-OVERDUE-PAID']);
+        $this->invoice(['status' => 'issued', 'due_date' => now()->addDay()->toDateString(), 'invoice_number' => 'INV-CURRENT-ISSUED']);
+
+        $this->get(route('invoices.index', ['unpaid' => 1, 'overdue' => 1, 'statuses' => ['partially_paid']]))->assertOk()
+            ->assertSee('INV-OVERDUE-PARTIAL')
+            ->assertDontSee('INV-OVERDUE-ISSUED')
+            ->assertDontSee('INV-OVERDUE-PAID')
+            ->assertDontSee('INV-CURRENT-ISSUED');
     }
 
     public function test_sorts_issue_date_descending(): void
@@ -245,7 +295,7 @@ class InvoiceIndexTest extends TestCase
         $this->get(route('invoices.index', [
             'search' => 'Shared Payer',
             'company_id' => $companyId,
-            'status' => 'paid',
+            'statuses' => ['paid'],
             'sort' => 'issue_date',
             'direction' => 'asc',
         ]))->assertOk()
@@ -254,14 +304,14 @@ class InvoiceIndexTest extends TestCase
             ->assertDontSee('INV-WRONG-COMPANY');
     }
 
-    public function test_query_parameters_are_preserved_in_pagination(): void
+    public function test_statuses_and_unpaid_are_preserved_in_pagination_and_sorting(): void
     {
         $companyId = $this->company('Paginated Company');
 
         for ($index = 1; $index <= 11; $index++) {
             $this->invoice([
                 'company_id' => $companyId,
-                'status' => 'paid',
+                'status' => 'issued',
                 'payer_name' => 'Pagination Match',
                 'invoice_number' => sprintf('PAGE-%02d', $index),
             ]);
@@ -270,19 +320,33 @@ class InvoiceIndexTest extends TestCase
         $url = route('invoices.index', [
             'search' => 'Pagination Match',
             'company_id' => $companyId,
-            'status' => 'paid',
+            'statuses' => ['issued', 'partially_paid'],
+            'overdue' => 1,
+            'unpaid' => 1,
             'sort' => 'due_date',
             'direction' => 'asc',
             'page' => 2,
         ]);
 
-        $this->get(route('invoices.index', [
+        $response = $this->get(route('invoices.index', [
             'search' => 'Pagination Match',
             'company_id' => $companyId,
-            'status' => 'paid',
+            'statuses' => ['issued', 'partially_paid'],
+            'unpaid' => 1,
+            'overdue' => 1,
             'sort' => 'due_date',
             'direction' => 'asc',
         ]))->assertOk()->assertSee($url);
+
+        $response->assertSee(route('invoices.index', [
+            'search' => 'Pagination Match',
+            'company_id' => $companyId,
+            'statuses' => ['issued', 'partially_paid'],
+            'overdue' => 1,
+            'unpaid' => 1,
+            'sort' => 'issue_date',
+            'direction' => 'desc',
+        ]));
     }
 
     public function test_search_form_submits_to_invoice_index(): void
