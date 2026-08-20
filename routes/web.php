@@ -277,6 +277,11 @@ Route::middleware(['auth', 'active', 'password.changed'])->group(function (): vo
         [InvoiceController::class, 'issue']
     )->name('invoices.issue');
 
+    Route::post(
+        'invoices/{invoice}/apply-credit',
+        [InvoiceController::class, 'applyCredit']
+    )->name('invoices.apply-credit');
+
     Route::patch(
         'invoices/{invoice}/cancel',
         [InvoiceController::class, 'cancel']

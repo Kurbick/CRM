@@ -10,8 +10,6 @@ final readonly class AppliedCreditResult
 
     public const FULLY_RESERVED = 'fully_reserved';
 
-    public const DUPLICATE = 'duplicate';
-
     public function __construct(
         public bool $applied,
         public int $appliedAmountMinor,

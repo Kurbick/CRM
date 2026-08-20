@@ -544,6 +544,7 @@
                         </thead>
                         <tbody>
                             @forelse($company->invoices as $invoice)
+                                @php($paymentSource = $invoicePaymentSources->get($invoice->id))
                                 <x-tables.clickable-row :url="route('invoices.show', ['invoice' => $invoice, 'origin' => 'company', 'tab' => 'invoices'])" :label="'Открыть инвойс '.$invoice->invoice_number">
                                     <td class="crm-table-number">
                                         <a href="{{ route('invoices.show', ['invoice' => $invoice, 'origin' => 'company', 'tab' => 'invoices']) }}" class="crm-table-primary-link">{{ $invoice->invoice_number }}</a>
@@ -571,6 +572,9 @@
                                     <td class="text-xs">
                                         <div class="text-green-600 font-medium">Оплачено:
                                             {{ number_format($invoice->applied_amount, 2) }} ₼</div>
+                                        @if ($paymentSource['credit_balance_applied_minor'] > 0)
+                                            <div class="text-blue-600 font-medium mt-0.5">Из баланса: {{ number_format((float) $paymentSource['credit_balance_applied_amount'], 2) }} ₼</div>
+                                        @endif
                                         @if ($invoice->overpayment_amount > 0)
                                             <div class="text-blue-600 font-medium mt-0.5">Переплата:
                                                 {{ number_format($invoice->overpayment_amount, 2) }} ₼</div>

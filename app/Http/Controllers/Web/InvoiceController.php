@@ -474,6 +474,25 @@ class InvoiceController extends Controller
         $hasPayments = $invoice->payments->isNotEmpty();
         $actionablePayments = $this->actionablePayments($invoice);
 
+        $canApplyCredit = in_array($invoice->status, ['issued', 'partially_paid'], true)
+            && Gate::allows('create', [Payment::class, $invoice])
+            && Gate::allows('viewFinancials', $invoice->company);
+        $creditBalance = null;
+        $creditBalanceMinor = 0;
+        $creditMaximumMinor = 0;
+        if ($canApplyCredit) {
+            $creditBalance = $invoice->company->creditBalance()->first();
+            if ($creditBalance !== null) {
+                $creditBalanceMinor = $this->paymentAvailabilityService->toMinorUnits(
+                    $creditBalance->getRawOriginal('amount')
+                );
+                $creditMaximumMinor = min(
+                    $creditBalanceMinor,
+                    $paymentAvailability['available_minor'],
+                );
+            }
+        }
+
         if ($canViewPaymentHistory) {
             $paymentsById = $invoice->payments->keyBy('id');
             $paymentSource = $this->paymentSourceResolver->fromLoadedInvoice($invoice);
@@ -500,6 +519,12 @@ class InvoiceController extends Controller
             'hasPayments',
             'actionablePayments'
         );
+        $viewData += compact(
+            'canApplyCredit',
+            'creditBalance',
+            'creditBalanceMinor',
+            'creditMaximumMinor',
+        );
         $viewData['sellerFallback'] = $this->sellerSnapshot->legacyFallback();
 
         if ($canViewPaymentHistory) {
@@ -507,6 +532,87 @@ class InvoiceController extends Controller
         }
 
         return view('invoices.show', $viewData);
+    }
+
+    /**
+     * Apply an exact operator-requested amount from the Company's Credit Balance.
+     */
+    public function applyCredit(
+        Request $request,
+        Invoice $invoice,
+        ApplyCreditToInvoice $applyCreditToInvoice,
+    ): RedirectResponse {
+        Gate::authorize('view', $invoice);
+        Gate::authorize('create', [Payment::class, $invoice]);
+
+        $invoice->loadMissing('company');
+        Gate::authorize('viewFinancials', $invoice->company);
+
+        try {
+            $validated = $request->validate([
+                'amount' => ['required', 'numeric', 'decimal:0,2', 'min:0.01', 'max:9999999999.99'],
+                'expected_credit_balance_minor' => ['required', 'integer', 'min:0', 'max:999999999999'],
+                'expected_available_minor' => ['required', 'integer', 'min:0', 'max:999999999999'],
+            ], [
+                'amount.required' => 'Укажите сумму применения Credit Balance.',
+                'amount.numeric' => 'Сумма применения Credit Balance должна быть числом.',
+                'amount.decimal' => 'Сумма должна содержать не более двух знаков после запятой.',
+                'amount.min' => 'Сумма применения Credit Balance должна быть больше нуля.',
+                'amount.max' => 'Сумма применения Credit Balance превышает допустимый предел.',
+                'expected_credit_balance_minor.*' => 'Финансовые данные изменились. Обновите страницу и попробуйте снова.',
+                'expected_available_minor.*' => 'Финансовые данные изменились. Обновите страницу и попробуйте снова.',
+            ]);
+        } catch (ValidationException $exception) {
+            $errors = $exception->errors();
+            if (isset($errors['amount'])) {
+                $errors['credit_amount'] = $errors['amount'];
+                unset($errors['amount']);
+            }
+
+            return redirect()->route('invoices.show', $invoice)
+                ->withErrors($errors)
+                ->withInput()
+                ->with('credit_dialog_open', true);
+        }
+
+        try {
+            $requestedMinor = $this->paymentAvailabilityService->toMinorUnits($validated['amount']);
+            $result = $applyCreditToInvoice->executeManual(
+                invoice: $invoice,
+                requestedAmountMinor: $requestedMinor,
+                expectedCreditBalanceMinor: (int) $validated['expected_credit_balance_minor'],
+                expectedAvailableMinor: (int) $validated['expected_available_minor'],
+            );
+        } catch (ValidationException $exception) {
+            $errors = $exception->errors();
+            foreach (['credit', 'expected_credit_balance_minor', 'expected_available_minor'] as $key) {
+                if (isset($errors[$key])) {
+                    $errors['credit_amount'] = array_merge(
+                        $errors['credit_amount'] ?? [],
+                        $errors[$key],
+                    );
+                    unset($errors[$key]);
+                }
+            }
+
+            return redirect()->route('invoices.show', $invoice)
+                ->withErrors($errors)
+                ->withInput()
+                ->with('credit_dialog_open', true);
+        } catch (\LogicException) {
+            return redirect()->route('invoices.show', $invoice)
+                ->withErrors(['credit_amount' => 'Не удалось определить корректную сумму применения Credit Balance.'])
+                ->withInput()
+                ->with('credit_dialog_open', true);
+        }
+
+        $amount = $this->paymentAvailabilityService->formatMinorUnits($result->appliedAmountMinor);
+        $message = "Из баланса применено {$amount}.";
+        if ($invoice->fresh()->status === 'paid') {
+            $message .= ' Инвойс полностью оплачен.';
+        }
+
+        return $this->mutationRedirect($invoice->fresh())->with('success', $message);
     }
 
     /** @return list<array{id: int, status: string, can_confirm: bool, can_cancel: bool}> */

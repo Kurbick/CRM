@@ -458,6 +458,127 @@
         {{-- Правая боковая колонка: Регистрация оплат и дополнительные действия --}}
         <div class="invoice-sidebar crm-print-hide space-y-6 print:hidden">
 
+            {{-- Ручное применение Credit Balance --}}
+            @if ($canApplyCredit && $creditBalanceMinor > 0)
+                <div x-data="{
+                        creditOpen: @js((bool) session('credit_dialog_open')),
+                        creditSubmitting: false,
+                        openCredit() {
+                            this.creditOpen = true;
+                            document.body.style.overflow = 'hidden';
+                            this.$nextTick(() => this.$refs.creditAmount?.focus());
+                        },
+                        closeCredit() {
+                            this.creditOpen = false;
+                            document.body.style.overflow = '';
+                            this.$nextTick(() => this.$refs.creditTrigger?.focus());
+                        }
+                    }"
+                    x-init="if (creditOpen) { document.body.style.overflow = 'hidden'; $nextTick(() => $refs.creditAmount?.focus()); }"
+                    x-on:keydown.escape.window="if (creditOpen) closeCredit()">
+                    <div class="rounded-xl border border-blue-200 bg-blue-50 p-5 shadow-sm">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <h3 class="text-sm font-semibold text-blue-900">Баланс компании</h3>
+                                <p class="mt-1 font-mono text-lg font-bold text-blue-800">
+                                    {{ $formatMoney($creditBalanceMinor / 100) }}
+                                </p>
+                            </div>
+                            <span class="rounded-full bg-blue-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-blue-700">
+                                Из баланса
+                            </span>
+                        </div>
+
+                        @if ($creditMaximumMinor > 0)
+                            <button type="button" x-ref="creditTrigger" @click="openCredit()"
+                                class="mt-4 w-full rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1">
+                                Использовать баланс
+                            </button>
+                        @else
+                            <button type="button" disabled
+                                class="mt-4 w-full cursor-not-allowed rounded-lg bg-blue-300 px-3 py-2.5 text-sm font-medium text-white opacity-80">
+                                Использовать баланс
+                            </button>
+                            @if ($paymentAvailability['pending_minor'] > 0)
+                                <p class="mt-2 text-xs leading-5 text-blue-800">
+                                    Весь остаток уже зарезервирован ожидающим платежом.
+                                </p>
+                            @endif
+                        @endif
+                    </div>
+
+                    @if ($creditMaximumMinor > 0 || session('credit_dialog_open'))
+                        <div x-show="creditOpen" x-cloak x-transition.opacity
+                            class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 print:hidden"
+                            role="dialog" aria-modal="true" aria-labelledby="credit-dialog-title">
+                            <div class="w-full max-w-md rounded-xl bg-white p-5 shadow-2xl" @click.stop>
+                                <div class="flex items-start justify-between gap-4">
+                                    <div>
+                                        <h3 id="credit-dialog-title" class="text-base font-semibold text-slate-900">
+                                            Использовать баланс
+                                        </h3>
+                                        <p class="mt-1 text-xs text-slate-500">Счёт {{ $invoice->invoice_number }}</p>
+                                    </div>
+                                    <button type="button" @click="closeCredit()"
+                                        class="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                                        aria-label="Закрыть диалог применения баланса">&times;</button>
+                                </div>
+
+                                <div class="mt-4 space-y-2 rounded-lg bg-blue-50 p-3 text-sm text-blue-900">
+                                    <div class="flex justify-between gap-3">
+                                        <span>Баланс компании:</span>
+                                        <strong class="font-mono">{{ $formatMoney($creditBalanceMinor / 100) }}</strong>
+                                    </div>
+                                    <div class="flex justify-between gap-3">
+                                        <span>Остаток по счёту:</span>
+                                        <strong class="font-mono">{{ $formatMoney($paymentAvailability['remaining_minor'] / 100) }}</strong>
+                                    </div>
+                                    @if ($paymentAvailability['pending_minor'] > 0)
+                                        <div class="flex justify-between gap-3">
+                                            <span>Ожидает подтверждения:</span>
+                                            <strong class="font-mono">{{ $formatMoney($paymentAvailability['pending_minor'] / 100) }}</strong>
+                                        </div>
+                                    @endif
+                                    <div class="flex justify-between gap-3 border-t border-blue-200 pt-2">
+                                        <span>Доступно к погашению:</span>
+                                        <strong class="font-mono">{{ $formatMoney($creditMaximumMinor / 100) }}</strong>
+                                    </div>
+                                </div>
+
+                                <form action="{{ route('invoices.apply-credit', $invoice) }}" method="POST" class="mt-4 space-y-4"
+                                    @submit="creditSubmitting = true">
+                                    @csrf
+                                    <input type="hidden" name="expected_credit_balance_minor" value="{{ $creditBalanceMinor }}">
+                                    <input type="hidden" name="expected_available_minor" value="{{ $paymentAvailability['available_minor'] }}">
+                                    <div>
+                                        <label for="credit_amount" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                            Использовать (₼)
+                                        </label>
+                                        <input type="number" name="amount" id="credit_amount" x-ref="creditAmount"
+                                            value="{{ old('amount', number_format($creditMaximumMinor / 100, 2, '.', '')) }}"
+                                            required min="0.01" max="{{ number_format($creditMaximumMinor / 100, 2, '.', '') }}" step="0.01"
+                                            class="mt-1 w-full rounded-lg border @error('credit_amount') border-red-300 @else border-slate-200 @enderror px-3 py-2 text-sm font-mono outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                                        @error('credit_amount')
+                                            <p class="mt-1 text-xs text-red-600" role="alert">{{ $message }}</p>
+                                        @enderror
+                                    </div>
+                                    <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                                        <button type="button" @click="closeCredit()"
+                                            class="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100">
+                                            Отмена
+                                        </button>
+                                        <button type="submit" :disabled="creditSubmitting"
+                                            class="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
+                                            Использовать баланс
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    @endif
+                </div>
+            @endif
+
             {{-- Форма добавления оплаты --}}
             @can('create', [\App\Models\Payment::class, $invoice])
             @if (in_array($invoice->status, ['issued', 'partially_paid']) && $invoice->remaining_amount > 0)
@@ -481,7 +602,7 @@
                             <label for="amount" class="block text-xs font-semibold text-gray-500 uppercase mb-1">Сумма
                                 (₼) <span class="text-red-500">*</span></label>
                             <input type="number" name="amount" id="amount"
-                                value="{{ old('amount', $paymentAvailability['available_amount']) }}" required step="0.01"
+                                value="{{ session('credit_dialog_open') ? $paymentAvailability['available_amount'] : old('amount', $paymentAvailability['available_amount']) }}" required step="0.01"
                                 min="0.01" @disabled($paymentAvailability['available_minor'] === 0)
                                 class="w-full px-3 py-2 border @error('amount') border-red-300 @else border-gray-200 @enderror rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition font-mono"
                                 placeholder="0.00">
@@ -699,9 +820,9 @@
                             $payment = $paymentsById->get($paymentRow['id']);
 
                             /*
-                             * Платёж, автоматически созданный из Credit Balance,
-                             * нельзя отменять как обычный банковский/наличный платёж.
-                             * Сервер дополнительно проверяет это в PaymentController.
+                             * Платёж, созданный из Credit Balance, нельзя отменять
+                             * как обычный банковский/наличный платёж без точной
+                             * ledger-связи. Сервер дополнительно проверяет источник.
                              */
                             $isCreditBalancePayment = in_array(
                                 $paymentRow['id'],

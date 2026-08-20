@@ -4,7 +4,6 @@ namespace App\Actions\Credits;
 
 use App\Actions\Payments\ApplyConfirmedPaymentLifecycle;
 use App\Models\CreditBalance;
-use App\Models\CreditBalanceEntry;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Services\InvoicePaymentAvailabilityService;
@@ -28,7 +27,53 @@ final class ApplyCreditToInvoice
     ): AppliedCreditResult {
         $this->validateRequestedAmount($requestedAmountMinor);
 
-        return DB::transaction(function () use ($invoice, $requestedAmountMinor): AppliedCreditResult {
+        return $this->run(
+            invoice: $invoice,
+            requestedAmountMinor: $requestedAmountMinor,
+            strict: false,
+        );
+    }
+
+    /**
+     * Apply an exact operator-requested amount using server-rendered financial
+     * snapshots as stale-state guards.
+     */
+    public function executeManual(
+        Invoice $invoice,
+        int $requestedAmountMinor,
+        int $expectedCreditBalanceMinor,
+        int $expectedAvailableMinor,
+    ): AppliedCreditResult {
+        $this->validateRequestedAmount($requestedAmountMinor);
+
+        if ($expectedCreditBalanceMinor < 0 || $expectedCreditBalanceMinor > self::MAX_AMOUNT_MINOR
+            || $expectedAvailableMinor < 0 || $expectedAvailableMinor > self::MAX_AMOUNT_MINOR) {
+            throw new InvalidArgumentException('Credit financial snapshot is outside the supported range.');
+        }
+
+        return $this->run(
+            invoice: $invoice,
+            requestedAmountMinor: $requestedAmountMinor,
+            strict: true,
+            expectedCreditBalanceMinor: $expectedCreditBalanceMinor,
+            expectedAvailableMinor: $expectedAvailableMinor,
+        );
+    }
+
+    private function run(
+        Invoice $invoice,
+        ?int $requestedAmountMinor,
+        bool $strict,
+        ?int $expectedCreditBalanceMinor = null,
+        ?int $expectedAvailableMinor = null,
+    ): AppliedCreditResult {
+        return DB::transaction(function () use (
+            $invoice,
+            $requestedAmountMinor,
+            $strict,
+            $expectedCreditBalanceMinor,
+            $expectedAvailableMinor,
+        ): AppliedCreditResult {
             $lockedInvoice = Invoice::query()
                 ->whereKey($invoice->getKey())
                 ->lockForUpdate()
@@ -40,33 +85,16 @@ final class ApplyCreditToInvoice
                 ]);
             }
 
-            $invoiceTotalMinor = $this->money->toMinorUnits(
-                $lockedInvoice->getRawOriginal('total_amount'),
-            );
+            $invoiceTotalMinor = $this->money->toMinorUnits($lockedInvoice->getRawOriginal('total_amount'));
 
             if ($invoiceTotalMinor < 1 || $invoiceTotalMinor > self::MAX_AMOUNT_MINOR) {
                 throw new LogicException('Invoice total is outside the supported Credit application range.');
             }
 
-            $paymentTotals = Payment::query()
-                ->where('invoice_id', $lockedInvoice->getKey())
-                ->selectRaw("COALESCE(SUM(CASE WHEN status = 'confirmed' AND amount > 0 THEN amount ELSE 0 END), 0) AS confirmed_amount")
-                ->selectRaw("COALESCE(SUM(CASE WHEN status = 'pending' AND amount > 0 THEN amount ELSE 0 END), 0) AS pending_amount")
-                ->toBase()
-                ->first();
+            $availability = $this->money->evaluatePendingCreation($lockedInvoice);
+            $unreservedRemainingMinor = $availability['available_minor'];
 
-            $confirmedMinor = $this->money->toMinorUnits($paymentTotals?->confirmed_amount ?? '0.00');
-            $pendingMinor = $this->money->toMinorUnits($paymentTotals?->pending_amount ?? '0.00');
-            $settledRemainingMinor = max(
-                $invoiceTotalMinor - $confirmedMinor,
-                0,
-            );
-            $unreservedRemainingMinor = max(
-                $settledRemainingMinor - $pendingMinor,
-                0,
-            );
-
-            if ($unreservedRemainingMinor === 0) {
+            if ($unreservedRemainingMinor === 0 && ! $strict) {
                 return AppliedCreditResult::noOp(AppliedCreditResult::FULLY_RESERVED);
             }
 
@@ -75,65 +103,76 @@ final class ApplyCreditToInvoice
                 ->lockForUpdate()
                 ->first();
 
-            if ($creditBalance === null) {
-                return AppliedCreditResult::noOp(AppliedCreditResult::NO_CREDIT_BALANCE);
+            $availableCreditMinor = 0;
+            if ($creditBalance !== null) {
+                if ((int) $creditBalance->company_id !== (int) $lockedInvoice->company_id) {
+                    throw new LogicException('Credit Balance and Invoice companies do not match.');
+                }
+
+                $availableCreditMinor = $this->money->toMinorUnits(
+                    $creditBalance->getRawOriginal('amount'),
+                );
+
+                if ($availableCreditMinor < 0 || $availableCreditMinor > self::MAX_AMOUNT_MINOR) {
+                    throw new LogicException('Credit Balance amount is outside the supported range.');
+                }
             }
 
-            if ((int) $creditBalance->company_id !== (int) $lockedInvoice->company_id) {
-                throw new LogicException('Credit Balance and Invoice companies do not match.');
+            if ($strict && ($expectedAvailableMinor !== $unreservedRemainingMinor
+                || $expectedCreditBalanceMinor !== $availableCreditMinor)) {
+                throw ValidationException::withMessages([
+                    'credit_amount' => 'Финансовые данные изменились. Обновите страницу и попробуйте снова.',
+                ]);
             }
 
-            $alreadyApplied = CreditBalanceEntry::query()
-                ->where('credit_balance_id', $creditBalance->getKey())
-                ->where('type', 'applied')
-                ->where('invoice_id', $lockedInvoice->getKey())
-                ->whereNotExists(function ($query): void {
-                    $query->selectRaw('1')
-                        ->from('credit_balance_entries as applied_reversals')
-                        ->whereColumn(
-                            'applied_reversals.credit_balance_id',
-                            'credit_balance_entries.credit_balance_id',
-                        )
-                        ->whereColumn(
-                            'applied_reversals.payment_id',
-                            'credit_balance_entries.payment_id',
-                        )
-                        ->whereColumn(
-                            'applied_reversals.invoice_id',
-                            'credit_balance_entries.invoice_id',
-                        )
-                        ->where('applied_reversals.type', 'applied_reversal');
-                })
-                ->exists();
+            if ($unreservedRemainingMinor === 0) {
+                if ($strict) {
+                    throw ValidationException::withMessages([
+                        'credit_amount' => 'Весь остаток уже зарезервирован ожидающим платежом.',
+                    ]);
+                }
 
-            if ($alreadyApplied) {
                 return AppliedCreditResult::noOp(
-                    AppliedCreditResult::DUPLICATE,
-                    (int) $creditBalance->getKey(),
+                    AppliedCreditResult::FULLY_RESERVED,
+                    $creditBalance?->getKey(),
                 );
             }
 
-            $availableCreditMinor = $this->money->toMinorUnits(
-                $creditBalance->getRawOriginal('amount'),
-            );
+            if ($creditBalance === null) {
+                if ($strict) {
+                    throw ValidationException::withMessages([
+                        'credit_amount' => 'На балансе компании нет доступных средств.',
+                    ]);
+                }
 
-            if ($availableCreditMinor < 0 || $availableCreditMinor > self::MAX_AMOUNT_MINOR) {
-                throw new LogicException('Credit Balance amount is outside the supported range.');
+                return AppliedCreditResult::noOp(AppliedCreditResult::NO_CREDIT_BALANCE);
             }
 
             if ($availableCreditMinor === 0) {
+                if ($strict) {
+                    throw ValidationException::withMessages([
+                        'credit_amount' => 'На балансе компании нет доступных средств.',
+                    ]);
+                }
+
                 return AppliedCreditResult::noOp(
                     AppliedCreditResult::ZERO_CREDIT,
                     (int) $creditBalance->getKey(),
                 );
             }
 
-            $requestedMinor = $requestedAmountMinor ?? $unreservedRemainingMinor;
-            $appliedMinor = min(
-                $requestedMinor,
-                $availableCreditMinor,
-                $unreservedRemainingMinor,
-            );
+            $safeMaximumMinor = min($availableCreditMinor, $unreservedRemainingMinor);
+            $requestedMinor = $requestedAmountMinor ?? $safeMaximumMinor;
+
+            if ($strict && $requestedMinor > $safeMaximumMinor) {
+                throw ValidationException::withMessages([
+                    'credit_amount' => 'Можно использовать не более '.$this->money->formatMinorUnits($safeMaximumMinor).'.',
+                ]);
+            }
+
+            $appliedMinor = $strict
+                ? $requestedMinor
+                : min($requestedMinor, $safeMaximumMinor);
 
             if ($appliedMinor === 0) {
                 return AppliedCreditResult::noOp(
@@ -148,7 +187,8 @@ final class ApplyCreditToInvoice
                 'type' => 'applied',
                 'amount' => $appliedAmount,
                 'invoice_id' => $lockedInvoice->getKey(),
-                'description' => "Применён к инвойсу #{$lockedInvoice->invoice_number}",
+                'description' => ($strict ? 'Вручную применён' : 'Применён')
+                    ." к инвойсу #{$lockedInvoice->invoice_number}",
             ]);
 
             $creditBalance->forceFill([
@@ -162,7 +202,8 @@ final class ApplyCreditToInvoice
                 'amount' => $appliedAmount,
                 'payment_method' => 'transfer',
                 'status' => 'confirmed',
-                'comment' => "Автоматически применён Credit Balance ({$appliedAmount} ₼)",
+                'comment' => ($strict ? 'Вручную применён' : 'Автоматически применён')
+                    ." Credit Balance ({$appliedAmount} ₼)",
             ]));
 
             $entry->forceFill(['payment_id' => $payment->getKey()])->saveQuietly();

@@ -74,6 +74,86 @@ class CreditApplicationActionTest extends AuthorizationTestCase
         $this->assertSame('partially_paid', $invoice->fresh()->status);
     }
 
+    public function test_manual_application_uses_exact_amount_and_financial_snapshots(): void
+    {
+        [$invoice, $balance] = $this->creditFixture('100.00', '50.00');
+
+        $result = $this->action()->executeManual($invoice, 3000, 5000, 10000);
+
+        $this->assertTrue($result->applied);
+        $this->assertSame(3000, $result->appliedAmountMinor);
+        $this->assertDatabaseHas('payments', [
+            'id' => $result->paymentId,
+            'comment' => 'Вручную применён Credit Balance (30.00 ₼)',
+        ]);
+        $this->assertDatabaseHas('credit_balance_entries', [
+            'id' => $result->entryId,
+            'description' => "Вручную применён к инвойсу #{$invoice->invoice_number}",
+        ]);
+        $this->assertSame('20.00', $balance->fresh()->getRawOriginal('amount'));
+        $this->assertSame('partially_paid', $invoice->fresh()->status);
+        $this->assertSame(
+            'Вручную применён Credit Balance (30.00 ₼)',
+            Payment::query()->findOrFail($result->paymentId)->comment,
+        );
+    }
+
+    public function test_manual_application_rejects_amount_above_current_safe_maximum_without_clamping(): void
+    {
+        [$invoice, $balance] = $this->creditFixture('100.00', '50.00');
+
+        try {
+            $this->action()->executeManual($invoice, 5100, 5000, 10000);
+            $this->fail('Manual Credit amount above balance must be rejected.');
+        } catch (ValidationException $exception) {
+            $this->assertSame(
+                'Можно использовать не более 50,00 ₼.',
+                $exception->errors()['credit_amount'][0],
+            );
+        }
+
+        $this->assertSame('50.00', $balance->fresh()->getRawOriginal('amount'));
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertDatabaseCount('credit_balance_entries', 0);
+    }
+
+    public function test_manual_application_rejects_stale_snapshots_atomically(): void
+    {
+        [$invoice, $balance] = $this->creditFixture('100.00', '50.00');
+        $this->action()->executeManual($invoice, 3000, 5000, 10000);
+
+        try {
+            $this->action()->executeManual($invoice->fresh(), 3000, 5000, 10000);
+            $this->fail('Stale Credit snapshots must be rejected.');
+        } catch (ValidationException $exception) {
+            $this->assertSame(
+                'Финансовые данные изменились. Обновите страницу и попробуйте снова.',
+                $exception->errors()['credit_amount'][0],
+            );
+        }
+
+        $this->assertSame('20.00', $balance->fresh()->getRawOriginal('amount'));
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseCount('credit_balance_entries', 1);
+    }
+
+    public function test_manual_application_can_follow_an_automatic_partial_application(): void
+    {
+        [$invoice, $balance] = $this->creditFixture('100.00', '20.00');
+        $automatic = $this->action()->execute($invoice);
+        $this->assertSame(2000, $automatic->appliedAmountMinor);
+
+        $balance->fresh()->forceFill(['amount' => '30.00'])->saveQuietly();
+        $manual = $this->action()->executeManual($invoice->fresh(), 3000, 3000, 8000);
+
+        $this->assertTrue($manual->applied);
+        $this->assertNotSame($automatic->paymentId, $manual->paymentId);
+        $this->assertSame(2, Payment::query()->where('invoice_id', $invoice->id)->count());
+        $this->assertSame(2, CreditBalanceEntry::query()->where('invoice_id', $invoice->id)->where('type', 'applied')->count());
+        $this->assertSame(50.0, $invoice->fresh()->paid_amount);
+        $this->assertSame('0.00', $balance->fresh()->getRawOriginal('amount'));
+    }
+
     public function test_pending_reservation_limits_credit_to_unreserved_capacity(): void
     {
         [$invoice, $balance] = $this->creditFixture('100.00', '100.00');
@@ -325,7 +405,7 @@ class CreditApplicationActionTest extends AuthorizationTestCase
         $this->assertStringContainsString('fromMinorUnits(', $source);
     }
 
-    public function test_duplicate_application_is_idempotent(): void
+    public function test_multiple_applications_to_one_invoice_create_distinct_events(): void
     {
         [$invoice, $balance] = $this->creditFixture('100.00', '100.00');
         $first = $this->action()->execute($invoice, 2500);
@@ -337,11 +417,14 @@ class CreditApplicationActionTest extends AuthorizationTestCase
 
         $second = $this->action()->execute($invoice);
 
-        $this->assertNoOp($second, AppliedCreditResult::DUPLICATE);
+        $this->assertTrue($second->applied);
+        $this->assertSame(7500, $second->appliedAmountMinor);
+        $this->assertNotSame($first->paymentId, $second->paymentId);
+        $this->assertNotSame($first->entryId, $second->entryId);
         $this->assertSame($balance->id, $second->creditBalanceId);
-        $this->assertDatabaseCount('credit_balance_entries', 1);
-        $this->assertDatabaseCount('payments', 1);
-        $this->assertSame('75.00', $balance->fresh()->getRawOriginal('amount'));
+        $this->assertDatabaseCount('credit_balance_entries', 2);
+        $this->assertDatabaseCount('payments', 2);
+        $this->assertSame('0.00', $balance->fresh()->getRawOriginal('amount'));
         $this->assertSame(
             $firstAllocation,
             DB::table('payment_allocations')
@@ -352,7 +435,7 @@ class CreditApplicationActionTest extends AuthorizationTestCase
         );
     }
 
-    public function test_legacy_orphan_entry_is_duplicate_and_is_never_relinked(): void
+    public function test_legacy_orphan_entry_does_not_block_a_new_exact_application(): void
     {
         [$invoice, $balance] = $this->creditFixture('100.00', '100.00');
         $orphan = $balance->entries()->create([
@@ -364,11 +447,12 @@ class CreditApplicationActionTest extends AuthorizationTestCase
 
         $result = $this->action()->execute($invoice);
 
-        $this->assertNoOp($result, AppliedCreditResult::DUPLICATE);
+        $this->assertTrue($result->applied);
+        $this->assertSame(10000, $result->appliedAmountMinor);
         $this->assertNull($orphan->fresh()->payment_id);
-        $this->assertSame('100.00', $balance->fresh()->getRawOriginal('amount'));
-        $this->assertDatabaseCount('payments', 0);
-        $this->assertDatabaseCount('credit_balance_entries', 1);
+        $this->assertSame('0.00', $balance->fresh()->getRawOriginal('amount'));
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseCount('credit_balance_entries', 2);
     }
 
     public function test_failure_after_ledger_and_balance_mutation_before_payment_rolls_back(): void
@@ -442,11 +526,11 @@ class CreditApplicationActionTest extends AuthorizationTestCase
             $this->assertNotContains('companies', $profiles[1]['tables']);
         }
 
-        $this->assertSame([9, 9], array_column($pendingProfiles, 'reads'));
+        $this->assertSame([8, 8], array_column($pendingProfiles, 'reads'));
         $this->assertSame([6, 6], array_column($pendingProfiles, 'writes'));
-        $this->assertSame([9, 9], array_column($confirmedProfiles, 'reads'));
+        $this->assertSame([8, 8], array_column($confirmedProfiles, 'reads'));
         $this->assertSame([7, 12], array_column($confirmedProfiles, 'writes'));
-        $this->assertSame([9, 9], array_column($lineProfiles, 'reads'));
+        $this->assertSame([8, 8], array_column($lineProfiles, 'reads'));
         $this->assertSame([6, 11], array_column($lineProfiles, 'writes'));
     }
 

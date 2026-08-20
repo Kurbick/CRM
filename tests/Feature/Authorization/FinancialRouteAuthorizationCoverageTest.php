@@ -8,6 +8,7 @@ use App\Http\Controllers\Web\PaymentController;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Support\Access\ApiRouteAuthorizationRegistry;
+use App\Support\Access\PermissionName;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -33,6 +34,12 @@ class FinancialRouteAuthorizationCoverageTest extends AuthorizationTestCase
             'ability' => 'issue',
             'target' => Invoice::class,
             'scenario' => 'invoice_issue',
+        ],
+        'invoices.apply-credit' => [
+            'method' => 'POST',
+            'ability' => 'create',
+            'target' => Payment::class,
+            'scenario' => 'invoice_apply_credit',
         ],
         'invoices.cancel' => [
             'method' => 'PATCH',
@@ -118,6 +125,7 @@ class FinancialRouteAuthorizationCoverageTest extends AuthorizationTestCase
             'invoice_store' => $this->assertInvoiceStoreForbidden($routeName),
             'invoice_update' => $this->assertInvoiceUpdateForbidden($routeName),
             'invoice_issue' => $this->assertInvoiceIssueForbidden($routeName),
+            'invoice_apply_credit' => $this->assertInvoiceApplyCreditForbidden($routeName),
             'invoice_cancel' => $this->assertInvoiceCancelForbidden($routeName),
             'invoice_destroy' => $this->assertInvoiceDestroyForbidden($routeName),
             'payment_store' => $this->assertPaymentStoreForbidden($routeName),
@@ -183,6 +191,76 @@ class FinancialRouteAuthorizationCoverageTest extends AuthorizationTestCase
         $this->assertSame($paymentCount, DB::table('payments')->count());
         $this->assertSame($allocationCount, DB::table('payment_allocations')->count());
         $this->assertSame($entryCount, DB::table('credit_balance_entries')->count());
+    }
+
+    private function assertInvoiceApplyCreditForbidden(string $routeName): void
+    {
+        $invoice = $this->invoice('issued', 'FORBIDDEN-APPLY-CREDIT');
+        $balance = $invoice->company->creditBalance()->create(['amount' => '50.00']);
+        $paymentCount = DB::table('payments')->count();
+        $entryCount = DB::table('credit_balance_entries')->count();
+
+        $this->post(route($routeName, $invoice), $this->applyCreditPayload())
+            ->assertForbidden();
+
+        $this->assertSame('issued', $invoice->fresh()->status);
+        $this->assertSame('50.00', $balance->fresh()->getRawOriginal('amount'));
+        $this->assertSame($paymentCount, DB::table('payments')->count());
+        $this->assertSame($entryCount, DB::table('credit_balance_entries')->count());
+    }
+
+    public function test_apply_credit_allows_invoice_payment_and_financial_permissions(): void
+    {
+        $invoice = $this->invoice('issued', 'ALLOWED-APPLY-CREDIT');
+        $balance = $invoice->company->creditBalance()->create(['amount' => '50.00']);
+        $this->actingAsPermissions([
+            PermissionName::InvoicesView->value,
+            PermissionName::PaymentsCreate->value,
+            PermissionName::CompaniesFinancialsView->value,
+        ]);
+
+        $this->post(route('invoices.apply-credit', $invoice), $this->applyCreditPayload())
+            ->assertRedirect(route('invoices.show', $invoice));
+
+        $payment = $invoice->payments()->sole();
+        $this->assertSame('30.00', $payment->getRawOriginal('amount'));
+        $this->assertDatabaseHas('credit_balance_entries', [
+            'invoice_id' => $invoice->id,
+            'payment_id' => $payment->id,
+            'type' => 'applied',
+            'amount' => '30.00',
+        ]);
+        $this->assertSame('20.00', $balance->fresh()->getRawOriginal('amount'));
+    }
+
+    public function test_apply_credit_requires_payment_create_permission(): void
+    {
+        $this->actingAsPermissions([
+            PermissionName::InvoicesView->value,
+            PermissionName::CompaniesFinancialsView->value,
+        ]);
+
+        $this->assertInvoiceApplyCreditForbidden('invoices.apply-credit');
+    }
+
+    public function test_apply_credit_requires_company_financial_visibility(): void
+    {
+        $this->actingAsPermissions([
+            PermissionName::InvoicesView->value,
+            PermissionName::PaymentsCreate->value,
+        ]);
+
+        $this->assertInvoiceApplyCreditForbidden('invoices.apply-credit');
+    }
+
+    /** @return array<string, string> */
+    private function applyCreditPayload(): array
+    {
+        return [
+            'amount' => '30.00',
+            'expected_credit_balance_minor' => '5000',
+            'expected_available_minor' => '10000',
+        ];
     }
 
     private function assertInvoiceCancelForbidden(string $routeName): void

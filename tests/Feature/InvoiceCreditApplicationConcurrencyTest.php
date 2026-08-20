@@ -98,9 +98,9 @@ class InvoiceCreditApplicationConcurrencyTest extends FinancialTestCase
         $this->assertExactApplicationState([$invoice], 3000);
     }
 
-    public function test_legacy_orphan_cannot_be_claimed_by_concurrent_application(): void
+    public function test_legacy_orphan_does_not_block_concurrent_application(): void
     {
-        [$invoice, , $balance] = $this->issuedFixture('100.00', '100.00');
+        [$invoice, , $balance] = $this->issuedFixture('100.00', '50.00');
         $orphan = $balance->entries()->create([
             'type' => 'applied',
             'amount' => '10.00',
@@ -116,12 +116,12 @@ class InvoiceCreditApplicationConcurrencyTest extends FinancialTestCase
 
         $this->assertTrue($result['first']['ok']);
         $this->assertTrue($result['second']['ok']);
-        $this->assertSame('duplicate', $result['first']['value']['reason']);
-        $this->assertSame('duplicate', $result['second']['value']['reason']);
+        $this->assertSame(5000, $result['first']['value']['applied_minor']);
+        $this->assertSame('zero_credit', $result['second']['value']['reason']);
         $this->assertNull($orphan->fresh()->payment_id);
-        $this->assertSame('100.00', $balance->fresh()->getRawOriginal('amount'));
-        $this->assertDatabaseMissing('payments', ['invoice_id' => $invoice->id]);
-        $this->assertSame(1, CreditBalanceEntry::query()->where('invoice_id', $invoice->id)->count());
+        $this->assertSame('0.00', $balance->fresh()->getRawOriginal('amount'));
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertSame(2, CreditBalanceEntry::query()->where('invoice_id', $invoice->id)->count());
     }
 
     public function test_failed_issue_rolls_back_releases_lock_and_concurrent_retry_succeeds_once(): void

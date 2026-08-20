@@ -143,7 +143,7 @@ class InvoiceCreditApplicationIntegrationTest extends FinancialTestCase
         $this->assertDatabaseMissing('credit_balance_entries', ['invoice_id' => $invoice->id]);
     }
 
-    public function test_existing_orphan_entry_is_not_relinked_or_reapplied(): void
+    public function test_existing_orphan_entry_is_not_relinked_when_issue_applies_fresh_credit(): void
     {
         [$invoice, , $balance] = $this->fixture('100.00');
         $orphan = $balance->entries()->create([
@@ -155,11 +155,17 @@ class InvoiceCreditApplicationIntegrationTest extends FinancialTestCase
 
         $this->post(route('invoices.issue', $invoice))->assertSessionDoesntHaveErrors();
 
-        $this->assertSame('issued', $invoice->fresh()->status);
-        $this->assertSame('100.00', $balance->fresh()->getRawOriginal('amount'));
+        $this->assertSame('paid', $invoice->fresh()->status);
+        $this->assertSame('0.00', $balance->fresh()->getRawOriginal('amount'));
         $this->assertNull($orphan->fresh()->payment_id);
-        $this->assertDatabaseMissing('payments', ['invoice_id' => $invoice->id]);
-        $this->assertSame(1, CreditBalanceEntry::query()->where('invoice_id', $invoice->id)->count());
+        $payment = Payment::query()->where('invoice_id', $invoice->id)->sole();
+        $this->assertDatabaseHas('credit_balance_entries', [
+            'invoice_id' => $invoice->id,
+            'payment_id' => $payment->id,
+            'type' => 'applied',
+            'amount' => '100.00',
+        ]);
+        $this->assertSame(2, CreditBalanceEntry::query()->where('invoice_id', $invoice->id)->count());
     }
 
     public function test_existing_confirmed_payment_still_blocks_issue_before_credit_mutation(): void
@@ -292,7 +298,9 @@ class InvoiceCreditApplicationIntegrationTest extends FinancialTestCase
             ];
         }
 
-        $this->assertSame([16, 16, 16], array_column($profiles, 'reads'));
+        // The obsolete one-active-application lookup was removed; the Issue
+        // flow remains bounded at 15 domain reads for every input size.
+        $this->assertSame([15, 15, 15], array_column($profiles, 'reads'));
         $this->assertSame([7, 7, 12], array_column($profiles, 'writes'));
         $this->assertSame($profiles[0]['reads'], $profiles[1]['reads']);
         $this->assertSame($profiles[0]['reads'], $profiles[2]['reads']);

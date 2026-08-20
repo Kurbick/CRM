@@ -2,9 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Credits\ApplyCreditToInvoice;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\PaymentAllocation;
+use App\Support\Access\PermissionName;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\Feature\FinancialTestCase as TestCase;
@@ -78,6 +80,32 @@ class InvoicePaymentSourceDisplayTest extends TestCase
             ->assertSee('Из баланса: 100,00 ₼')
             ->assertSee('400,00 ₼')
             ->assertDontSee('Частично из баланса');
+    }
+
+    public function test_manual_credit_is_blue_and_aggregated_on_company_invoice_tab(): void
+    {
+        [$invoice] = $this->invoice('500.00', 'issued');
+        $invoice->company->creditBalance()->create(['amount' => '350.00']);
+        $action = app(ApplyCreditToInvoice::class);
+        $action->executeManual($invoice, 20000, 35000, 50000);
+        $action->executeManual($invoice->fresh(), 15000, 15000, 30000);
+        $this->authenticatedUser->givePermissionTo([
+            PermissionName::CompaniesView->value,
+            PermissionName::CompaniesFinancialsView->value,
+        ]);
+
+        $this->get(route('invoices.index'))->assertOk()
+            ->assertSee('Из баланса: 350,00 ₼')
+            ->assertDontSee('Переплата:');
+        $this->get(route('companies.show', [
+            'company' => $invoice->company,
+            'tab' => 'invoices',
+        ]))->assertOk()
+            ->assertSee('Из баланса: 350.00 ₼')
+            ->assertDontSee('Переплата:');
+        $this->get(route('invoices.show', $invoice))->assertOk()
+            ->assertSee('Из баланса: 350,00 ₼')
+            ->assertDontSee('Переплата:');
     }
 
     public function test_index_source_state_does_not_add_queries_per_invoice(): void

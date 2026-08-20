@@ -12,6 +12,7 @@ use App\Models\InvoiceLine;
 use App\Models\Payment;
 use App\Services\OneTimeServiceDebtCalculator;
 use App\Services\InvoiceBillingPeriodPresenter;
+use App\Services\InvoicePaymentSourceResolver;
 use App\Services\SubscriptionPeriodDebtCalculator;
 use App\Support\Access\PermissionName;
 use App\Support\CompanyPageContext;
@@ -221,6 +222,7 @@ class CompanyController extends Controller
         OneTimeServiceDebtCalculator $oneTimeDebtCalculator,
         DeleteCompany $deleteCompany,
         InvoiceBillingPeriodPresenter $billingPeriodPresenter,
+        InvoicePaymentSourceResolver $paymentSourceResolver,
     ) {
         Gate::authorize('view', $company);
 
@@ -244,12 +246,15 @@ class CompanyController extends Controller
         }
 
         if ($canViewInvoices) {
-            $relations['invoices'] = fn ($q) => $q
-                ->withSum([
+            $relations['invoices'] = function ($q) use ($paymentSourceResolver) {
+                $q->withSum([
                     'payments as confirmed_paid_amount' => fn ($paymentQuery) => $paymentQuery
                         ->where('status', 'confirmed'),
-                ], 'amount')
-                ->orderBy('due_date', 'desc');
+                ], 'amount');
+                $paymentSourceResolver->addAggregates($q->getQuery());
+
+                return $q->orderBy('due_date', 'desc');
+            };
         }
 
         if ($canViewPayments) {
@@ -316,6 +321,11 @@ class CompanyController extends Controller
 
                 return [$invoice->id => $billingPeriodPresenter->present($invoice, $lines)];
             });
+            $invoicePaymentSources = $company->invoices->mapWithKeys(
+                fn (Invoice $invoice): array => [
+                    $invoice->id => $paymentSourceResolver->fromAggregates($invoice),
+                ]
+            );
             $subscriptionPeriodDebtGroups = array_values(array_filter(array_map(
                 function (array $subscription): array {
                     $subscription['periods'] = array_values(array_map(
@@ -353,7 +363,8 @@ class CompanyController extends Controller
                 'subscriptionPeriodDebtAnomalyCount',
                 'oneTimeServiceDebts',
                 'oneTimeServiceDebtLines',
-                'invoiceBillingPeriods'
+                'invoiceBillingPeriods',
+                'invoicePaymentSources'
             );
         }
 
