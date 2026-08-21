@@ -579,6 +579,9 @@
                                             <div class="text-blue-600 font-medium mt-0.5">Переплата:
                                                 {{ number_format($invoice->overpayment_amount, 2) }} ₼</div>
                                         @endif
+                                        @if ((float) ($invoice->pending_amount ?? 0) > 0)
+                                            <div class="text-amber-600 font-medium mt-0.5">Ожидает подтверждения: {{ number_format((float) $invoice->pending_amount, 2) }} ₼</div>
+                                        @endif
                                         @if ($invoice->remaining_amount > 0)
                                             <div class="text-red-500 font-medium mt-0.5">Долг:
                                                 {{ number_format($invoice->remaining_amount, 2) }} ₼</div>

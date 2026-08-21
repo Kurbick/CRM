@@ -359,6 +359,7 @@
                             $appliedAmount = $invoice->applied_amount;
                             $overpaymentAmount = $invoice->overpayment_amount;
                             $remainingAmount = $invoice->remaining_amount;
+                            $pendingAmount = (float) ($invoice->pending_amount ?? 0);
                             $paymentSource = $invoicePaymentSources->get($invoice->id);
                         @endphp
                         <x-tables.clickable-row :url="route('invoices.show', $invoice)" :label="'Открыть инвойс '.$invoice->invoice_number">
@@ -436,6 +437,13 @@
                                         <div class="text-blue-600 font-medium mt-0.5">
                                             Переплата:
                                             {{ $formatMoney($overpaymentAmount) }}
+                                        </div>
+                                    @endif
+
+                                    @if ($pendingAmount > 0)
+                                        <div class="mt-0.5 font-medium text-amber-600">
+                                            Ожидает подтверждения:
+                                            {{ $formatMoney($pendingAmount) }}
                                         </div>
                                     @endif
 

@@ -318,10 +318,11 @@
                             <div class="crm-table-scroll">
                                 <table class="crm-table min-w-[620px] table-fixed">
                                     <colgroup>
-                                        <col class="w-[20%]">
+                                        <col class="w-[13%]">
+                                        <col class="w-[15%]">
                                         <col class="w-[22%]">
-                                        <col class="w-[34%]">
-                                        <col class="w-[24%]">
+                                        <col class="w-[21%]">
+                                        <col class="w-[29%]">
                                     </colgroup>
                                     <thead>
                                         <tr>
@@ -332,8 +333,20 @@
                                             <th></th>
                                         </tr>
                                     </thead>
-                                    <tbody>
                                         @foreach ($paymentBreakdown['paymentRows'] as $paymentRow)
+                                            @php
+                                                $payment = $paymentsById->get($paymentRow['id']);
+                                                $isCreditBalancePayment = in_array(
+                                                    $paymentRow['id'],
+                                                    $paymentSource['credit_balance_payment_ids'],
+                                                    true
+                                                );
+                                                $shouldOpenTableCancellation =
+                                                    $errors->has('cancel_reason') &&
+                                                    (string) old('cancel_payment_id') === (string) $payment->id;
+                                            @endphp
+                                            <tbody x-data="{ cancelOpen: @js($shouldOpenTableCancellation), cancelSubmitting: false }"
+                                                x-on:keydown.escape="cancelOpen = false">
                                             <tr>
                                                 <td class="crm-table-date">
                                                     {{ $paymentRow['payment_date'] ? \Illuminate\Support\Carbon::parse($paymentRow['payment_date'])->format('d/m/Y') : '—' }}
@@ -351,9 +364,90 @@
                                                 <td>
                                                     @include('partials.badge', ['status' => $paymentRow['status']])
                                                 </td>
+                                                <td data-testid="invoice-payment-actions-{{ $payment->id }}" class="px-1 text-right">
+                                                    @if ($payment->status === 'pending')
+                                                    <div class="flex flex-wrap justify-end gap-1.5 text-xs font-medium">
+                                                            @can('confirm', $payment)
+                                                                <form action="{{ route('payments.confirm', $payment) }}" method="POST"
+                                                                    onsubmit="return confirm('Подтвердить этот платёж? После подтверждения сумма оплаты, статус инвойса и Credit Balance будут пересчитаны.')">
+                                                                    @csrf
+                                                                    @method('PATCH')
+                                                                    <button type="submit" data-testid="invoice-payment-confirm-action"
+                                                                        class="inline-flex !h-9 !min-h-0 !w-24 shrink-0 items-center justify-center whitespace-nowrap !rounded-md border !px-0 !py-0 !text-sm !font-medium transition focus:outline-none focus:ring-2 focus:ring-offset-1 border-green-200 bg-green-50 text-green-700 hover:bg-green-100 focus:ring-green-500">
+                                                                        Подтвердить
+                                                                    </button>
+                                                                </form>
+                                                            @endcan
+
+                                                            @can('cancel', $payment)
+                                                                @if (!$isCreditBalancePayment)
+                                                                        <button type="button" data-testid="invoice-payment-cancel-action" x-show="!cancelOpen"
+                                                                            class="inline-flex !h-9 !min-h-0 !w-24 shrink-0 items-center justify-center whitespace-nowrap !rounded-md border !px-0 !py-0 !text-sm !font-medium transition focus:outline-none focus:ring-2 focus:ring-offset-1 border-red-200 bg-red-50 text-red-700 hover:bg-red-100 focus:ring-red-500"
+                                                                            @click="cancelOpen = true; $nextTick(() => $refs.tableCancelReason.focus())">
+                                                                        Отменить
+                                                                    </button>
+                                                                @endif
+                                                            @endcan
+                                                        </div>
+
+                                                    @endif
+                                                </td>
                                             </tr>
+                                            @if ($payment->status === 'pending')
+                                                @can('cancel', $payment)
+                                                    @if (!$isCreditBalancePayment)
+                                                        <tr x-show="cancelOpen" x-cloak
+                                                            data-testid="invoice-payment-cancel-row-{{ $payment->id }}">
+                                                        <td colspan="5" class="bg-slate-50/70 px-3 py-3">
+                                                            <form action="{{ route('payments.cancel', $payment) }}" method="POST"
+                                                                class="space-y-2 text-left"
+                                                                x-on:submit="
+                                                                    const reason = $event.currentTarget.elements.cancel_reason.value.trim();
+                                                                    if (cancelSubmitting || reason === '' || !$event.currentTarget.checkValidity()) {
+                                                                        $event.preventDefault();
+                                                                        $event.currentTarget.reportValidity();
+                                                                        return;
+                                                                    }
+                                                                    if (!confirm('Отменить этот платёж? Он останется в истории, а суммы инвойса и Credit Balance будут пересчитаны.')) {
+                                                                        $event.preventDefault();
+                                                                        return;
+                                                                    }
+                                                                    cancelSubmitting = true;
+                                                                ">
+                                                                @csrf
+                                                                @method('PATCH')
+                                                                <input type="hidden" name="cancel_payment_id" value="{{ $payment->id }}">
+                                                                <label class="block text-xs font-semibold text-red-700" for="table_cancel_reason_{{ $payment->id }}">
+                                                                    Причина отмены
+                                                                </label>
+                                                                <input id="table_cancel_reason_{{ $payment->id }}" name="cancel_reason"
+                                                                    x-ref="tableCancelReason" required minlength="3" maxlength="1000"
+                                                                    value="{{ $shouldOpenTableCancellation ? old('cancel_reason') : '' }}"
+                                                                    placeholder="Причина отмены"
+                                                                    class="w-full rounded-md border border-red-200 bg-white px-2 py-1.5 text-xs text-gray-700 outline-none focus:border-red-400 focus:ring-1 focus:ring-red-300">
+                                                                @if ($shouldOpenTableCancellation)
+                                                                    @error('cancel_reason')
+                                                                        <p class="text-left text-xs text-red-600">{{ $message }}</p>
+                                                                    @enderror
+                                                                @endif
+                                                                <div class="flex flex-wrap justify-end gap-2">
+                                                                    <button type="button" @click="cancelOpen = false"
+                                                                        class="inline-flex h-7 items-center rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-600 transition hover:bg-gray-50 hover:text-gray-900">
+                                                                        Не отменять
+                                                                    </button>
+                                                                    <button type="submit" :disabled="cancelSubmitting"
+                                                                        class="inline-flex h-7 items-center rounded-md border border-red-200 bg-red-50 px-1.5 py-1 text-[11px] font-medium text-red-700 transition hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1">
+                                                                        Подтвердить отмену
+                                                                    </button>
+                                                                </div>
+                                                            </form>
+                                                        </td>
+                                                        </tr>
+                                                    @endif
+                                                @endcan
+                                            @endif
+                                            </tbody>
                                         @endforeach
-                                    </tbody>
                                 </table>
                             </div>
                         @else
@@ -379,6 +473,16 @@
                             {{ $formatMoney($invoice->applied_amount) }}
                         </span>
                     </div>
+
+                    @if ($paymentAvailability['pending_minor'] > 0)
+                        <div class="flex justify-between w-64 text-amber-600">
+                            <span>Ожидает подтверждения:</span>
+
+                            <span class="font-bold font-mono">
+                                {{ $formatMoney($paymentAvailability['pending_minor'] / 100) }}
+                            </span>
+                        </div>
+                    @endif
 
                     @can('viewAny', \App\Models\Payment::class)
                         @if ($paymentSource['credit_balance_applied_minor'] > 0)
@@ -607,7 +711,15 @@
                                 class="w-full px-3 py-2 border @error('amount') border-red-300 @else border-gray-200 @enderror rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition font-mono"
                                 placeholder="0.00">
                             <p class="text-[10px] text-gray-400 mt-1">Остаток к оплате:
+                                {{ $formatMoney($paymentAvailability['remaining_minor'] / 100) }}</p>
+                            <p class="text-[10px] text-gray-400 mt-1">Доступно для нового платежа:
                                 {{ $formatMoney($paymentAvailability['available_amount']) }}</p>
+                            @if ($paymentAvailability['available_minor'] === 0 && $paymentAvailability['pending_minor'] > 0)
+                                <p class="mt-2 text-xs leading-5 text-amber-700">
+                                    Весь остаток уже зарезервирован ожидающим платежом.<br>
+                                    Подтвердите или отмените ожидающий платёж ниже.
+                                </p>
+                            @endif
                             @error('amount')
                                 <p class="text-xs text-red-500 mt-1">{{ $message }}</p>
                             @enderror
@@ -840,12 +952,11 @@
                         @endphp
 
                         <div x-data="{ cancelOpen: @js($shouldOpenCancellation), allocationOpen: false, cancelSubmitting: false }"
+                            x-on:keydown.escape="cancelOpen = false"
                             class="min-w-0 overflow-hidden rounded-lg border border-gray-200 p-4 text-sm">
 
                             <div class="flex items-center justify-between gap-3">
-                                <span
-                                    class="font-semibold font-mono
-                                        {{ $payment->status === 'cancelled' ? 'text-gray-400 line-through' : 'text-gray-900' }}">
+                                <span class="font-semibold font-mono text-gray-900">
 
                                     {{ $formatMoney($paymentRow['amount']) }}
                                 </span>
@@ -855,10 +966,12 @@
                                 ])
                             </div>
 
-                            <div class="flex justify-between gap-3 text-xs text-gray-400 mt-1">
+                            <div class="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-gray-400">
                                 <span>
                                     {{ $payment->payment_date ? \Illuminate\Support\Carbon::parse($payment->payment_date)->format('d/m/Y') : '—' }}
                                 </span>
+
+                                <span aria-hidden="true">·</span>
 
                                 <span class="font-medium">
                                     {{ $paymentRow['payment_method_label'] }}
@@ -959,65 +1072,51 @@
 
                             {{-- Данные отменённого платежа --}}
                             @if ($payment->status === 'cancelled')
-                                <div class="mt-2 space-y-1 border-t border-red-100 pt-2 text-xs text-red-600">
-                                    @if ($payment->cancelled_at)
-                                        <p>
-                                            Отменён: {{ $displayDateTime->format($payment->cancelled_at, 'd/m/Y H:i') }}
-                                        </p>
-                                    @endif
-
+                                <div data-testid="invoice-history-cancellation-{{ $payment->id }}" class="mt-2 text-xs text-red-600">
+                                    <span>Отменён:</span>
+                                    {{ $payment->cancelled_at ? $displayDateTime->format($payment->cancelled_at, 'd/m/Y H:i') : '—' }}
                                     @if ($payment->cancel_reason)
-                                        <p class="whitespace-pre-line">
-                                            Причина: {{ $payment->cancel_reason }}
-                                        </p>
+                                        <span class="text-red-400"> · </span>
+                                        <span>Причина: {{ $payment->cancel_reason }}</span>
                                     @endif
                                 </div>
                             @endif
 
-                            {{-- Подтверждение ожидающего платежа --}}
-                            @can('confirm', $payment)
-                            @if ($payment->status === 'pending')
-                                <div class="mt-3">
-                                    <form action="{{ route('payments.confirm', $payment) }}" method="POST"
-                                        onsubmit="return confirm('Подтвердить этот платёж? После подтверждения сумма оплаты, статус инвойса и Credit Balance будут пересчитаны.')">
+                            @if (in_array($payment->status, ['pending', 'confirmed'], true))
+                                <div data-testid="invoice-history-actions-{{ $payment->id }}"
+                                    class="mt-3 flex flex-wrap items-center gap-1.5 border-t border-gray-100 pt-3 text-xs font-medium">
+                                    @if ($payment->status === 'pending')
+                                        @can('confirm', $payment)
+                                            <form action="{{ route('payments.confirm', $payment) }}" method="POST"
+                                                onsubmit="return confirm('Подтвердить этот платёж? После подтверждения сумма оплаты, статус инвойса и Credit Balance будут пересчитаны.')">
+                                                @csrf
+                                                @method('PATCH')
+                                                <button type="submit" data-testid="invoice-history-confirm-action"
+                                                    class="inline-flex !h-9 !min-h-0 !w-24 shrink-0 items-center justify-center whitespace-nowrap !rounded-md border !px-0 !py-0 !text-sm !font-medium transition focus:outline-none focus:ring-2 focus:ring-offset-1 border-green-200 bg-green-50 text-green-700 hover:bg-green-100 focus:ring-green-500">
+                                                    Подтвердить
+                                                </button>
+                                            </form>
+                                        @endcan
+                                    @endif
 
-                                        @csrf
-                                        @method('PATCH')
-
-                                        <button type="submit"
-                                            class="inline-flex items-center rounded-lg
-                       border border-green-200 bg-green-50
-                       px-3 py-2 text-xs font-medium text-green-700
-                       hover:bg-green-100 transition">
-
-                                            <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor"
-                                                viewBox="0 0 24 24">
-
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M5 13l4 4L19 7" />
-                                            </svg>
-
-                                            Подтвердить платёж
-                                        </button>
-                                    </form>
+                                    @can('cancel', $payment)
+                                        @if (!$isCreditBalancePayment)
+                                            <button type="button" data-testid="invoice-history-cancel-action" x-show="!cancelOpen"
+                                                class="inline-flex !h-9 !min-h-0 !w-24 shrink-0 items-center justify-center whitespace-nowrap !rounded-md border !px-0 !py-0 !text-sm !font-medium transition focus:outline-none focus:ring-2 focus:ring-offset-1 border-red-200 bg-red-50 text-red-700 hover:bg-red-100 focus:ring-red-500"
+                                                @click="cancelOpen = true; $nextTick(() => $refs.cancelReason.focus())">
+                                                Отменить
+                                            </button>
+                                        @endif
+                                    @endcan
                                 </div>
                             @endif
-                            @endcan
 
                             {{-- Отмена обычного ожидающего или подтверждённого платежа --}}
                             @can('cancel', $payment)
                             @if (in_array($payment->status, ['pending', 'confirmed'], true) && !$isCreditBalancePayment)
-                                <div class="mt-3">
-                                    <button type="button" x-show="!cancelOpen"
-                                        @click="cancelOpen = true; $nextTick(() => $refs.cancelReason.focus())"
-                                        class="text-xs font-medium text-red-600 hover:text-red-800 transition">
-
-                                        Отменить платёж
-                                    </button>
-
-                                    <form x-show="cancelOpen" x-cloak action="{{ route('payments.cancel', $payment) }}"
+                                <form x-show="cancelOpen" x-cloak action="{{ route('payments.cancel', $payment) }}"
                                         method="POST"
-                                        class="mt-3 space-y-3 rounded-lg border border-red-100 bg-red-50 p-3"
+                                        class="mt-3 space-y-2 border-t border-red-100 pt-3"
                                         x-on:submit="
                                             const reason = $event.currentTarget.elements.cancel_reason.value.trim();
                                             if (cancelSubmitting || reason === '' || !$event.currentTarget.checkValidity()) {
@@ -1045,7 +1144,7 @@
                                                 <span class="text-red-500">*</span>
                                             </label>
 
-                                            <textarea id="cancel_reason_{{ $payment->id }}" name="cancel_reason" rows="3" required minlength="3"
+                                            <textarea id="cancel_reason_{{ $payment->id }}" name="cancel_reason" rows="2" required minlength="3"
                                                 maxlength="1000"
                                                 x-ref="cancelReason"
                                                 x-on:keydown.enter="
@@ -1070,23 +1169,20 @@
                                             @endif
                                         </div>
 
-                                        <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                                        <div class="flex flex-wrap justify-end gap-2">
                                             <button type="button" @click="cancelOpen = false"
-                                                class="px-3 py-2 text-xs font-medium text-gray-600
-                                                       hover:text-gray-900 transition">
+                                                class="inline-flex h-7 items-center rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-600 transition hover:bg-gray-50 hover:text-gray-900">
 
                                                 Не отменять
                                             </button>
 
                                             <button type="submit" :disabled="cancelSubmitting"
-                                                class="rounded-lg bg-red-600 px-3 py-2 text-xs
-                                                       font-medium text-white hover:bg-red-700 transition">
+                                                class="inline-flex h-7 items-center rounded-md border border-red-200 bg-red-50 px-1.5 py-1 text-[11px] font-medium text-red-700 transition hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1">
 
                                                 Подтвердить отмену
                                             </button>
                                         </div>
                                     </form>
-                                </div>
                             @endif
                             @endcan
                         </div>

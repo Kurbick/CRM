@@ -142,6 +142,59 @@ class InvoiceShowViewTest extends TestCase
         $this->assertStringNotContainsString('$event.currentTarget.form.submit();', $source);
     }
 
+    public function test_pending_payment_table_actions_are_compact_inline_and_cancel_form_uses_full_width_row(): void
+    {
+        $source = file_get_contents(resource_path('views/invoices/show.blade.php'));
+        $table = substr($source, strpos($source, '<table class="crm-table min-w-[620px] table-fixed">'));
+        $table = substr($table, 0, strpos($table, '</table>'));
+
+        $this->assertStringContainsString('<col class="w-[29%]">', $table);
+        $sharedActionSizing = 'inline-flex !h-9 !min-h-0 !w-24 shrink-0 items-center justify-center whitespace-nowrap !rounded-md border !px-0 !py-0 !text-sm !font-medium';
+        $this->assertSame(4, substr_count($source, $sharedActionSizing));
+        $this->assertStringNotContainsString('min-w-', $sharedActionSizing);
+        $this->assertStringContainsString('class="px-1 text-right"', $table);
+        $this->assertStringContainsString('class="flex flex-wrap justify-end gap-1.5', $table);
+        $this->assertStringContainsString('data-testid="invoice-payment-confirm-action"', $table);
+        $this->assertStringContainsString('data-testid="invoice-payment-cancel-action"', $table);
+        $this->assertStringContainsString('data-testid="invoice-payment-cancel-row-{{ $payment->id }}"', $table);
+        $this->assertStringContainsString('<td colspan="5"', $table);
+        $this->assertStringContainsString('class="w-full rounded-md border border-red-200', $table);
+
+        $cancelFormPosition = strpos($table, '<form action="{{ route(\'payments.cancel\', $payment) }}"');
+        $mainActionCellEnd = strpos($table, '</td>', strpos($table, 'data-testid="invoice-payment-actions-'));
+        $cancelRowPosition = strpos($table, 'data-testid="invoice-payment-cancel-row-');
+
+        $this->assertNotFalse($cancelFormPosition);
+        $this->assertNotFalse($mainActionCellEnd);
+        $this->assertNotFalse($cancelRowPosition);
+        $this->assertGreaterThan($mainActionCellEnd, $cancelRowPosition);
+        $this->assertGreaterThan($cancelRowPosition, $cancelFormPosition);
+    }
+
+    public function test_payment_history_keeps_actions_in_a_footer_and_preserves_cancellation_metadata(): void
+    {
+        $source = file_get_contents(resource_path('views/invoices/show.blade.php'));
+        $history = substr($source, strpos($source, 'id="payment-history-list"'));
+
+        $this->assertStringContainsString('class="font-semibold font-mono text-gray-900"', $history);
+        $this->assertStringContainsString('class="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-gray-400"', $history);
+        $this->assertStringContainsString('class="mt-3 flex flex-wrap items-center gap-1.5 border-t border-gray-100 pt-3', $history);
+        $this->assertStringContainsString('data-testid="invoice-history-confirm-action"', $history);
+        $this->assertStringContainsString('data-testid="invoice-history-cancel-action"', $history);
+        $this->assertStringContainsString('data-testid="invoice-history-cancellation-{{ $payment->id }}"', $history);
+        $this->assertStringContainsString('class="mt-3 space-y-2 border-t border-red-100 pt-3"', $history);
+        $this->assertStringContainsString('textarea id="cancel_reason_{{ $payment->id }}"', $history);
+        $this->assertStringNotContainsString('text-gray-400 line-through', $history);
+        $this->assertStringNotContainsString('rounded-lg border border-red-100 bg-red-50 p-3', $history);
+
+        $amountPosition = strpos($history, 'class="font-semibold font-mono text-gray-900"');
+        $actionsPosition = strpos($history, 'data-testid="invoice-history-actions-');
+        $metadataPosition = strpos($history, 'data-testid="invoice-history-cancellation-');
+
+        $this->assertGreaterThan($amountPosition, $actionsPosition);
+        $this->assertGreaterThan($metadataPosition, $actionsPosition);
+    }
+
     public function test_payment_details_drawer_remains_accessible_without_duplicate_history_summary(): void
     {
         $source = file_get_contents(resource_path('views/invoices/show.blade.php'));

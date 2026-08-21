@@ -129,7 +129,8 @@ class PaymentAuthorizationTest extends AuthorizationTestCase
             ->assertSee('Зарегистрировать платеж')
             ->assertDontSee('SECRET-PAYMENT-COMMENT')
             ->assertDontSee('История платежей')
-            ->assertDontSee('87,65')
+            ->assertSee('Ожидает подтверждения')
+            ->assertSee('87,65')
             ->assertDontSee('17/06/2026')
             ->assertDontSee('Карта');
 
@@ -170,7 +171,7 @@ class PaymentAuthorizationTest extends AuthorizationTestCase
             ->assertDontSee('Отменить платёж')
             ->assertDontSee('История платежей')
             ->assertDontSee('CONFIRM-ACTION-SECRET')
-            ->assertDontSee('86,54')
+            ->assertSee('86,54')
             ->assertDontSee('18/06/2026')
             ->assertDontSee('Карта');
 
@@ -222,7 +223,7 @@ class PaymentAuthorizationTest extends AuthorizationTestCase
             ->assertDontSee('CREDIT-ACTION-SECRET')
             ->assertDontSee('CREDIT-BALANCE-ACTION-DETAIL')
             ->assertDontSee('Из баланса')
-            ->assertDontSee('76,43')
+            ->assertSee('76,43')
             ->assertDontSee('19/06/2026')
             ->assertDontSee('Наличные');
     }
@@ -284,8 +285,7 @@ class PaymentAuthorizationTest extends AuthorizationTestCase
             ->assertDontSee('APPLIED-REVERSAL-SECRET')
             ->assertDontSee('APPLIED-ENTRY-SECRET')
             ->assertDontSee('APPLIED-REVERSAL-ENTRY-SECRET')
-            ->assertDontSee('64,32')
-            ->assertDontSee('64.32')
+            ->assertSee('64,32')
             ->assertDontSee('20/06/2026')
             ->assertDontSee('2026-06-20')
             ->assertDontSee('card')
@@ -316,8 +316,7 @@ class PaymentAuthorizationTest extends AuthorizationTestCase
             ->assertDontSee(route('payments.cancel', $payment), false)
             ->assertDontSee('SECRET-LEGACY-CREDIT')
             ->assertDontSee('Автоматически применён Credit Balance')
-            ->assertDontSee('63,41')
-            ->assertDontSee('63.41')
+            ->assertSee('63,41')
             ->assertDontSee('21/06/2026')
             ->assertDontSee('2026-06-21')
             ->assertDontSee('card')
@@ -335,13 +334,13 @@ class PaymentAuthorizationTest extends AuthorizationTestCase
 
         $this->actingAsPermissions([...$base, PermissionName::PaymentsConfirm->value]);
         $this->get(route('invoices.show', $invoice))
-            ->assertSee('Подтвердить платёж')
-            ->assertDontSee('Отменить платёж');
+            ->assertSee('data-testid="invoice-payment-confirm-action"', false)
+            ->assertDontSee('data-testid="invoice-payment-cancel-action"', false);
 
         $this->actingAsPermissions([...$base, PermissionName::PaymentsCancel->value]);
         $this->get(route('invoices.show', $invoice))
-            ->assertDontSee('Подтвердить платёж')
-            ->assertSee('Отменить платёж');
+            ->assertDontSee('data-testid="invoice-payment-confirm-action"', false)
+            ->assertSee('data-testid="invoice-payment-cancel-action"', false);
 
         $confirmedInvoice = $this->invoice('paid', 'CONFIRMED-UI');
         $this->payment($confirmedInvoice, 'confirmed');
@@ -350,6 +349,6 @@ class PaymentAuthorizationTest extends AuthorizationTestCase
             PermissionName::PaymentsConfirm->value,
         ]);
         $this->get(route('invoices.show', $confirmedInvoice))
-            ->assertDontSee('Подтвердить платёж');
+            ->assertDontSee('data-testid="invoice-payment-confirm-action"', false);
     }
 }

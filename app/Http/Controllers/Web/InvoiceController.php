@@ -66,6 +66,11 @@ class InvoiceController extends Controller
                     $paymentQuery->where('status', 'confirmed');
                 },
             ], 'amount');
+        $query->withSum([
+            'payments as pending_amount' => function ($paymentQuery) {
+                $paymentQuery->where('status', 'pending');
+            },
+        ], 'amount');
 
         $this->paymentSourceResolver->addAggregates($query);
 

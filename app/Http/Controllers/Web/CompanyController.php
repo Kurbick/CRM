@@ -251,6 +251,10 @@ class CompanyController extends Controller
                     'payments as confirmed_paid_amount' => fn ($paymentQuery) => $paymentQuery
                         ->where('status', 'confirmed'),
                 ], 'amount');
+                $q->withSum([
+                    'payments as pending_amount' => fn ($paymentQuery) => $paymentQuery
+                        ->where('status', 'pending'),
+                ], 'amount');
                 $paymentSourceResolver->addAggregates($q->getQuery());
 
                 return $q->orderBy('due_date', 'desc');

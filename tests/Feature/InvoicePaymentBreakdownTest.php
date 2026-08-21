@@ -154,12 +154,32 @@ class InvoicePaymentBreakdownTest extends TestCase
 
         Model::preventLazyLoading();
         try {
-            $this->get(route('invoices.show', $invoice))
+            $response = $this->get(route('invoices.show', $invoice))
                 ->assertOk()
                 ->assertSee(route('payments.confirm', $payment), false)
                 ->assertSee(route('payments.cancel', $payment), false)
+                ->assertSee('invoice-payment-actions-'.$payment->id, false)
+                ->assertSee('invoice-history-actions-'.$payment->id, false)
                 ->assertSee('overflow-x-auto', false)
                 ->assertSee('print:hidden', false);
+
+            $sharedSizing = 'inline-flex !h-9 !min-h-0 !w-24 shrink-0 items-center justify-center whitespace-nowrap !rounded-md border !px-0 !py-0 !text-sm !font-medium';
+            foreach ([
+                'invoice-payment-confirm-action',
+                'invoice-payment-cancel-action',
+                'invoice-history-confirm-action',
+                'invoice-history-cancel-action',
+            ] as $testId) {
+                $matched = preg_match(
+                    '/data-testid="'.preg_quote($testId, '/').'"[^>]*class="([^"]+)"/s',
+                    $response->getContent(),
+                    $classes
+                );
+
+                $this->assertSame(1, $matched, "Missing rendered classes for {$testId}.");
+                $this->assertStringStartsWith($sharedSizing, $classes[1]);
+                $this->assertStringNotContainsString('min-w-', $classes[1]);
+            }
         } finally {
             Model::preventLazyLoading(false);
         }
@@ -173,7 +193,7 @@ class InvoicePaymentBreakdownTest extends TestCase
         for ($number = 1; $number <= 5; $number++) {
             $this->payment($invoice, 'cancelled', '1.00', "Отменённый {$number}");
         }
-        $this->payment($invoice, 'pending', '2.00', 'Ожидающий');
+        $pending = $this->payment($invoice, 'pending', '2.00', 'Ожидающий');
         $confirmed = $this->payment($invoice, 'confirmed', '10.00', 'Подтверждённый');
         $this->allocation($confirmed, $line, '10.00');
 
@@ -192,6 +212,10 @@ class InvoicePaymentBreakdownTest extends TestCase
             ->assertSee('Отменённый 5')
             ->assertSee('Ожидающий')
             ->assertSee('Подтверждённый')
+            ->assertSee('invoice-history-actions-'.$pending->id, false)
+            ->assertSee('invoice-history-cancellation-', false)
+            ->assertSee('Отменён:')
+            ->assertSee('Причина: Ошибка')
             ->assertDontSeeText('element.offsetParent !== null')
             ->assertDontSeeText('event.preventDefault()');
         $this->assertSame(7, $breakdown['payments_count']);

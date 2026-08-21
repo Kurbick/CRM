@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Support\Access\PermissionName;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\Feature\FinancialTestCase as TestCase;
@@ -20,10 +21,13 @@ class InvoicePendingPaymentAvailabilityTest extends TestCase
         $this->get(route('invoices.show', $invoice))->assertOk()
             ->assertSee('value="100.00"', false)
             ->assertSee('Остаток к оплате:')
+            ->assertSee('600,00 ₼')
+            ->assertSee('Доступно для нового платежа:')
             ->assertSee('100,00 ₼')
+            ->assertSee('Ожидает подтверждения:')
+            ->assertSee('500,00 ₼')
             ->assertSee('Оплачено:')
-            ->assertSee('0,00 ₼')
-            ->assertSee('600,00 ₼');
+            ->assertSee('0,00 ₼');
 
         $invoice->refresh()->load('payments');
         $this->assertSame(0.0, $invoice->paid_amount);
@@ -39,7 +43,9 @@ class InvoicePendingPaymentAvailabilityTest extends TestCase
 
         $this->get(route('invoices.show', $invoice))->assertOk()
             ->assertSee('value="100.00"', false)
-            ->assertSee('100,00 ₼');
+            ->assertSee('100,00 ₼')
+            ->assertSee('Ожидает подтверждения:')
+            ->assertSee('500,00 ₼');
     }
 
     public function test_confirmed_and_pending_amounts_are_kept_separate(): void
@@ -58,7 +64,12 @@ class InvoicePendingPaymentAvailabilityTest extends TestCase
         $this->get(route('invoices.show', $invoice))->assertOk()
             ->assertSee('value="100.00"', false)
             ->assertSee('200,00 ₼')
-            ->assertSee('400,00 ₼');
+            ->assertSee('300,00 ₼')
+            ->assertSee('400,00 ₼')
+            ->assertSee('Доступно для нового платежа:')
+            ->assertSee('100,00 ₼');
+
+        $this->assertSame('partially_paid', $invoice->fresh()->status);
     }
 
     public function test_old_payment_amount_is_preserved_after_validation_error(): void
@@ -129,6 +140,82 @@ class InvoicePendingPaymentAvailabilityTest extends TestCase
         $this->get(route('invoices.show', $invoice))->assertOk()
             ->assertSee('value="100.00"', false)
             ->assertSee('100,00 ₼');
+    }
+
+    public function test_confirming_or_cancelling_one_pending_payment_preserves_other_reservations(): void
+    {
+        $invoice = $this->invoice('1000.00');
+        $first = $this->payment($invoice, 'pending', '300.00');
+        $second = $this->payment($invoice, 'pending', '200.00');
+
+        $this->patch(route('payments.confirm', $first))
+            ->assertRedirect(route('invoices.show', $invoice));
+
+        $this->assertSame('confirmed', $first->fresh()->status);
+        $this->assertSame('pending', $second->fresh()->status);
+        $this->assertSame('partially_paid', $invoice->fresh()->status);
+
+        $this->get(route('invoices.show', $invoice))->assertOk()
+            ->assertSee('300,00 ₼')
+            ->assertSee('200,00 ₼')
+            ->assertSee('700,00 ₼')
+            ->assertSee('500,00 ₼');
+
+        $this->patch(route('payments.cancel', $second), [
+            'cancel_payment_id' => $second->id,
+            'cancel_reason' => 'Проверка отдельной отмены ожидания',
+        ])->assertRedirect(route('invoices.show', $invoice));
+
+        $this->assertSame('confirmed', $first->fresh()->status);
+        $this->assertSame('cancelled', $second->fresh()->status);
+        $this->assertSame('partially_paid', $invoice->fresh()->status);
+
+        $this->get(route('invoices.show', $invoice))->assertOk()
+            ->assertSee('300,00 ₼')
+            ->assertSee('700,00 ₼')
+            ->assertDontSee('Ожидает подтверждения:');
+    }
+
+    public function test_fully_pending_reservation_keeps_debt_visible_and_explains_disabled_form(): void
+    {
+        $invoice = $this->invoice('600.00');
+        $this->payment($invoice, 'pending', '600.00');
+
+        $this->get(route('invoices.show', $invoice))->assertOk()
+            ->assertSee('Выставлен')
+            ->assertSee('Остаток к оплате:')
+            ->assertSee('600,00 ₼')
+            ->assertSee('Ожидает подтверждения:')
+            ->assertSee('Доступно для нового платежа:')
+            ->assertSee('0,00 ₼')
+            ->assertSee('Весь остаток уже зарезервирован ожидающим платежом.')
+            ->assertSee('Подтвердите или отмените ожидающий платёж ниже.')
+            ->assertSee('disabled', false);
+
+        $this->assertSame('issued', $invoice->fresh()->status);
+        $this->assertSame(600.0, $invoice->fresh()->remaining_amount);
+    }
+
+    public function test_pending_amount_is_visible_on_invoice_index_and_company_invoices(): void
+    {
+        $invoice = $this->invoice('600.00');
+        $this->payment($invoice, 'pending', '500.00');
+
+        $this->get(route('invoices.index'))->assertOk()
+            ->assertSee('Ожидает подтверждения:')
+            ->assertSee('500,00 ₼')
+            ->assertSee('Выставлен');
+
+        $this->authenticatedUser->givePermissionTo([
+            PermissionName::CompaniesView->value,
+            PermissionName::CompaniesFinancialsView->value,
+        ]);
+        $this->get(route('companies.show', [
+            'company' => $invoice->company,
+            'tab' => 'invoices',
+        ]))->assertOk()
+            ->assertSee('Ожидает подтверждения:')
+            ->assertSee('500.00 ₼');
     }
 
     public function test_without_pending_existing_overpayment_remains_supported(): void
