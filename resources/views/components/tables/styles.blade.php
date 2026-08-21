@@ -119,6 +119,66 @@
         white-space: nowrap;
     }
 
+    .crm-table-icon-action {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2rem;
+        height: 2rem;
+        min-width: 2rem;
+        min-height: 2rem;
+        max-width: 2rem;
+        max-height: 2rem;
+        flex: 0 0 2rem;
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        border-width: 1px;
+        border-style: solid;
+        border-radius: 0.375rem;
+        line-height: 1;
+        vertical-align: middle;
+        background: #fff;
+        appearance: none;
+        transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
+    }
+
+    .crm-table-icon-action > svg {
+        display: block;
+        width: 1rem;
+        height: 1rem;
+        min-width: 1rem;
+        min-height: 1rem;
+        flex: none;
+    }
+
+    .crm-table-icon-action:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 2px #fff, 0 0 0 4px rgb(37 99 235 / 0.35);
+    }
+
+    .crm-table-icon-action-primary {
+        border-color: #bfdbfe;
+        color: #2563eb;
+    }
+
+    .crm-table-icon-action-primary:hover {
+        border-color: #93c5fd;
+        background: #eff6ff;
+        color: #1d4ed8;
+    }
+
+    .crm-table-icon-action-danger {
+        border-color: #fecaca;
+        color: #dc2626;
+    }
+
+    .crm-table-icon-action-danger:hover {
+        border-color: #fca5a5;
+        background: #fef2f2;
+        color: #b91c1c;
+    }
+
     .crm-table-action-link {
         color: #2563eb;
         font-size: 0.75rem;

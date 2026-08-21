@@ -41,14 +41,33 @@ class ContractSubjectFormWorkspaceTest extends AuthorizationTestCase
             ->assertSee('data-testid="contract-form-workspace"', false);
 
         $selectorUrl = route('contracts.subjects.create', $contract);
-        $this->get($selectorUrl)
+        $selectorResponse = $this->get($selectorUrl)
             ->assertOk()
             ->assertSee('Назад к договору')
             ->assertSee('data-testid="contract-subject-selector"', false)
+            ->assertSee('data-testid="contract-subject-order-option"', false)
+            ->assertSee('data-testid="contract-subject-subscription-option"', false)
+            ->assertSee('data-testid="contract-subject-order-icon"', false)
+            ->assertSee('data-testid="contract-subject-subscription-icon"', false)
             ->assertSee(route('contracts.orders.create', $contract))
             ->assertSee(route('contracts.subscriptions.create', $contract))
             ->assertDontSee('w-full max-w-2xl rounded-lg border border-gray-200 bg-white', false)
             ->assertDontSee('min-h-16 items-center rounded-lg', false);
+
+        $selectorOptionClasses = 'group flex h-[68px] cursor-pointer items-center gap-3 rounded-md border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 transition hover:border-blue-400 hover:bg-blue-50/50 focus-visible:border-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 active:border-blue-600 active:bg-blue-50';
+        $selectorMarkup = substr(
+            $selectorResponse->getContent(),
+            strpos($selectorResponse->getContent(), 'data-testid="contract-subject-selector"')
+        );
+        $selectorMarkup = substr($selectorMarkup, 0, strpos($selectorMarkup, '</section>'));
+        $this->assertSame(2, substr_count($selectorMarkup, $selectorOptionClasses));
+        $this->assertSame(2, substr_count($selectorMarkup, 'flex h-10 w-10 shrink-0 items-center justify-center rounded-md'));
+        $this->assertSame(2, substr_count($selectorMarkup, '<svg class="h-5 w-5"'));
+        $this->assertSame(2, substr_count($selectorMarkup, 'data-testid="contract-subject-choice-indicator"'));
+        $this->assertSame(2, substr_count($selectorMarkup, 'group-active:scale-100'));
+        $this->assertStringNotContainsString('M5 13l4 4L19 7', $selectorMarkup);
+        $this->assertStringNotContainsString('Единоразовая работа', $selectorMarkup);
+        $this->assertStringNotContainsString('Регулярные начисления', $selectorMarkup);
 
         $this->get(route('contracts.orders.create', $contract))
             ->assertOk()

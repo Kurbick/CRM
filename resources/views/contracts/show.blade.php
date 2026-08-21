@@ -43,8 +43,6 @@
             ],
         };
 
-        $hasContractContext = filled($contract->comment);
-
         $services = collect();
 
         foreach ($contract->orders as $order) {
@@ -173,7 +171,7 @@
                 <p class="text-sm font-semibold tabular-nums text-slate-900">
                     {{ \Carbon\Carbon::parse($contract->start_date)->format('d/m/Y') }}
                 </p>
-                <p class="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Начало</p>
+                <p class="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Дата начала</p>
             </div>
 
             <div aria-hidden="true" class="hidden h-px bg-slate-200 sm:block"></div>
@@ -192,38 +190,20 @@
                     {{ $contract->end_date ? \Carbon\Carbon::parse($contract->end_date)->format('d/m/Y') : 'Бессрочный' }}
                 </p>
                 @if ($contract->end_date)
-                    <p class="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Окончание</p>
+                    <p class="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Дата окончания</p>
                 @endif
             </div>
         </div>
     </section>
 
     {{-- Рабочая область договора --}}
-    <div data-testid="contract-workspace" data-layout="{{ $hasContractContext ? 'split' : 'full' }}"
-        class="grid items-start gap-5 {{ $hasContractContext ? 'lg:grid-cols-[minmax(0,2fr)_minmax(260px,0.85fr)]' : 'grid-cols-1' }}">
-        @if ($hasContractContext)
-            <aside data-testid="contract-context"
-                class="order-1 overflow-hidden border-y border-slate-200 bg-white lg:order-2 lg:sticky lg:top-6">
-                <div class="border-b border-slate-200 px-4 py-3">
-                    <h2 class="text-sm font-semibold text-slate-900">Информация</h2>
-                </div>
-
-                <dl class="px-4">
-                    <div data-testid="contract-context-comment">
-                        <dt class="pt-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Комментарий</dt>
-                        <dd class="whitespace-pre-line pb-3 pt-1 text-sm leading-5 text-slate-700">{{ $contract->comment }}</dd>
-                    </div>
-                </dl>
-            </aside>
-        @endif
-
-        <div class="flex min-w-0 flex-col gap-5 {{ $hasContractContext ? 'order-2 lg:order-1' : '' }}">
+    <div data-testid="contract-workspace" data-layout="full" class="flex min-w-0 flex-col gap-5">
 
             {{-- Документы --}}
             @if ($canUploadDocuments || $canReadDocumentMetadata)
                 <section data-testid="contract-documents" x-data="{
             uploadOpen: {{ $errors->has('document') || $errors->has('document_type') || $errors->has('comment') ? 'true' : 'false' }}
-        }" class="order-2 overflow-hidden border-y border-slate-200 bg-white">
+                }" class="order-3 overflow-hidden border-y border-slate-200 bg-white">
                     <div class="flex flex-col gap-2 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                         <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                             <h2 class="text-sm font-semibold text-slate-900">Документы</h2>
@@ -385,7 +365,7 @@
                                                         <div class="crm-table-secondary mt-0.5 truncate">{{ $document->comment }}</div>
                                                     @endif
                                                 </td>
-                                                <td>
+                                                <td class="whitespace-nowrap">
                                                     <span class="crm-badge crm-badge-neutral">
                                                         {{ $documentTypes[$document->document_type] ?? 'Другой документ' }}
                                                     </span>
@@ -393,20 +373,31 @@
                                                 <td class="crm-table-date">{{ $displayDateTime->format($document->created_at, 'd/m/Y H:i') }}</td>
                                                 <td class="crm-table-number">{{ $documentSize ?? '—' }}</td>
                                                 <td class="crm-table-actions">
-                                                    <div class="inline-flex items-center gap-3">
+                                                    <div class="inline-flex items-center gap-2">
                                                         @can('download', $document)
                                                             <a href="{{ route('contract-documents.download', $document) }}"
-                                                                class="crm-table-action-link">Скачать</a>
+                                                                class="crm-table-icon-action crm-table-icon-action-primary"
+                                                                aria-label="Скачать документ" title="Скачать">
+                                                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 4v10m0 0-4-4m4 4 4-4M5 20h14" />
+                                                                </svg>
+                                                            </a>
                                                         @endcan
 
                                                         @can('delete', $document)
-                                                            <form action="{{ route('contract-documents.destroy', $document) }}" method="POST"
+                                                            <form class="inline-flex m-0 p-0" action="{{ route('contract-documents.destroy', $document) }}" method="POST"
                                                                 onsubmit="return confirm('Удалить этот документ?')">
                                                                 @csrf
                                                                 @method('DELETE')
-                                                                <button type="submit"
-                                                                    class="text-xs font-semibold text-red-500 transition hover:text-red-700">
-                                                                    Удалить
+                                                                <button type="submit" class="crm-table-icon-action crm-table-icon-action-danger"
+                                                                    aria-label="Удалить документ" title="Удалить">
+                                                                    <svg fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">
+                                                                        <path d="M4 7h16" />
+                                                                        <path d="M9 7V4h6v3" />
+                                                                        <path d="M7 7l1 13h8l1-13" />
+                                                                        <path d="M10 11v5" />
+                                                                        <path d="M14 11v5" />
+                                                                    </svg>
                                                                 </button>
                                                             </form>
                                                         @endcan
@@ -422,6 +413,23 @@
                         @endif
                     @endif
                 </section>
+            @endif
+
+            @if (filled($contract->comment))
+                <div data-testid="contract-comment"
+                    class="order-2 flex items-start gap-3 border-y border-blue-100 bg-blue-50/40 px-4 py-3">
+                    <span aria-hidden="true"
+                        class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-blue-100 text-blue-700">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                                d="M7 8h10M7 12h6m-8 8 2.5-3H19a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h1v3Z" />
+                        </svg>
+                    </span>
+                    <div class="min-w-0">
+                        <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Комментарий</p>
+                        <p class="mt-0.5 whitespace-pre-line text-sm leading-5 text-slate-700">{{ $contract->comment }}</p>
+                    </div>
+                </div>
             @endif
 
             {{-- Предмет договора --}}
@@ -446,15 +454,15 @@
 
                 @if ($services->isNotEmpty())
                     <div class="crm-table-scroll">
-                        <table class="crm-table min-w-[820px] table-fixed">
+                        <table data-testid="contract-subjects-table" class="crm-table w-full table-fixed">
                             <colgroup>
-                                <col class="w-[18%]">
-                                <col class="w-[18%]">
-                                <col class="w-[10%]">
-                                <col class="w-[12%]">
-                                <col class="w-[12%]">
-                                <col class="w-[15%]">
-                                <col class="w-[15%]">
+                                <col data-column="type" class="w-[9%]">
+                                <col data-column="name" class="w-[39%]">
+                                <col data-column="date" class="w-[11%]">
+                                <col data-column="period" class="w-[10%]">
+                                <col data-column="amount" class="w-[10%]">
+                                <col data-column="status" class="w-[11%]">
+                                <col data-column="actions" class="w-[10%]">
                             </colgroup>
                             <thead>
                                 <tr>
@@ -470,7 +478,7 @@
                             <tbody>
                                 @foreach ($services as $service)
                                     <tr>
-                                        <td>
+                                        <td class="whitespace-nowrap">
                                             @include('partials.badge', [
                                                 'status' => $service['type'] === 'order' ? 'one_time' : 'subscription',
                                                 'label' => $service['type_name'],
@@ -480,28 +488,37 @@
                                         <td class="crm-table-date">
                                             {{ $service['date'] ? \Carbon\Carbon::parse($service['date'])->format('d/m/Y') : '—' }}
                                         </td>
-                                        <td>{{ $service['period'] ?? '—' }}</td>
+                                        <td class="whitespace-nowrap">{{ $service['period'] ?? '—' }}</td>
                                         <td class="crm-table-numeric font-medium text-slate-900">
                                             {{ number_format((float) $service['amount'], 2) }} ₼
                                         </td>
-                                        <td>@include('partials.badge', ['status' => $service['status']])</td>
+                                        <td class="whitespace-nowrap">@include('partials.badge', ['status' => $service['status']])</td>
                                         <td class="crm-table-actions">
-                                            <div class="inline-flex items-center gap-3">
+                                            <div class="inline-flex items-center gap-2">
                                                 @can('update', $service['subject'])
-                                                    <a href="{{ $service['edit_route'] }}" class="crm-table-action-link">
-                                                        Изменить
+                                                    <a href="{{ $service['edit_route'] }}" class="crm-table-icon-action crm-table-icon-action-primary"
+                                                        aria-label="Редактировать предмет договора" title="Редактировать">
+                                                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m15.232 5.232 3.536 3.536M4 20l4.5-1L18.768 8.732a2.5 2.5 0 0 0-3.536-3.536L4.5 15.5 4 20Z" />
+                                                        </svg>
                                                     </a>
                                                 @endcan
 
                                                 @can('delete', $service['subject'])
                                                     @if ($service['can_delete'])
-                                                        <form action="{{ $service['type'] === 'order' ? route('orders.destroy', $service['subject']) : route('subscriptions.destroy', $service['subject']) }}"
+                                                        <form class="inline-flex m-0 p-0" action="{{ $service['type'] === 'order' ? route('orders.destroy', $service['subject']) : route('subscriptions.destroy', $service['subject']) }}"
                                                             method="POST" onsubmit="return confirm('Удалить предмет договора?')">
                                                             @csrf
                                                             @method('DELETE')
-                                                            <button type="submit"
-                                                                class="text-xs font-semibold text-red-500 transition hover:text-red-700">
-                                                                Удалить
+                                                            <button type="submit" class="crm-table-icon-action crm-table-icon-action-danger"
+                                                                aria-label="Удалить предмет договора" title="Удалить">
+                                                                <svg fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">
+                                                                    <path d="M4 7h16" />
+                                                                    <path d="M9 7V4h6v3" />
+                                                                    <path d="M7 7l1 13h8l1-13" />
+                                                                    <path d="M10 11v5" />
+                                                                    <path d="M14 11v5" />
+                                                                </svg>
                                                             </button>
                                                         </form>
                                                     @endif
@@ -517,7 +534,6 @@
                     <p class="px-4 py-5 text-sm text-slate-500">Предметы договора пока не добавлены.</p>
                 @endif
             </section>
-        </div>
     </div>
 
 @endsection

@@ -74,18 +74,20 @@ class ContractAuthorizationTest extends AuthorizationTestCase
             ->assertSee('data-testid="contract-lifecycle"', false)
             ->assertSee('data-testid="contract-lifecycle-status"', false)
             ->assertSee('data-testid="contract-workspace"', false)
-            ->assertSee('data-layout="split"', false)
-            ->assertSee('data-testid="contract-context"', false)
+            ->assertSee('data-layout="full"', false)
+            ->assertDontSee('data-testid="contract-context"', false)
             ->assertSee('CTR-2026-001')
             ->assertSee(route('companies.show', $company), false)
             ->assertSee('SkyCell Workspace')
             ->assertSee('01/08/2026')
             ->assertSee('01/11/2026')
+            ->assertSee('Дата начала')
+            ->assertSee('Дата окончания')
             ->assertSee('Активен')
-            ->assertSee('Информация')
+            ->assertDontSee('Информация')
             ->assertDontSee('Реквизиты договора')
             ->assertSee('Рабочий комментарий договора')
-            ->assertSee('data-testid="contract-context-comment"', false)
+            ->assertSee('data-testid="contract-comment"', false)
             ->assertSee('Разовых: 1')
             ->assertSee('Подписок: 1')
             ->assertSee('Разовая услуга')
@@ -96,14 +98,31 @@ class ContractAuthorizationTest extends AuthorizationTestCase
             ->assertSee(route('contracts.subjects.create', $contract), false)
             ->assertSee(route('orders.edit', $order), false)
             ->assertSee(route('subscriptions.edit', $subscription), false)
+            ->assertSee('action="'.route('orders.destroy', $order).'"', false)
+            ->assertSee('action="'.route('subscriptions.destroy', $subscription).'"', false)
             ->assertSee('CTR-2026-001-signed.pdf')
             ->assertSee('Подписанная версия')
-            ->assertSee(route('contract-documents.download', $document), false);
+            ->assertSee(route('contract-documents.download', $document), false)
+            ->assertSee('action="'.route('contract-documents.destroy', $document).'"', false)
+            ->assertSee('aria-label="Редактировать предмет договора"', false)
+            ->assertSee('aria-label="Удалить предмет договора"', false)
+            ->assertSee('aria-label="Скачать документ"', false)
+            ->assertSee('aria-label="Удалить документ"', false);
 
         $this->assertSame(1, substr_count($response->getContent(), '01/08/2026'));
         $this->assertSame(1, substr_count($response->getContent(), '01/11/2026'));
         $this->assertSame(1, substr_count($response->getContent(), 'SkyCell Workspace'));
         $this->assertSame(1, substr_count($response->getContent(), route('companies.show', $company)));
+
+        $documentSection = substr(
+            $response->getContent(),
+            strpos($response->getContent(), '<section data-testid="contract-documents"')
+        );
+        $documentSection = substr($documentSection, 0, strpos($documentSection, '</section>'));
+        $this->assertStringContainsString('class="crm-table-icon-action crm-table-icon-action-primary"', $documentSection);
+        $this->assertStringContainsString('class="crm-table-icon-action crm-table-icon-action-danger"', $documentSection);
+        $this->assertStringContainsString('stroke="currentColor"', $documentSection);
+        $this->assertStringContainsString('<path d="M4 7h16" />', $documentSection);
     }
 
     public function test_contract_show_uses_indefinite_and_compact_empty_state_language(): void
@@ -121,6 +140,7 @@ class ContractAuthorizationTest extends AuthorizationTestCase
             ->assertSee('Бессрочный')
             ->assertSee('Indefinite Workspace')
             ->assertSee('data-layout="full"', false)
+            ->assertDontSee('data-testid="contract-comment"', false)
             ->assertDontSee('Информация')
             ->assertDontSee('data-testid="contract-context"', false)
             ->assertDontSee('data-testid="contract-context-comment"', false)
@@ -130,6 +150,72 @@ class ContractAuthorizationTest extends AuthorizationTestCase
             ->assertDontSee('Предмет договора пока не добавлен');
 
         $this->assertSame(1, substr_count($response->getContent(), $company->name));
+    }
+
+    public function test_contract_subject_table_uses_one_full_width_system_with_or_without_comment(): void
+    {
+        $company = $this->company('Subject table layouts');
+        $this->actingAsPermissions([
+            PermissionName::ContractsView->value,
+            PermissionName::ContractSubjectsUpdate->value,
+        ]);
+
+        foreach ([
+            'with_comment' => 'Комментарий в рабочем потоке договора',
+            'without_comment' => null,
+        ] as $comment) {
+            $contract = $this->contract($company);
+            $contract->forceFill(['comment' => $comment])->save();
+            $order = $this->subjectOrder($contract, [
+                'title' => 'Agentliyin üç veb-saytının hostinqi və texniki dəstəyi',
+                'order_date' => '2026-01-01',
+                'price' => '600.00',
+            ]);
+            $subscription = $this->subjectSubscription($contract, [
+                'title' => 'Aylıq monitorinq və texniki dəstək',
+                'start_date' => '2026-01-01',
+                'billing_period' => 'monthly',
+                'amount' => '600.00',
+            ]);
+
+            $response = $this->get(route('contracts.show', $contract))
+                ->assertOk()
+                ->assertSee('data-layout="full"', false)
+                ->assertSee('data-testid="contract-subjects-table"', false)
+                ->assertSee('Разовая услуга')
+                ->assertSee('Подписка')
+                ->assertSee($order->title)
+                ->assertSee($subscription->title)
+                ->assertSee('01/01/2026')
+                ->assertSee('Ежемесячно')
+                ->assertSee('600.00 ₼')
+                ->assertSee(route('orders.edit', $order), false)
+                ->assertSee(route('subscriptions.edit', $subscription), false);
+
+            if ($comment) {
+                $response->assertSee('data-testid="contract-comment"', false)
+                    ->assertSee($comment);
+            } else {
+                $response->assertDontSee('data-testid="contract-comment"', false);
+            }
+
+            $table = substr(
+                $response->getContent(),
+                strpos($response->getContent(), '<table data-testid="contract-subjects-table"')
+            );
+            $table = substr($table, 0, strpos($table, '</table>'));
+
+            $this->assertStringContainsString('class="crm-table w-full table-fixed"', $table);
+            $this->assertStringContainsString('<col data-column="type" class="w-[9%]">', $table);
+            $this->assertStringContainsString('<col data-column="name" class="w-[39%]">', $table);
+            $this->assertStringContainsString('<col data-column="date" class="w-[11%]">', $table);
+            $this->assertStringContainsString('<col data-column="period" class="w-[10%]">', $table);
+            $this->assertStringContainsString('<col data-column="amount" class="w-[10%]">', $table);
+            $this->assertStringContainsString('<col data-column="status" class="w-[11%]">', $table);
+            $this->assertStringContainsString('<col data-column="actions" class="w-[10%]">', $table);
+            $this->assertStringContainsString('<td class="crm-table-primary">', $table);
+            $this->assertStringContainsString('<td class="crm-table-actions">', $table);
+        }
     }
 
     public function test_view_permission_reveals_only_minimal_company_context_without_company_view(): void
