@@ -11,6 +11,7 @@ enum CompanyActivityEventType: string
     case ContactDeleted = 'contact.deleted';
     case ContractCreated = 'contract.created';
     case ContractStatusChanged = 'contract.status_changed';
+    case ContractDeleted = 'contract.deleted';
     case ContractSubjectCreated = 'contract_subject.created';
     case ContractSubjectUpdated = 'contract_subject.updated';
     case ContractSubjectDeleted = 'contract_subject.deleted';

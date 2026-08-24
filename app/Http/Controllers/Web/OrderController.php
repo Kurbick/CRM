@@ -2,16 +2,15 @@
 
 namespace App\Http\Controllers\Web;
 
+use App\Actions\Orders\CreateOrder;
 use App\Actions\Orders\DeleteOrder;
+use App\Actions\Orders\UpdateOrder;
 use App\Exceptions\OrderDeletionException;
 use App\Http\Controllers\Controller;
 use App\Models\Contract;
 use App\Models\Order;
-use App\Models\ServiceType;
-use App\Services\InvoiceDueDateSynchronizer;
 use App\Support\Navigation\AuthorizedLandingPage;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
 class OrderController extends Controller
@@ -26,7 +25,7 @@ class OrderController extends Controller
         return view('orders.create', compact('contract', 'backUrl'));
     }
 
-    public function store(Request $request, Contract $contract)
+    public function store(Request $request, Contract $contract, CreateOrder $createOrder)
     {
         Gate::authorize('create', [Order::class, $contract]);
 
@@ -42,21 +41,7 @@ class OrderController extends Controller
             'payment_terms.integer' => 'Срок оплаты должен быть целым числом дней.',
         ]);
 
-        $serviceType = ServiceType::firstOrCreate(
-            [
-                'name' => trim($validated['service_name']),
-                'type' => 'one_time',
-            ],
-            [
-                'base_price' => $validated['price'],
-            ]
-        );
-
-        unset($validated['service_name']);
-
-        $validated['service_type_id'] = $serviceType->id;
-
-        $contract->orders()->create($validated);
+        $createOrder->handle($contract, $validated, $request->user());
 
         return $this->mutationRedirect($contract)
             ->with('success', 'Разовая услуга успешно добавлена.');
@@ -79,7 +64,7 @@ class OrderController extends Controller
     public function update(
         Request $request,
         Order $order,
-        InvoiceDueDateSynchronizer $dueDateSynchronizer
+        UpdateOrder $updateOrder
     ) {
         Gate::authorize('update', $order);
 
@@ -98,10 +83,7 @@ class OrderController extends Controller
         $validated['title'] = trim($validated['title']);
         $validated['service_type_id'] = null;
 
-        DB::transaction(function () use ($order, $validated, $dueDateSynchronizer): void {
-            $order->update($validated);
-            $dueDateSynchronizer->synchronizeForOrder($order);
-        });
+        $updateOrder->handle($order, $validated, $request->user());
 
         $contract = $order->contract()
             ->select(['id', 'company_id', 'contract_number'])
@@ -111,7 +93,7 @@ class OrderController extends Controller
             ->with('success', 'Разовая услуга обновлена.');
     }
 
-    public function destroy(Order $order, DeleteOrder $deleteOrder)
+    public function destroy(Request $request, Order $order, DeleteOrder $deleteOrder)
     {
         Gate::authorize('delete', $order);
 
@@ -120,7 +102,7 @@ class OrderController extends Controller
             ->firstOrFail();
 
         try {
-            $deleteOrder->handle($order);
+            $deleteOrder->handle($order, $request->user());
         } catch (OrderDeletionException $exception) {
             return $this->mutationRedirect($contract)
                 ->with('error', $exception->getMessage());

@@ -93,6 +93,46 @@ class CompanyActivityPresenterTest extends TestCase
         $this->assertNull($presentation['context']);
     }
 
+    public function test_contract_created_uses_number_and_date_context(): void
+    {
+        $presentation = $this->present(CompanyActivityEventType::ContractCreated, [
+            'contract_number' => 'CTR-2026-001',
+            'start_date' => '2026-08-01',
+            'end_date' => '2027-11-01',
+        ]);
+
+        $this->assertSame('Создан договор CTR-2026-001', $presentation['title']);
+        $this->assertSame('01/08/2026 — 01/11/2027', $presentation['context']);
+    }
+
+    public function test_contract_status_change_uses_number_and_status_context(): void
+    {
+        $presentation = $this->present(CompanyActivityEventType::ContractStatusChanged, [
+            'contract_number' => 'CTR-2026-001',
+            'old_status' => 'active',
+            'new_status' => 'terminated',
+        ]);
+
+        $this->assertSame('Статус договора CTR-2026-001 изменён', $presentation['title']);
+        $this->assertSame('Активен → Завершён', $presentation['context']);
+    }
+
+    public function test_deleted_contract_uses_snapshot_without_a_broken_link(): void
+    {
+        $presentation = $this->present(CompanyActivityEventType::ContractDeleted, [
+            'contract_number' => 'CTR-2026-003',
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-09-01',
+            'status' => 'active',
+        ]);
+
+        $this->assertSame('Удалён договор CTR-2026-003', $presentation['title']);
+        $this->assertSame('01/08/2026 — 01/09/2026', $presentation['context']);
+        $this->assertSame('contract-deleted', $presentation['icon']);
+        $this->assertSame('red', $presentation['tone']);
+        $this->assertNull($presentation['subject_url']);
+    }
+
     public function test_subscription_subject_uses_canonical_wording_and_monthly_period(): void
     {
         $presentation = $this->present(CompanyActivityEventType::ContractSubjectCreated, [
@@ -119,6 +159,43 @@ class CompanyActivityPresenterTest extends TestCase
 
         $this->assertSame('Добавлена разовая услуга Audit', $presentation['title']);
         $this->assertSame('Договор CTR-2026-001 · 600,00 ₼', $presentation['context']);
+    }
+
+    public function test_subject_update_and_delete_use_type_specific_wording_and_snapshot_context(): void
+    {
+        $updated = $this->present(CompanyActivityEventType::ContractSubjectUpdated, [
+            'subject_type' => 'subscription',
+            'subject_name' => 'Support',
+            'contract_number' => 'CTR-2026-001',
+            'amount_minor' => 60000,
+            'billing_period' => 'monthly',
+        ]);
+        $deleted = $this->present(CompanyActivityEventType::ContractSubjectDeleted, [
+            'subject_type' => 'one_time',
+            'subject_name' => 'Разработка сайта',
+            'contract_number' => 'CTR-2026-001',
+            'amount_minor' => 120000,
+        ]);
+
+        $this->assertSame('Подписка Support изменена', $updated['title']);
+        $this->assertSame('Договор CTR-2026-001 · 600,00 ₼ / ежемесячно', $updated['context']);
+        $this->assertSame('Разовая услуга Разработка сайта удалена', $deleted['title']);
+        $this->assertSame('Договор CTR-2026-001 · 1 200,00 ₼', $deleted['context']);
+        $this->assertSame('subject-updated', $updated['icon']);
+        $this->assertSame('subject-deleted', $deleted['icon']);
+    }
+
+    public function test_deleted_document_uses_filename_and_contract_context(): void
+    {
+        $presentation = $this->present(CompanyActivityEventType::DocumentDeleted, [
+            'document_name' => 'contract.pdf',
+            'contract_number' => 'CTR-2026-001',
+        ]);
+
+        $this->assertSame('Удалён документ contract.pdf', $presentation['title']);
+        $this->assertSame('Договор CTR-2026-001', $presentation['context']);
+        $this->assertSame('document-deleted', $presentation['icon']);
+        $this->assertSame('red', $presentation['tone']);
     }
 
     #[DataProvider('billingPeriodProvider')]

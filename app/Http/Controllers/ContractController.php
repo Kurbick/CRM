@@ -2,13 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Contracts\CreateContract;
 use App\Actions\Contracts\DeleteContract;
+use App\Actions\Contracts\UpdateContract;
 use App\Exceptions\ContractDeletionException;
 use App\Http\Requests\StoreContractRequest;
 use App\Http\Requests\UpdateContractRequest;
 use App\Models\Company;
 use App\Models\Contract;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
 class ContractController extends Controller
@@ -37,9 +40,9 @@ class ContractController extends Controller
         return response()->json($contracts);
     }
 
-    public function store(StoreContractRequest $request, Company $company): JsonResponse
+    public function store(StoreContractRequest $request, Company $company, CreateContract $createContract): JsonResponse
     {
-        $contract = $company->contracts()->create($request->validated());
+        $contract = $createContract->handle($company, $request->validated(), $request->user());
 
         return response()->json($this->detailProjection($contract, $company), 201);
     }
@@ -54,9 +57,9 @@ class ContractController extends Controller
         ));
     }
 
-    public function update(UpdateContractRequest $request, Contract $contract): JsonResponse
+    public function update(UpdateContractRequest $request, Contract $contract, UpdateContract $updateContract): JsonResponse
     {
-        $contract->update($request->validated());
+        $contract = $updateContract->handle($contract, $request->validated(), $request->user());
 
         return response()->json($this->detailProjection(
             $contract,
@@ -64,12 +67,12 @@ class ContractController extends Controller
         ));
     }
 
-    public function destroy(Contract $contract, DeleteContract $deleteContract): JsonResponse
+    public function destroy(Request $request, Contract $contract, DeleteContract $deleteContract): JsonResponse
     {
         Gate::authorize('delete', $contract);
 
         try {
-            $deleteContract->handle($contract);
+            $deleteContract->handle($contract, $request->user());
 
             return response()->json(['message' => 'Контракт удалён'], 200);
         } catch (ContractDeletionException $exception) {

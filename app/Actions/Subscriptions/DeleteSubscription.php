@@ -4,19 +4,27 @@ namespace App\Actions\Subscriptions;
 
 use App\Exceptions\SubscriptionDeletionException;
 use App\Models\Subscription;
+use App\Models\User;
+use App\Services\CompanyActivityRecorder;
+use App\Support\CompanyActivityCategory;
+use App\Support\CompanyActivityEventType;
+use App\Support\CompanyActivitySnapshot;
+use App\Support\CompanyActivityVisibilityScope;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 
 final class DeleteSubscription
 {
+    public function __construct(private readonly CompanyActivityRecorder $activityRecorder) {}
+
     public function canDelete(Subscription $subscription): bool
     {
         return ! $this->hasBlockingDependencies($subscription);
     }
 
-    public function handle(Subscription $subscription): void
+    public function handle(Subscription $subscription, ?User $actor = null): void
     {
-        DB::transaction(function () use ($subscription): void {
+        DB::transaction(function () use ($subscription, $actor): void {
             $lockedSubscription = Subscription::query()
                 ->lockForUpdate()
                 ->findOrFail($subscription->getKey());
@@ -24,6 +32,13 @@ final class DeleteSubscription
             if ($this->hasBlockingDependencies($lockedSubscription)) {
                 throw SubscriptionDeletionException::dependencies();
             }
+
+            $lockedSubscription->loadMissing([
+                'contract:id,company_id,contract_number',
+                'serviceType:id,name,type',
+            ]);
+            $contract = $lockedSubscription->contract;
+            $metadata = CompanyActivitySnapshot::subject($lockedSubscription, $contract);
 
             try {
                 $lockedSubscription->delete();
@@ -34,6 +49,16 @@ final class DeleteSubscription
 
                 throw SubscriptionDeletionException::concurrentDependency($exception);
             }
+
+            $this->activityRecorder->record(
+                CompanyActivitySnapshot::companyFor($contract),
+                CompanyActivityEventType::ContractSubjectDeleted,
+                CompanyActivityCategory::Contracts,
+                CompanyActivityVisibilityScope::Contracts,
+                subject: $lockedSubscription,
+                metadata: $metadata,
+                actor: $actor,
+            );
         });
     }
 

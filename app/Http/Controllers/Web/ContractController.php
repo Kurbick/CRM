@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers\Web;
 
+use App\Actions\Contracts\CreateContract;
 use App\Actions\Contracts\DeleteContract;
+use App\Actions\Contracts\UpdateContract;
 use App\Exceptions\ContractDeletionException;
 use App\Http\Controllers\Controller;
 use App\Models\Company;
@@ -222,7 +224,7 @@ class ContractController extends Controller
         );
     }
 
-    public function store(Request $request)
+    public function store(Request $request, CreateContract $createContract)
     {
         Gate::authorize('create', Contract::class);
 
@@ -236,7 +238,8 @@ class ContractController extends Controller
             'comment' => 'nullable|string',
         ]);
 
-        $contract = Contract::create($validated);
+        $company = Company::query()->findOrFail($validated['company_id']);
+        $contract = $createContract->handle($company, $validated, $request->user());
 
         return $this->mutationRedirect($request, $contract)
             ->with('success', 'Договор успешно добавлен.');
@@ -311,7 +314,7 @@ class ContractController extends Controller
         );
     }
 
-    public function update(Request $request, Contract $contract)
+    public function update(Request $request, Contract $contract, UpdateContract $updateContract)
     {
         Gate::authorize('update', $contract);
 
@@ -324,7 +327,7 @@ class ContractController extends Controller
             'comment' => 'nullable|string',
         ]);
 
-        $contract->update($validated);
+        $contract = $updateContract->handle($contract, $validated, $request->user());
 
         return $this->mutationRedirect($request, $contract)
             ->with('success', 'Договор обновлён.');
@@ -408,7 +411,7 @@ class ContractController extends Controller
         return $parameters;
     }
 
-    public function destroy(Contract $contract, DeleteContract $deleteContract)
+    public function destroy(Request $request, Contract $contract, DeleteContract $deleteContract)
     {
         Gate::authorize('delete', $contract);
 
@@ -416,7 +419,7 @@ class ContractController extends Controller
         $company = $contract->company;
 
         try {
-            $deleteContract->handle($contract);
+            $deleteContract->handle($contract, $request->user());
         } catch (ContractDeletionException $exception) {
             return $this->failedDeletionRedirect($contract, $company)
                 ->with('error', $exception->getMessage());

@@ -75,7 +75,8 @@ class ContractDocumentController extends Controller
                 $contract,
                 $file,
                 $validated['document_type'],
-                $validated['comment'] ?? null
+                $validated['comment'] ?? null,
+                $request->user(),
             );
         } catch (ContractDocumentStorageException $exception) {
             return $this->mutationRedirect($contract)
@@ -134,7 +135,7 @@ class ContractDocumentController extends Controller
             ->firstOrFail();
 
         try {
-            $deleteDocument->handle($document);
+            $deleteDocument->handle($document, auth()->user());
         } catch (ContractDocumentDeletionException $exception) {
             return $this->mutationRedirect($contract)
                 ->with('error', $exception->getMessage());

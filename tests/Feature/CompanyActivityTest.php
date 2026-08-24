@@ -161,6 +161,43 @@ class CompanyActivityTest extends TestCase
             ->assertViewHas('activeTab', 'activity');
     }
 
+    public function test_activity_tab_control_navigates_to_server_loaded_activity_url(): void
+    {
+        $company = $this->company('Navigable Activity Company');
+        $this->event(
+            $company,
+            CompanyActivityEventType::ContractDeleted,
+            CompanyActivityCategory::Contracts,
+            metadata: [
+                'contract_number' => 'CTR-NAV-001',
+                'start_date' => '2026-08-01',
+                'end_date' => '2026-09-01',
+            ],
+        );
+        $user = $this->user([
+            PermissionName::CompaniesView->value,
+            PermissionName::ContractsView->value,
+        ]);
+        $this->actingAs($user, 'web');
+
+        $activityUrl = route('companies.show', [
+            'company' => $company,
+            'origin' => 'company',
+            'tab' => 'activity',
+        ]);
+
+        $this->get(route('companies.show', $company))
+            ->assertOk()
+            ->assertViewHas('activeTab', 'contacts')
+            ->assertSee('href="?origin=company&amp;tab=activity"', false)
+            ->assertDontSee('Удалён договор CTR-NAV-001');
+
+        $this->get($activityUrl)
+            ->assertOk()
+            ->assertViewHas('activeTab', 'activity')
+            ->assertSee('Удалён договор CTR-NAV-001');
+    }
+
     public function test_company_show_queries_activity_only_for_the_activity_tab(): void
     {
         $company = $this->company('Conditional Activity Company');

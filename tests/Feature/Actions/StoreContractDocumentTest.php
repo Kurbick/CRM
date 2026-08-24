@@ -5,6 +5,7 @@ namespace Tests\Feature\Actions;
 use App\Actions\ContractDocuments\StoreContractDocument;
 use App\Exceptions\ContractDocumentStorageException;
 use App\Models\ContractDocument;
+use App\Services\CompanyActivityRecorder;
 use Illuminate\Database\QueryException;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Filesystem\FilesystemManager;
@@ -58,7 +59,7 @@ class StoreContractDocumentTest extends AuthorizationTestCase
         $manager->shouldReceive('disk')->with('local')->once()->andReturn($disk);
 
         try {
-            (new StoreContractDocument($manager))->handle(
+            (new StoreContractDocument($manager, app(CompanyActivityRecorder::class)))->handle(
                 $contract,
                 UploadedFile::fake()->create('failure.pdf', 4, 'application/pdf'),
                 'signed'
@@ -131,7 +132,7 @@ class StoreContractDocumentTest extends AuthorizationTestCase
             ));
 
         try {
-            (new StoreContractDocument($manager))->handle(
+            (new StoreContractDocument($manager, app(CompanyActivityRecorder::class)))->handle(
                 $contract,
                 UploadedFile::fake()->create('cleanup.pdf', 4, 'application/pdf'),
                 'signed'
@@ -179,7 +180,7 @@ class StoreContractDocumentTest extends AuthorizationTestCase
         );
 
         try {
-            (new StoreContractDocument($manager))->handle(
+            (new StoreContractDocument($manager, app(CompanyActivityRecorder::class)))->handle(
                 $contract,
                 UploadedFile::fake()->create('cleanup-exception.pdf', 4, 'application/pdf'),
                 'signed'

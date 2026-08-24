@@ -346,12 +346,6 @@
             {{-- Компактная навигация по связанным данным --}}
             <div class="flex flex-col gap-2 border-b border-slate-200 px-4 sm:flex-row sm:items-center sm:justify-between">
                 <nav class="-mb-px flex min-w-0 gap-5 overflow-x-auto" aria-label="Tabs">
-                    <button @click="selectTab('activity')"
-                        :class="tab === 'activity' ? 'border-blue-600 text-blue-600' :
-                            'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'"
-                        class="whitespace-nowrap border-b-2 px-1 py-3 text-xs font-semibold transition">
-                        Активность
-                    </button>
                     <button @click="selectTab('contacts')"
                         :class="tab === 'contacts' ? 'border-blue-600 text-blue-600' :
                             'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'"
@@ -384,6 +378,12 @@
                             </button>
                         @endcan
                     @endcan
+                    <a href="?{{ http_build_query(\App\Support\CompanyPageContext::query('activity')) }}"
+                        :class="tab === 'activity' ? 'border-blue-600 text-blue-600' :
+                            'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'"
+                        class="whitespace-nowrap border-b-2 px-1 py-3 text-xs font-semibold transition">
+                        Активность
+                    </a>
                 </nav>
                 <div class="flex shrink-0 items-center gap-2 pb-2 sm:pb-0 sm:pl-4">
                     <form x-show="tab === 'activity'" x-cloak method="GET" class="shrink-0">

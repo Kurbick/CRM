@@ -4,19 +4,27 @@ namespace App\Actions\Orders;
 
 use App\Exceptions\OrderDeletionException;
 use App\Models\Order;
+use App\Models\User;
+use App\Services\CompanyActivityRecorder;
+use App\Support\CompanyActivityCategory;
+use App\Support\CompanyActivityEventType;
+use App\Support\CompanyActivitySnapshot;
+use App\Support\CompanyActivityVisibilityScope;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 
 final class DeleteOrder
 {
+    public function __construct(private readonly CompanyActivityRecorder $activityRecorder) {}
+
     public function canDelete(Order $order): bool
     {
         return ! $this->hasBlockingDependencies($order);
     }
 
-    public function handle(Order $order): void
+    public function handle(Order $order, ?User $actor = null): void
     {
-        DB::transaction(function () use ($order): void {
+        DB::transaction(function () use ($order, $actor): void {
             $lockedOrder = Order::query()
                 ->lockForUpdate()
                 ->findOrFail($order->getKey());
@@ -24,6 +32,13 @@ final class DeleteOrder
             if ($this->hasBlockingDependencies($lockedOrder)) {
                 throw OrderDeletionException::dependencies();
             }
+
+            $lockedOrder->loadMissing([
+                'contract:id,company_id,contract_number',
+                'serviceType:id,name,type',
+            ]);
+            $contract = $lockedOrder->contract;
+            $metadata = CompanyActivitySnapshot::subject($lockedOrder, $contract);
 
             try {
                 $lockedOrder->delete();
@@ -34,6 +49,16 @@ final class DeleteOrder
 
                 throw OrderDeletionException::concurrentDependency($exception);
             }
+
+            $this->activityRecorder->record(
+                CompanyActivitySnapshot::companyFor($contract),
+                CompanyActivityEventType::ContractSubjectDeleted,
+                CompanyActivityCategory::Contracts,
+                CompanyActivityVisibilityScope::Contracts,
+                subject: $lockedOrder,
+                metadata: $metadata,
+                actor: $actor,
+            );
         });
     }
 

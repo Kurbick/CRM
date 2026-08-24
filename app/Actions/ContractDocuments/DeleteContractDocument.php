@@ -3,7 +3,14 @@
 namespace App\Actions\ContractDocuments;
 
 use App\Exceptions\ContractDocumentDeletionException;
+use App\Models\Contract;
 use App\Models\ContractDocument;
+use App\Models\User;
+use App\Services\CompanyActivityRecorder;
+use App\Support\CompanyActivityCategory;
+use App\Support\CompanyActivityEventType;
+use App\Support\CompanyActivitySnapshot;
+use App\Support\CompanyActivityVisibilityScope;
 use App\Support\ContractDocuments\ContractDocumentPath;
 use Illuminate\Database\QueryException;
 use Illuminate\Filesystem\FilesystemManager;
@@ -15,9 +22,12 @@ use Throwable;
 
 final class DeleteContractDocument
 {
-    public function __construct(private readonly FilesystemManager $filesystems) {}
+    public function __construct(
+        private readonly FilesystemManager $filesystems,
+        private readonly CompanyActivityRecorder $activityRecorder,
+    ) {}
 
-    public function handle(ContractDocument $document): void
+    public function handle(ContractDocument $document, ?User $actor = null): void
     {
         $disk = $this->filesystems->disk(ContractDocumentPath::DISK);
         $documentId = $document->getKey();
@@ -33,7 +43,8 @@ final class DeleteContractDocument
                 &$contractId,
                 &$originalPath,
                 &$quarantinePath,
-                &$fileWasMoved
+                &$fileWasMoved,
+                $actor
             ): void {
                 $locked = ContractDocument::query()->lockForUpdate()->find($documentId);
 
@@ -43,6 +54,14 @@ final class DeleteContractDocument
 
                 $contractId = $locked->contract_id;
                 $originalPath = (string) $locked->file_path;
+                $contract = $locked->contract()
+                    ->select(['id', 'company_id', 'contract_number'])
+                    ->firstOrFail();
+                $metadata = [
+                    'document_name' => $locked->original_name,
+                    'contract_number' => $contract->contract_number,
+                    'document_type' => $locked->document_type,
+                ];
 
                 if (! ContractDocumentPath::isAllowed($locked, $originalPath)) {
                     Log::warning('Contract document path is unsafe.', $this->logContext(
@@ -71,6 +90,7 @@ final class DeleteContractDocument
                         'shared_legacy_path'
                     ));
                     $locked->delete();
+                    $this->recordDeleted($contract, $locked, $metadata, $actor);
 
                     return;
                 }
@@ -84,6 +104,7 @@ final class DeleteContractDocument
                         'physical_file_missing'
                     ));
                     $locked->delete();
+                    $this->recordDeleted($contract, $locked, $metadata, $actor);
 
                     return;
                 }
@@ -101,6 +122,7 @@ final class DeleteContractDocument
                 }
 
                 $locked->delete();
+                $this->recordDeleted($contract, $locked, $metadata, $actor);
             });
         } catch (ContractDocumentDeletionException $exception) {
             $this->restoreAfterFailure(
@@ -157,6 +179,24 @@ final class DeleteContractDocument
                 $quarantinePath
             );
         }
+    }
+
+    /** @param array<string, mixed> $metadata */
+    private function recordDeleted(
+        Contract $contract,
+        ContractDocument $document,
+        array $metadata,
+        ?User $actor
+    ): void {
+        $this->activityRecorder->record(
+            CompanyActivitySnapshot::companyFor($contract),
+            CompanyActivityEventType::DocumentDeleted,
+            CompanyActivityCategory::Documents,
+            CompanyActivityVisibilityScope::Documents,
+            subject: $document,
+            metadata: $metadata,
+            actor: $actor,
+        );
     }
 
     private function restoreAfterFailure(

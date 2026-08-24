@@ -2,17 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Orders\CreateOrder;
 use App\Actions\Orders\DeleteOrder;
+use App\Actions\Orders\UpdateOrder;
 use App\Exceptions\OrderDeletionException;
 use App\Http\Requests\StoreOrderRequest;
 use App\Http\Requests\UpdateOrderRequest;
 use App\Models\Contract;
 use App\Models\Order;
 use App\Models\ServiceType;
-use App\Services\InvoiceDueDateSynchronizer;
 use DateTimeInterface;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
 class OrderController extends Controller
@@ -48,9 +49,9 @@ class OrderController extends Controller
         return response()->json($orders);
     }
 
-    public function store(StoreOrderRequest $request, Contract $contract): JsonResponse
+    public function store(StoreOrderRequest $request, Contract $contract, CreateOrder $createOrder): JsonResponse
     {
-        $order = $contract->orders()->create($request->validated());
+        $order = $createOrder->handle($contract, $request->validated(), $request->user());
         $order->refresh();
 
         return response()->json($this->detailProjection(
@@ -74,12 +75,9 @@ class OrderController extends Controller
     public function update(
         UpdateOrderRequest $request,
         Order $order,
-        InvoiceDueDateSynchronizer $dueDateSynchronizer
+        UpdateOrder $updateOrder
     ): JsonResponse {
-        DB::transaction(function () use ($request, $order, $dueDateSynchronizer): void {
-            $order->update($request->validated());
-            $dueDateSynchronizer->synchronizeForOrder($order);
-        });
+        $order = $updateOrder->handle($order, $request->validated(), $request->user());
 
         return response()->json($this->detailProjection(
             $order,
@@ -88,12 +86,12 @@ class OrderController extends Controller
         ));
     }
 
-    public function destroy(Order $order, DeleteOrder $deleteOrder): JsonResponse
+    public function destroy(Request $request, Order $order, DeleteOrder $deleteOrder): JsonResponse
     {
         Gate::authorize('delete', $order);
 
         try {
-            $deleteOrder->handle($order);
+            $deleteOrder->handle($order, $request->user());
 
             return response()->json(['message' => 'Заказ удалён'], 200);
         } catch (OrderDeletionException) {

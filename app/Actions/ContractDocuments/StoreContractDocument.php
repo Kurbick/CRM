@@ -5,6 +5,12 @@ namespace App\Actions\ContractDocuments;
 use App\Exceptions\ContractDocumentStorageException;
 use App\Models\Contract;
 use App\Models\ContractDocument;
+use App\Models\User;
+use App\Services\CompanyActivityRecorder;
+use App\Support\CompanyActivityCategory;
+use App\Support\CompanyActivityEventType;
+use App\Support\CompanyActivitySnapshot;
+use App\Support\CompanyActivityVisibilityScope;
 use App\Support\ContractDocuments\ContractDocumentFileType;
 use App\Support\ContractDocuments\ContractDocumentPath;
 use App\Support\ContractDocuments\SafeDocumentName;
@@ -23,13 +29,17 @@ final class StoreContractDocument
 
     private const PATH_GENERATION_ATTEMPTS = 5;
 
-    public function __construct(private readonly FilesystemManager $filesystems) {}
+    public function __construct(
+        private readonly FilesystemManager $filesystems,
+        private readonly CompanyActivityRecorder $activityRecorder,
+    ) {}
 
     public function handle(
         Contract $contract,
         UploadedFile $file,
         string $documentType,
-        ?string $comment = null
+        ?string $comment = null,
+        ?User $actor = null,
     ): ContractDocument {
         $disk = $this->filesystems->disk(ContractDocumentPath::DISK);
         $extension = ContractDocumentFileType::serverExtension($file);
@@ -49,10 +59,10 @@ final class StoreContractDocument
                 throw ContractDocumentStorageException::writeFailed();
             }
 
-            return DB::transaction(function () use ($contract, $file, $documentType, $comment, $path): ContractDocument {
+            return DB::transaction(function () use ($contract, $file, $documentType, $comment, $path, $actor): ContractDocument {
                 $lockedContract = Contract::query()->lockForUpdate()->findOrFail($contract->getKey());
 
-                return $lockedContract->documents()->create([
+                $document = $lockedContract->documents()->create([
                     'document_type' => $documentType,
                     'original_name' => SafeDocumentName::sanitize($file->getClientOriginalName()),
                     'file_path' => $path,
@@ -60,6 +70,22 @@ final class StoreContractDocument
                     'file_size' => $file->getSize(),
                     'comment' => $comment,
                 ]);
+
+                $this->activityRecorder->record(
+                    CompanyActivitySnapshot::companyFor($lockedContract),
+                    CompanyActivityEventType::DocumentUploaded,
+                    CompanyActivityCategory::Documents,
+                    CompanyActivityVisibilityScope::Documents,
+                    subject: $document,
+                    metadata: [
+                        'document_name' => $document->original_name,
+                        'contract_number' => $lockedContract->contract_number,
+                        'document_type' => $document->document_type,
+                    ],
+                    actor: $actor,
+                );
+
+                return $document;
             });
         } catch (ContractDocumentStorageException $exception) {
             $this->cleanUpWrittenFile($disk, $path, $contract->getKey(), $exception);

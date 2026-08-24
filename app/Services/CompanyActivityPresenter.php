@@ -51,23 +51,41 @@ final class CompanyActivityPresenter
             CompanyActivityEventType::ContactCreated => ['Контакт создан', $contactName, 'contact', 'slate'],
             CompanyActivityEventType::ContactUpdated => ['Контакт обновлён', $contactName, 'contact', 'slate'],
             CompanyActivityEventType::ContactDeleted => ['Контакт удалён', $contactName, 'contact', 'slate'],
-            CompanyActivityEventType::ContractCreated => ['Договор создан', $contractNumber, 'contract', 'blue'],
+            CompanyActivityEventType::ContractCreated => [
+                $contractNumber === null ? 'Договор создан' : 'Создан договор '.$contractNumber,
+                $this->contractDates($metadata),
+                'contract',
+                'blue',
+            ],
             CompanyActivityEventType::ContractStatusChanged => [
-                'Статус договора изменён',
-                $this->joinContext($contractNumber, $this->statusChange($metadata)),
+                $contractNumber === null
+                    ? 'Статус договора изменён'
+                    : 'Статус договора '.$contractNumber.' изменён',
+                $this->statusChange($metadata),
                 'contract',
                 'slate',
             ],
+            CompanyActivityEventType::ContractDeleted => [
+                $contractNumber === null ? 'Договор удалён' : 'Удалён договор '.$contractNumber,
+                $this->contractDates($metadata),
+                'contract-deleted',
+                'red',
+            ],
             CompanyActivityEventType::ContractSubjectCreated => $this->subjectCreated($metadata),
-            CompanyActivityEventType::ContractSubjectUpdated => ['Предмет договора обновлён', $subjectName, 'subject', 'slate'],
-            CompanyActivityEventType::ContractSubjectDeleted => ['Предмет договора удалён', $subjectName, 'subject', 'slate'],
+            CompanyActivityEventType::ContractSubjectUpdated => $this->subjectChanged($metadata, 'изменена', 'slate'),
+            CompanyActivityEventType::ContractSubjectDeleted => $this->subjectChanged($metadata, 'удалена', 'red'),
             CompanyActivityEventType::DocumentUploaded => [
                 $documentName === null ? 'Документ загружен' : 'Загружен документ '.$documentName,
                 $contractNumber === null ? null : 'Договор '.$contractNumber,
                 'document',
                 'blue',
             ],
-            CompanyActivityEventType::DocumentDeleted => ['Документ удалён', $documentName, 'document', 'slate'],
+            CompanyActivityEventType::DocumentDeleted => [
+                $documentName === null ? 'Документ удалён' : 'Удалён документ '.$documentName,
+                $contractNumber === null ? null : 'Договор '.$contractNumber,
+                'document-deleted',
+                'red',
+            ],
             CompanyActivityEventType::InvoiceCreated => ['Инвойс создан', $this->joinContext($invoiceNumber, $amount), 'invoice', 'blue'],
             CompanyActivityEventType::InvoiceIssued => [
                 $invoiceNumber === null ? 'Инвойс выставлен' : 'Инвойс '.$invoiceNumber.' выставлен',
@@ -127,6 +145,33 @@ final class CompanyActivityPresenter
         }
 
         return [$title, $this->joinContext($contract === null ? null : 'Договор '.$contract, $amount), 'subject', 'blue'];
+    }
+
+    /** @return array{0: string, 1: ?string, 2: string, 3: string} */
+    private function subjectChanged(array $metadata, string $verb, string $tone): array
+    {
+        $subjectName = $this->text($metadata, 'subject_name');
+        $subjectType = $this->text($metadata, 'subject_type');
+        $title = match ($subjectType) {
+            'subscription' => $subjectName === null
+                ? 'Подписка '.$verb
+                : 'Подписка '.$subjectName.' '.$verb,
+            'one_time' => $subjectName === null
+                ? 'Разовая услуга '.$verb
+                : 'Разовая услуга '.$subjectName.' '.$verb,
+            default => $subjectName === null
+                ? 'Предмет договора '.$verb
+                : 'Предмет договора '.$subjectName.' '.$verb,
+        };
+
+        $contract = $this->text($metadata, 'contract_number');
+        $amount = $this->amount($metadata);
+        $billingPeriod = $this->billingPeriod($metadata);
+        if ($subjectType === 'subscription' && $billingPeriod !== null && $amount !== null) {
+            $amount .= ' / '.$billingPeriod;
+        }
+
+        return [$title, $this->joinContext($contract === null ? null : 'Договор '.$contract, $amount), $tone === 'red' ? 'subject-deleted' : 'subject-updated', $tone];
     }
 
     private function subjectUrl(CompanyActivityEvent $event, User $user, array $availableSubjects): ?string
@@ -244,7 +289,45 @@ final class CompanyActivityPresenter
         $old = $this->text($metadata, 'old_status');
         $new = $this->text($metadata, 'new_status');
 
-        return $old !== null && $new !== null ? $old.' → '.$new : null;
+        return $old !== null && $new !== null
+            ? $this->statusLabel($old).' → '.$this->statusLabel($new)
+            : null;
+    }
+
+    private function statusLabel(string $status): string
+    {
+        return match ($status) {
+            'active' => 'Активен',
+            'terminated' => 'Завершён',
+            'expired' => 'Истёк',
+            'suspended' => 'Приостановлен',
+            'completed' => 'Завершён',
+            'cancelled' => 'Отменён',
+            default => $status,
+        };
+    }
+
+    private function contractDates(array $metadata): ?string
+    {
+        $start = $this->date($metadata['start_date'] ?? null);
+        $end = $this->date($metadata['end_date'] ?? null);
+
+        return $start !== null && $end !== null
+            ? $start.' — '.$end
+            : ($start ?? $end);
+    }
+
+    private function date(mixed $value): ?string
+    {
+        if (! is_scalar($value) || trim((string) $value) === '') {
+            return null;
+        }
+
+        try {
+            return CarbonImmutable::parse((string) $value)->format('d/m/Y');
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     private function joinContext(?string ...$parts): ?string

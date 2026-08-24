@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Subscriptions\CreateSubscription;
 use App\Actions\Subscriptions\DeleteSubscription;
 use App\Actions\Subscriptions\UpdateSubscription;
 use App\Exceptions\SubscriptionDeletionException;
@@ -10,10 +11,9 @@ use App\Http\Requests\UpdateSubscriptionRequest;
 use App\Models\Contract;
 use App\Models\ServiceType;
 use App\Models\Subscription;
-use App\Services\SubscriptionLifecycle;
 use DateTimeInterface;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
 class SubscriptionController extends Controller
@@ -55,16 +55,9 @@ class SubscriptionController extends Controller
     public function store(
         StoreSubscriptionRequest $request,
         Contract $contract,
-        SubscriptionLifecycle $lifecycle
+        CreateSubscription $createSubscription
     ): JsonResponse {
-        $subscription = DB::transaction(function () use ($request, $contract, $lifecycle): Subscription {
-            $attributes = $lifecycle->normalizeInterval($request->validated());
-            $subscription = $contract->subscriptions()->make($attributes);
-            $subscription->next_billing_date = $attributes['start_date'];
-            $subscription->save();
-
-            return $subscription;
-        });
+        $subscription = $createSubscription->handle($contract, $request->validated(), $request->user());
         $subscription->refresh();
 
         return response()->json($this->detailProjection(
@@ -90,7 +83,7 @@ class SubscriptionController extends Controller
         Subscription $subscription,
         UpdateSubscription $updateSubscription
     ): JsonResponse {
-        $subscription = $updateSubscription->handle($subscription, $request->validated());
+        $subscription = $updateSubscription->handle($subscription, $request->validated(), $request->user());
 
         return response()->json($this->detailProjection(
             $subscription,
@@ -99,12 +92,12 @@ class SubscriptionController extends Controller
         ));
     }
 
-    public function destroy(Subscription $subscription, DeleteSubscription $deleteSubscription): JsonResponse
+    public function destroy(Request $request, Subscription $subscription, DeleteSubscription $deleteSubscription): JsonResponse
     {
         Gate::authorize('delete', $subscription);
 
         try {
-            $deleteSubscription->handle($subscription);
+            $deleteSubscription->handle($subscription, $request->user());
 
             return response()->json(['message' => 'Подписка удалена'], 200);
         } catch (SubscriptionDeletionException) {

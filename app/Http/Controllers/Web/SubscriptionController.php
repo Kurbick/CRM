@@ -2,17 +2,15 @@
 
 namespace App\Http\Controllers\Web;
 
+use App\Actions\Subscriptions\CreateSubscription;
 use App\Actions\Subscriptions\DeleteSubscription;
 use App\Actions\Subscriptions\UpdateSubscription;
 use App\Exceptions\SubscriptionDeletionException;
 use App\Http\Controllers\Controller;
 use App\Models\Contract;
-use App\Models\ServiceType;
 use App\Models\Subscription;
-use App\Services\SubscriptionLifecycle;
 use App\Support\Navigation\AuthorizedLandingPage;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
 class SubscriptionController extends Controller
@@ -27,7 +25,7 @@ class SubscriptionController extends Controller
         return view('subscriptions.create', compact('contract', 'backUrl'));
     }
 
-    public function store(Request $request, Contract $contract)
+    public function store(Request $request, Contract $contract, CreateSubscription $createSubscription)
     {
         Gate::authorize('create', [Subscription::class, $contract]);
 
@@ -43,25 +41,7 @@ class SubscriptionController extends Controller
             'comment' => 'nullable|string',
         ]);
 
-        DB::transaction(function () use ($contract, $validated): void {
-            $serviceType = ServiceType::firstOrCreate(
-                [
-                    'name' => trim($validated['service_name']),
-                    'type' => 'subscription',
-                ],
-                [
-                    'base_price' => $validated['amount'],
-                ]
-            );
-
-            unset($validated['service_name']);
-            $validated = app(SubscriptionLifecycle::class)->normalizeInterval($validated);
-            $validated['service_type_id'] = $serviceType->id;
-
-            $subscription = $contract->subscriptions()->make($validated);
-            $subscription->next_billing_date = $validated['start_date'];
-            $subscription->save();
-        });
+        $createSubscription->handle($contract, $validated, $request->user());
 
         return $this->mutationRedirect($contract)
             ->with('success', 'Подписка успешно добавлена.');
@@ -103,7 +83,7 @@ class SubscriptionController extends Controller
 
         $validated['title'] = trim($validated['title']);
         $validated['service_type_id'] = null;
-        $subscription = $updateSubscription->handle($subscription, $validated);
+        $subscription = $updateSubscription->handle($subscription, $validated, $request->user());
 
         $contract = $subscription->contract()
             ->select(['id', 'company_id', 'contract_number'])
@@ -113,7 +93,7 @@ class SubscriptionController extends Controller
             ->with('success', 'Подписка обновлена.');
     }
 
-    public function destroy(Subscription $subscription, DeleteSubscription $deleteSubscription)
+    public function destroy(Request $request, Subscription $subscription, DeleteSubscription $deleteSubscription)
     {
         Gate::authorize('delete', $subscription);
 
@@ -122,7 +102,7 @@ class SubscriptionController extends Controller
             ->firstOrFail();
 
         try {
-            $deleteSubscription->handle($subscription);
+            $deleteSubscription->handle($subscription, $request->user());
         } catch (SubscriptionDeletionException $exception) {
             return $this->mutationRedirect($contract)
                 ->with('error', $exception->getMessage());

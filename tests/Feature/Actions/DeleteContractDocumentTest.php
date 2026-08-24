@@ -5,6 +5,7 @@ namespace Tests\Feature\Actions;
 use App\Actions\ContractDocuments\DeleteContractDocument;
 use App\Exceptions\ContractDocumentDeletionException;
 use App\Models\ContractDocument;
+use App\Services\CompanyActivityRecorder;
 use Illuminate\Database\QueryException;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Filesystem\FilesystemManager;
@@ -349,7 +350,7 @@ class DeleteContractDocumentTest extends AuthorizationTestCase
         $manager = Mockery::mock(FilesystemManager::class);
         $manager->shouldReceive('disk')->with('local')->once()->andReturn($disk);
 
-        return new DeleteContractDocument($manager);
+        return new DeleteContractDocument($manager, app(CompanyActivityRecorder::class));
     }
 
     private function queryException(): QueryException
