@@ -171,6 +171,32 @@ class CompanyIndexTest extends TestCase
         $this->assertCount(3, $response->viewData('companies')->getCollection());
     }
 
+    public function test_status_filter_uses_the_canonical_company_dropdown_without_selected_markers(): void
+    {
+        $source = file_get_contents(resource_path('views/companies/index.blade.php'));
+        $start = strpos($source, 'selectedStatus: @js($status)');
+        $end = strpos($source, '{{-- Кнопки --}}', $start);
+        $filter = substr($source, $start, $end - $start);
+
+        $this->assertStringContainsString('name="status" x-model="selectedStatus"', $filter);
+        $this->assertStringContainsString(
+            'class="relative w-full px-3 py-2 pr-16 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition text-left"',
+            $filter,
+        );
+        $this->assertStringContainsString(
+            'class="absolute z-30 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg"',
+            $filter,
+        );
+        $this->assertStringContainsString('x-for="statusOption in statuses.slice(1)"', $filter);
+        $this->assertStringContainsString("value: '', label: 'Все'", $filter);
+        $this->assertStringContainsString("value: 'active', label: 'Активные'", $filter);
+        $this->assertStringContainsString("value: 'suspended', label: 'Приостановленные'", $filter);
+        $this->assertStringContainsString("value: 'archived', label: 'Архивные'", $filter);
+        $this->assertStringNotContainsString('x-show="statusOption.value === selectedStatus"', $filter);
+        $this->assertStringNotContainsString('bg-blue-50 text-blue-700 font-medium', $filter);
+        $this->assertStringNotContainsString('M5 13l4 4L19 7', $filter);
+    }
+
     public function test_autocomplete_requires_two_characters_searches_all_fields_and_limits_output(): void
     {
         $this->company('SkyCell Holdings', 'SkyCell', '1234567890');

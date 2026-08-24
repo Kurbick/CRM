@@ -159,23 +159,26 @@
             }" x-on:click.outside="open = false" x-on:keydown.escape.window="open = false">
                 <input type="hidden" name="status" x-model="selectedStatus">
                 <button type="button" x-on:click="open = !open"
-                    class="relative w-full px-3 py-2 pr-10 border border-gray-200 rounded-lg bg-white text-left text-sm text-gray-700 hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition">
+                    class="relative w-full px-3 py-2 pr-16 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition text-left">
                     <span x-text="selectedLabel"
                         :class="selectedStatus ? 'crm-filter-selected' : 'crm-filter-neutral'"></span>
-                    <svg class="absolute right-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                    </svg>
+                    <span class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
+                        <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </span>
                 </button>
                 <div x-show="open" x-cloak
-                    class="absolute z-30 mt-1 w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
-                    <template x-for="statusOption in statuses" :key="statusOption.value">
+                    class="absolute z-30 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                    <button type="button" x-on:click="selectStatus(statuses[0])"
+                        class="w-full px-3 py-2.5 text-left text-sm text-gray-600 hover:bg-gray-50 transition">
+                        Все
+                    </button>
+                    <div class="border-t border-gray-100"></div>
+                    <template x-for="statusOption in statuses.slice(1)" :key="statusOption.value">
                         <button type="button" x-on:click="selectStatus(statusOption)"
-                            class="flex w-full items-center justify-between px-3 py-2.5 text-left text-sm transition hover:bg-blue-50 hover:text-blue-700"
-                            :class="statusOption.value === selectedStatus ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'">
+                            class="w-full px-3 py-2.5 text-left text-sm hover:bg-blue-50 hover:text-blue-700 transition">
                             <span x-text="statusOption.label"></span>
-                            <svg x-show="statusOption.value === selectedStatus" class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
-                            </svg>
                         </button>
                     </template>
                 </div>

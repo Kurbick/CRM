@@ -386,27 +386,57 @@
                     </a>
                 </nav>
                 <div class="flex shrink-0 items-center gap-2 pb-2 sm:pb-0 sm:pl-4">
-                    <form x-show="tab === 'activity'" x-cloak method="GET" class="shrink-0">
+                    <form x-show="tab === 'activity'" x-cloak method="GET" class="relative w-full sm:w-44"
+                        x-data="{
+                            open: false,
+                            selectedCategory: @js($activityCategory?->value ?? ''),
+                            categories: [
+                                { value: '', label: 'Все события' },
+                                { value: 'contacts', label: 'Контакты' },
+                                { value: 'contracts', label: 'Договоры' },
+                                { value: 'invoices', label: 'Инвойсы' },
+                                { value: 'payments', label: 'Платежи' },
+                                { value: 'documents', label: 'Документы' },
+                            ],
+                            get selectedLabel() {
+                                return this.categories.find(category => category.value === this.selectedCategory)?.label ?? 'Все события';
+                            },
+                            selectCategory(category) {
+                                this.selectedCategory = category.value;
+                                this.open = false;
+                                this.$nextTick(() => this.$root.closest('form').requestSubmit());
+                            },
+                        }"
+                        x-on:click.outside="open = false" x-on:keydown.escape.window="open = false">
                         <input type="hidden" name="tab" value="activity">
-                        <select name="activity_category" onchange="this.form.submit()"
-                            class="rounded border border-slate-300 bg-white py-1.5 pl-2 pr-8 text-xs font-medium text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                            aria-label="Фильтр активности">
-                            <option value="">Все события</option>
-                            @foreach (\App\Support\CompanyActivityCategory::cases() as $category)
-                                @if ($category !== \App\Support\CompanyActivityCategory::Company)
-                                <option value="{{ $category->value }}" @selected($activityCategory?->value === $category->value)>
-                                    {{ match ($category) {
-                                        \App\Support\CompanyActivityCategory::Contacts => 'Контакты',
-                                        \App\Support\CompanyActivityCategory::Contracts => 'Договоры',
-                                        \App\Support\CompanyActivityCategory::Invoices => 'Инвойсы',
-                                        \App\Support\CompanyActivityCategory::Payments => 'Платежи',
-                                        \App\Support\CompanyActivityCategory::Documents => 'Документы',
-                                        default => 'Компания',
-                                    } }}
-                                </option>
-                                @endif
-                            @endforeach
-                        </select>
+                        <input type="hidden" name="activity_category" x-model="selectedCategory">
+
+                        <button type="button" x-on:click="open = !open"
+                            class="relative w-full px-3 py-2 pr-16 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition text-left"
+                            aria-haspopup="true" x-bind:aria-expanded="open" aria-label="Фильтр активности">
+                            <span x-text="selectedLabel"
+                                :class="selectedCategory ? 'crm-filter-selected' : 'crm-filter-neutral'"></span>
+                            <span class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
+                                <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </span>
+                        </button>
+
+                        <div x-show="open" x-cloak x-transition
+                            class="absolute z-30 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                            <button type="button" x-on:click="selectCategory(categories[0])"
+                                class="w-full px-3 py-2.5 text-left text-sm text-gray-600 hover:bg-gray-50 transition">
+                                Все события
+                            </button>
+                            <div class="border-t border-gray-100"></div>
+                            <template x-for="category in categories.slice(1)" :key="category.value">
+                                <button type="button" x-on:click="selectCategory(category)"
+                                    class="w-full px-3 py-2.5 text-left text-sm hover:bg-blue-50 hover:text-blue-700 transition">
+                                    <span x-text="category.label"></span>
+                                </button>
+                            </template>
+                        </div>
                     </form>
                     @can('create', [\App\Models\CompanyContact::class, $company])
                         <a x-show="tab === 'contacts'" href="{{ route('companies.contacts.create', ['company' => $company, 'origin' => 'company', 'tab' => 'contacts']) }}"
@@ -449,10 +479,10 @@
                         <p class="mt-1 text-xs text-slate-500">Новые действия по компании будут появляться здесь.</p>
                     </div>
                 @else
-                    <div class="relative overflow-hidden" data-testid="company-activity-timeline">
+                    <div class="relative max-h-80 overflow-y-auto overflow-x-hidden" data-testid="company-activity-timeline" style="scrollbar-gutter: stable;">
                         <div class="pointer-events-none absolute bottom-0 left-[14px] top-0 w-px bg-slate-200"></div>
                         @foreach ($activityEvents as $event)
-                            <div data-testid="activity-row" class="relative grid min-h-[40px] grid-cols-[28px_minmax(110px,1fr)_minmax(0,1fr)] items-center gap-x-3 border-b border-slate-100 py-1.5 last:border-b-0 sm:grid-cols-[28px_155px_minmax(220px,1.2fr)_minmax(170px,1fr)_100px] sm:gap-x-3">
+                            <div data-testid="activity-row" class="relative grid min-h-[40px] grid-cols-[28px_minmax(110px,1fr)_minmax(0,1fr)] items-center gap-x-3 border-b border-slate-100 py-1.5 pr-3 last:border-b-0 sm:grid-cols-[28px_155px_minmax(220px,1.2fr)_minmax(170px,1fr)_100px] sm:gap-x-3">
                                 <div class="relative flex items-center justify-center">
                                     <x-activity.icon :type="$event['icon']" :tone="$event['tone']" />
                                 </div>

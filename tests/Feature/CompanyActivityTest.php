@@ -139,22 +139,49 @@ class CompanyActivityTest extends TestCase
         $this->assertSame([$contractEvent->id, $contactEvent->id], collect($contractPage->items())->pluck('id')->all());
     }
 
-    public function test_company_show_keeps_contacts_as_default_but_activity_is_first_and_empty_state_is_exact(): void
+    public function test_company_show_keeps_contacts_as_default_activity_is_last_and_empty_state_is_exact(): void
     {
         $company = $this->company('Empty Activity Company');
-        $user = $this->user([PermissionName::CompaniesView->value]);
+        $user = $this->user([
+            PermissionName::CompaniesView->value,
+            PermissionName::CompaniesFinancialsView->value,
+            PermissionName::ContractsView->value,
+            PermissionName::InvoicesView->value,
+            PermissionName::PaymentsView->value,
+        ]);
         $this->actingAs($user, 'web');
 
         $response = $this->get(route('companies.show', $company))->assertOk();
 
         $this->assertSame('contacts', $response->viewData('activeTab'));
         $html = $response->getContent();
-        $this->assertLessThan(strpos($html, 'Контакты ('), strpos($html, 'Активность'));
+        $positions = array_map(
+            static fn (string $label): int => strpos($html, $label),
+            ['Контакты (', 'Договоры (', 'Инвойсы (', 'Платежи (', 'Активность'],
+        );
+        for ($index = 1; $index < count($positions); $index++) {
+            $this->assertLessThan($positions[$index], $positions[$index - 1]);
+        }
         $response->assertSee('Событий пока нет.')
             ->assertSee('Новые действия по компании будут появляться здесь.')
             ->assertSee('Все события')
+            ->assertSee('Контакты')
+            ->assertSee('Договоры')
+            ->assertSee('Инвойсы')
+            ->assertSee('Платежи')
+            ->assertSee('Документы')
             ->assertSee('name="activity_category"', false)
-            ->assertSee('value="activity"', false);
+            ->assertSee('x-model="selectedCategory"', false)
+            ->assertSee('x-on:click.outside="open = false"', false)
+            ->assertSee('class="relative w-full px-3 py-2 pr-16 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition text-left"', false)
+            ->assertSee('class="absolute z-30 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg"', false)
+            ->assertSee('class="border-t border-gray-100"', false)
+            ->assertDontSee('x-show="category.value === selectedCategory"', false)
+            ->assertDontSee('bg-blue-50 text-blue-700 font-medium', false)
+            ->assertSee('value="activity"', false)
+            ->assertDontSee('<select name="activity_category"', false)
+            ->assertDontSee('data-testid="company-activity-timeline"', false)
+            ->assertDontSee('max-h-80 overflow-y-auto', false);
 
         $this->get(route('companies.show', ['company' => $company, 'tab' => 'activity']))
             ->assertOk()
@@ -251,7 +278,17 @@ class CompanyActivityTest extends TestCase
             ->assertSee('m18.375 12.739-7.693 7.693', false)
             ->assertSee('M12 8.5v7', false)
             ->assertSee('grid-cols-[28px_155px_minmax(220px,1.2fr)_minmax(170px,1fr)_100px]', false)
+            ->assertSee('data-testid="company-activity-timeline"', false)
+            ->assertSee('class="relative max-h-80 overflow-y-auto overflow-x-hidden"', false)
+            ->assertSee('style="scrollbar-gutter: stable;"', false)
+            ->assertSee('py-1.5 pr-3 last:border-b-0', false)
             ->assertDontSee('Активность (');
+
+        $html = $response->getContent();
+        $this->assertLessThan(
+            strpos($html, 'data-testid="company-activity-timeline"'),
+            strpos($html, 'name="activity_category"'),
+        );
     }
 
     public function test_activity_get_filter_keeps_activity_tab_and_filters_rows(): void
@@ -276,7 +313,7 @@ class CompanyActivityTest extends TestCase
             ->assertSee('Инвойс создан')
             ->assertDontSee('Контакт создан')
             ->assertSee('value="activity"', false)
-            ->assertSee('value="invoices" selected', false);
+            ->assertSee('name="activity_category" x-model="selectedCategory"', false);
     }
 
     public function test_presenter_uses_local_today_yesterday_and_older_date_labels(): void
