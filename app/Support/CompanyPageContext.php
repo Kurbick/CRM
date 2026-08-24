@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 
 final class CompanyPageContext
 {
-    public const TABS = ['contacts', 'contracts', 'invoices', 'payments'];
+    public const TABS = ['activity', 'contacts', 'contracts', 'invoices', 'payments'];
 
     public static function activeTab(Request $request): string
     {
@@ -36,7 +36,7 @@ final class CompanyPageContext
     /** @return array{origin: string, tab: string} */
     public static function query(string $tab): array
     {
-        if (!in_array($tab, self::TABS, true)) {
+        if (! in_array($tab, self::TABS, true)) {
             $tab = 'contacts';
         }
 

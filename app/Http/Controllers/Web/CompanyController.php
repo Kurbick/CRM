@@ -10,11 +10,14 @@ use App\Models\Contract;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
 use App\Models\Payment;
-use App\Services\OneTimeServiceDebtCalculator;
+use App\Services\CompanyActivityPresenter;
+use App\Services\CompanyActivityQuery;
 use App\Services\InvoiceBillingPeriodPresenter;
 use App\Services\InvoicePaymentSourceResolver;
+use App\Services\OneTimeServiceDebtCalculator;
 use App\Services\SubscriptionPeriodDebtCalculator;
 use App\Support\Access\PermissionName;
+use App\Support\CompanyActivityCategory;
 use App\Support\CompanyPageContext;
 use App\Support\Navigation\AuthorizedLandingPage;
 use Carbon\CarbonImmutable;
@@ -223,6 +226,8 @@ class CompanyController extends Controller
         DeleteCompany $deleteCompany,
         InvoiceBillingPeriodPresenter $billingPeriodPresenter,
         InvoicePaymentSourceResolver $paymentSourceResolver,
+        CompanyActivityQuery $activityQuery,
+        CompanyActivityPresenter $activityPresenter,
     ) {
         Gate::authorize('view', $company);
 
@@ -280,11 +285,35 @@ class CompanyController extends Controller
 
         $returnContext = $this->companyReturnContext($request);
 
+        $activityCategory = null;
+        $activityPage = null;
+        $activityEvents = collect();
+
+        if ($activeTab === 'activity') {
+            $activityCategory = CompanyActivityCategory::tryFrom((string) $request->query('activity_category'));
+            $activityPage = $activityQuery->paginate(
+                $request->user(),
+                $company,
+                $activityCategory,
+                is_string($request->query('activity_cursor')) ? $request->query('activity_cursor') : null,
+            );
+            $activitySubjects = $activityQuery->availableSubjectIds($request->user(), $company, $activityPage);
+            $activityEvents = collect($activityPage->items())
+                ->map(fn ($event): array => $activityPresenter->present($event, $request->user(), $activitySubjects));
+            $activityPage->appends(array_filter([
+                'tab' => 'activity',
+                'activity_category' => $activityCategory?->value,
+            ]));
+        }
+
         $viewData = compact(
             'company',
             'activeTab',
             'returnContext',
-            'companyCanBeDeleted'
+            'companyCanBeDeleted',
+            'activityPage',
+            'activityEvents',
+            'activityCategory'
         );
 
         if ($canViewFinancials) {

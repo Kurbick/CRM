@@ -346,6 +346,12 @@
             {{-- Компактная навигация по связанным данным --}}
             <div class="flex flex-col gap-2 border-b border-slate-200 px-4 sm:flex-row sm:items-center sm:justify-between">
                 <nav class="-mb-px flex min-w-0 gap-5 overflow-x-auto" aria-label="Tabs">
+                    <button @click="selectTab('activity')"
+                        :class="tab === 'activity' ? 'border-blue-600 text-blue-600' :
+                            'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'"
+                        class="whitespace-nowrap border-b-2 px-1 py-3 text-xs font-semibold transition">
+                        Активность
+                    </button>
                     <button @click="selectTab('contacts')"
                         :class="tab === 'contacts' ? 'border-blue-600 text-blue-600' :
                             'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'"
@@ -379,7 +385,29 @@
                         @endcan
                     @endcan
                 </nav>
-                <div class="shrink-0 pb-2 sm:pb-0 sm:pl-4">
+                <div class="flex shrink-0 items-center gap-2 pb-2 sm:pb-0 sm:pl-4">
+                    <form x-show="tab === 'activity'" x-cloak method="GET" class="shrink-0">
+                        <input type="hidden" name="tab" value="activity">
+                        <select name="activity_category" onchange="this.form.submit()"
+                            class="rounded border border-slate-300 bg-white py-1.5 pl-2 pr-8 text-xs font-medium text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            aria-label="Фильтр активности">
+                            <option value="">Все события</option>
+                            @foreach (\App\Support\CompanyActivityCategory::cases() as $category)
+                                @if ($category !== \App\Support\CompanyActivityCategory::Company)
+                                <option value="{{ $category->value }}" @selected($activityCategory?->value === $category->value)>
+                                    {{ match ($category) {
+                                        \App\Support\CompanyActivityCategory::Contacts => 'Контакты',
+                                        \App\Support\CompanyActivityCategory::Contracts => 'Договоры',
+                                        \App\Support\CompanyActivityCategory::Invoices => 'Инвойсы',
+                                        \App\Support\CompanyActivityCategory::Payments => 'Платежи',
+                                        \App\Support\CompanyActivityCategory::Documents => 'Документы',
+                                        default => 'Компания',
+                                    } }}
+                                </option>
+                                @endif
+                            @endforeach
+                        </select>
+                    </form>
                     @can('create', [\App\Models\CompanyContact::class, $company])
                         <a x-show="tab === 'contacts'" href="{{ route('companies.contacts.create', ['company' => $company, 'origin' => 'company', 'tab' => 'contacts']) }}"
                             class="crm-light-action">
@@ -411,6 +439,50 @@
                         @endcan
                     @endif
                 </div>
+            </div>
+
+            {{-- Таб: Активность --}}
+            <div x-show="tab === 'activity'" x-cloak class="p-4 sm:p-5">
+                @if ($activityEvents->isEmpty())
+                    <div class="px-1 py-8 text-center">
+                        <p class="text-sm font-medium text-slate-700">Событий пока нет.</p>
+                        <p class="mt-1 text-xs text-slate-500">Новые действия по компании будут появляться здесь.</p>
+                    </div>
+                @else
+                    <div class="relative overflow-hidden" data-testid="company-activity-timeline">
+                        <div class="pointer-events-none absolute bottom-0 left-[14px] top-0 w-px bg-slate-200"></div>
+                        @foreach ($activityEvents as $event)
+                            <div data-testid="activity-row" class="relative grid min-h-[40px] grid-cols-[28px_minmax(110px,1fr)_minmax(0,1fr)] items-center gap-x-3 border-b border-slate-100 py-1.5 last:border-b-0 sm:grid-cols-[28px_155px_minmax(220px,1.2fr)_minmax(170px,1fr)_100px] sm:gap-x-3">
+                                <div class="relative flex items-center justify-center">
+                                    <x-activity.icon :type="$event['icon']" :tone="$event['tone']" />
+                                </div>
+                                <time class="text-xs tabular-nums text-slate-500">{{ $event['time_label'] }}</time>
+                                <div class="min-w-0">
+                                    @if ($event['subject_url'])
+                                        <a href="{{ $event['subject_url'] }}" class="text-sm font-medium text-slate-900 hover:text-blue-600 hover:underline">{{ $event['title'] }}</a>
+                                    @else
+                                        <p class="text-sm font-medium text-slate-900">{{ $event['title'] }}</p>
+                                    @endif
+                                </div>
+                                <div class="hidden min-w-0 truncate text-xs text-slate-500 sm:block">
+                                    @if ($event['context_url'] && $event['context'])
+                                        <a href="{{ $event['context_url'] }}" class="hover:text-blue-600 hover:underline">{{ $event['context'] }}</a>
+                                    @else
+                                        {{ $event['context'] ?? '—' }}
+                                    @endif
+                                </div>
+                                <div class="hidden truncate text-right text-xs text-slate-500 sm:block" title="{{ $event['actor_label'] }}">
+                                    {{ $event['actor_label'] }}
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                    @if ($activityPage->hasMorePages())
+                        <div class="pt-4 text-center">
+                            <a href="{{ $activityPage->nextPageUrl() }}" class="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline">Показать ещё</a>
+                        </div>
+                    @endif
+                @endif
             </div>
 
             {{-- Таб: Контакты --}}
