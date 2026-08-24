@@ -146,20 +146,21 @@
             }" x-on:click.outside="open = false" x-on:keydown.escape.window="open = false">
                 <input type="hidden" name="company_id" x-model="selectedId">
 
-                <div class="relative">
+                <div class="flex w-full min-w-0 items-center overflow-hidden rounded-lg border border-gray-200 bg-white transition focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
                     <input type="text" x-model="query" x-on:focus="open = true" x-on:click="open = true"
                         x-on:input="selectedId = ''; open = true"
                         x-on:keydown.enter.prevent="if (filteredCompanies.length > 0) selectCompany(filteredCompanies[0])"
                         placeholder="Все компании" autocomplete="off"
-                        class="w-full px-3 py-2 pr-16 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition"
+                        class="min-w-0 flex-1 truncate overflow-hidden text-ellipsis whitespace-nowrap !border-0 !bg-transparent px-3 py-2 pr-0 text-sm outline-none transition focus:!border-0 focus:ring-0"
+                        :title="selectedId ? query : ''"
                         :class="selectedId ? 'crm-filter-selected' : 'crm-filter-neutral'">
 
                     <button type="button" x-show="query.length > 0" x-cloak x-on:click="clearCompany()"
-                        class="absolute inset-y-0 right-8 flex items-center px-2 text-gray-400 hover:text-red-500 transition"
+                        class="flex-none px-2 text-gray-400 hover:text-red-500 transition"
                         title="Сбросить компанию">✕</button>
 
                     <button type="button" x-on:click="open = !open"
-                        class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600 transition"
+                        class="flex-none px-3 text-gray-400 hover:text-gray-600 transition"
                         tabindex="-1">
                         <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
@@ -196,20 +197,24 @@
                 selectContract(contract) {
                     this.selectedId = String(contract.id);
                     this.open = false;
+                    this.$nextTick(() => this.$root.closest('form').requestSubmit());
                 },
                 clearContract() {
                     this.selectedId = '';
                     this.open = false;
+                    this.$nextTick(() => this.$root.closest('form').requestSubmit());
                 }
             }" x-on:click.outside="open = false" x-on:keydown.escape.window="open = false">
                 <input type="hidden" name="contract_id" x-model="selectedId">
 
                 <button type="button" x-on:click="open = !open"
-                    class="relative w-full px-3 py-2 pr-10 border border-gray-200 rounded-lg bg-white text-left text-sm text-gray-700 hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition"
+                    class="flex w-full min-w-0 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-left text-sm text-gray-700 hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition"
                     aria-haspopup="true" x-bind:aria-expanded="open">
-                    <span x-text="selectedLabel"
+                    <span class="min-w-0 flex-1 truncate overflow-hidden text-ellipsis whitespace-nowrap"
+                        x-text="selectedLabel"
+                        :title="selectedId ? selectedLabel : ''"
                         :class="selectedId ? 'crm-filter-selected' : 'crm-filter-neutral'"></span>
-                    <span class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
+                    <span class="flex-none text-gray-400">
                         <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                         </svg>

@@ -86,6 +86,58 @@ class CompanyContextNavigationTest extends TestCase
             ->assertRedirect(route('companies.show', ['company' => $company, 'tab' => 'contacts']));
     }
 
+    public function test_company_contacts_use_canonical_icon_actions_with_existing_authorization(): void
+    {
+        [$company] = $this->companyAndContract();
+        $contact = $company->contacts()->create([
+            'first_name' => 'Visible',
+            'last_name' => 'Contact',
+            'role' => 'other',
+        ]);
+        $showUrl = route('companies.show', ['company' => $company, 'tab' => 'contacts']);
+        $editUrl = route('contacts.edit', ['contact' => $contact, 'origin' => 'company', 'tab' => 'contacts']);
+        $deleteUrl = route('contacts.destroy', $contact);
+
+        $withoutDelete = $this->get($showUrl)
+            ->assertOk()
+            ->assertSee($editUrl)
+            ->assertSee('class="crm-table-icon-action crm-table-icon-action-primary"', false)
+            ->assertSee('aria-label="Редактировать контакт"', false)
+            ->assertSee('title="Редактировать"', false)
+            ->assertDontSee('action="'.$deleteUrl.'"', false)
+            ->assertDontSee('aria-label="Удалить контакт"', false);
+
+        $this->assertStringNotContainsString('Редакт.</a>', $withoutDelete->getContent());
+        $this->assertStringNotContainsString('crm-table-action-link">Редакт.', $withoutDelete->getContent());
+
+        $this->authenticatedUser->givePermissionTo(PermissionName::CompanyContactsDelete->value);
+        $withDelete = $this->get($showUrl)
+            ->assertOk()
+            ->assertSee($editUrl)
+            ->assertSee($deleteUrl, false)
+            ->assertSee('action="'.$deleteUrl.'"', false)
+            ->assertSee('name="_method" value="DELETE"', false)
+            ->assertSee('class="crm-table-icon-action crm-table-icon-action-primary"', false)
+            ->assertSee('class="crm-table-icon-action crm-table-icon-action-danger"', false)
+            ->assertSee('aria-label="Удалить контакт"', false)
+            ->assertSee('<path d="M4 7h16" />', false)
+            ->assertSee('stroke="currentColor"', false);
+
+        $this->assertStringNotContainsString('Редакт.</a>', $withDelete->getContent());
+        $this->assertStringNotContainsString('>Удалить</button>', $withDelete->getContent());
+
+        $viewer = User::factory()->create();
+        $viewer->givePermissionTo(PermissionName::CompaniesView->value);
+        $this->actingAs($viewer, 'web');
+
+        $this->get($showUrl)
+            ->assertOk()
+            ->assertDontSee($editUrl)
+            ->assertDontSee('action="'.$deleteUrl.'"', false)
+            ->assertDontSee('aria-label="Редактировать контакт"', false)
+            ->assertDontSee('aria-label="Удалить контакт"', false);
+    }
+
     public function test_invalid_or_external_context_is_ignored_and_entity_owns_company_context(): void
     {
         [$company, $contract] = $this->companyAndContract();

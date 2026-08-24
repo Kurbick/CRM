@@ -75,11 +75,42 @@ class InvoiceIndexViewTest extends TestCase
         $source = file_get_contents(resource_path('views/invoices/index.blade.php'));
 
         $this->assertStringContainsString('name="contract_id" x-model="selectedId"', $source);
-        $this->assertStringContainsString("selectedLabel()", $source);
+        $this->assertStringContainsString('selectedLabel()', $source);
         $this->assertStringContainsString("'Все договоры'", $source);
         $this->assertStringContainsString('selectContract(contract)', $source);
         $this->assertStringContainsString('rounded-lg border border-gray-200 bg-white shadow-lg', $source);
         $this->assertStringNotContainsString('<select name="contract_id"', $source);
+    }
+
+    public function test_company_and_contract_closed_values_reserve_controls_and_truncate_labels(): void
+    {
+        $source = file_get_contents(resource_path('views/invoices/index.blade.php'));
+
+        $this->assertStringContainsString('class="flex w-full min-w-0 items-center overflow-hidden rounded-lg border border-gray-200 bg-white transition focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500"', $source);
+        $this->assertStringContainsString('class="min-w-0 flex-1 truncate overflow-hidden text-ellipsis whitespace-nowrap !border-0 !bg-transparent px-3 py-2 pr-0 text-sm outline-none transition focus:!border-0 focus:ring-0"', $source);
+        $this->assertStringContainsString(':title="selectedId ? query : \'\'"', $source);
+        $this->assertStringContainsString('class="flex-none px-2 text-gray-400 hover:text-red-500 transition"', $source);
+        $this->assertStringContainsString('class="flex-none px-3 text-gray-400 hover:text-gray-600 transition"', $source);
+        $this->assertStringContainsString('class="flex w-full min-w-0 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-left text-sm text-gray-700 hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition"', $source);
+        $this->assertStringContainsString('class="min-w-0 flex-1 truncate overflow-hidden text-ellipsis whitespace-nowrap"', $source);
+        $this->assertStringContainsString(':title="selectedId ? selectedLabel : \'\'"', $source);
+        $this->assertStringContainsString('class="flex-none text-gray-400"', $source);
+        $this->assertStringNotContainsString('class="absolute inset-y-0 right-8 flex items-center px-2 text-gray-400 hover:text-red-500 transition"', $source);
+        $this->assertStringNotContainsString('class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600 transition"', $source);
+    }
+
+    public function test_company_and_contract_selection_submit_the_existing_filter_form(): void
+    {
+        $source = file_get_contents(resource_path('views/invoices/index.blade.php'));
+        $submitExpression = "this.\$nextTick(() => this.\$root.closest('form').requestSubmit());";
+
+        $this->assertSame(4, substr_count($source, $submitExpression));
+        $this->assertStringContainsString("selectContract(contract) {\n                    this.selectedId = String(contract.id);\n                    this.open = false;\n                    this.\$nextTick(() => this.\$root.closest('form').requestSubmit());\n                }", $source);
+        $this->assertStringContainsString("clearContract() {\n                    this.selectedId = '';\n                    this.open = false;\n                    this.\$nextTick(() => this.\$root.closest('form').requestSubmit());\n                }", $source);
+        $this->assertStringContainsString('name="search"', $source);
+        $this->assertStringContainsString('name="statuses[]"', $source);
+        $this->assertStringContainsString('name="overdue"', $source);
+        $this->assertStringContainsString('name="unpaid"', $source);
     }
 
     public function test_only_condition_checkboxes_submit_the_filter_form_immediately(): void

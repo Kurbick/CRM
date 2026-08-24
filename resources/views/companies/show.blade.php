@@ -553,20 +553,32 @@
                                     </td>
                                     <td class="text-xs text-slate-500">{{ $contact->comment ?? '—' }}</td>
                                     <td class="crm-table-actions">
-                                        <div class="inline-flex items-center gap-3">
+                                        <div class="inline-flex items-center gap-2">
                                             @can('update', $contact)
                                                 <a href="{{ route('contacts.edit', ['contact' => $contact, 'origin' => 'company', 'tab' => 'contacts']) }}"
-                                                    class="crm-table-action-link">Редакт.</a>
+                                                    class="crm-table-icon-action crm-table-icon-action-primary"
+                                                    aria-label="Редактировать контакт" title="Редактировать">
+                                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m15.232 5.232 3.536 3.536M4 20l4.5-1L18.768 8.732a2.5 2.5 0 0 0-3.536-3.536L4.5 15.5 4 20Z" />
+                                                    </svg>
+                                                </a>
                                             @endcan
                                             @can('delete', $contact)
-                                                <form action="{{ route('contacts.destroy', $contact) }}" method="POST"
+                                                <form class="inline-flex m-0 p-0" action="{{ route('contacts.destroy', $contact) }}" method="POST"
                                                     onsubmit="return confirm('Удалить контактное лицо?')">
                                                     @csrf
                                                     @method('DELETE')
                                                     <input type="hidden" name="origin" value="company">
                                                     <input type="hidden" name="tab" value="contacts">
-                                                    <button type="submit" class="text-xs font-semibold text-red-600 transition hover:text-red-700">
-                                                        Удалить
+                                                    <button type="submit" class="crm-table-icon-action crm-table-icon-action-danger"
+                                                        aria-label="Удалить контакт" title="Удалить">
+                                                        <svg fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">
+                                                            <path d="M4 7h16" />
+                                                            <path d="M9 7V4h6v3" />
+                                                            <path d="M7 7l1 13h8l1-13" />
+                                                            <path d="M10 11v5" />
+                                                            <path d="M14 11v5" />
+                                                        </svg>
                                                     </button>
                                                 </form>
                                             @endcan
