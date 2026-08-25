@@ -14,14 +14,19 @@ use App\Models\Invoice;
 use App\Models\InvoiceLine;
 use App\Models\Payment;
 use App\Models\Subscription;
-use App\Services\InvoiceDueDateCalculator;
+use App\Services\CompanyActivityRecorder;
 use App\Services\InvoiceBillingPeriodPresenter;
+use App\Services\InvoiceDueDateCalculator;
 use App\Services\InvoiceEditabilityService;
 use App\Services\InvoicePaymentAvailabilityService;
 use App\Services\InvoicePaymentBreakdownPresenter;
 use App\Services\InvoicePaymentSourceResolver;
 use App\Services\SubscriptionBillingSchedule;
 use App\Support\Access\PermissionName;
+use App\Support\CompanyActivityCategory;
+use App\Support\CompanyActivityEventType;
+use App\Support\CompanyActivitySnapshot;
+use App\Support\CompanyActivityVisibilityScope;
 use App\Support\CompanyPageContext;
 use App\Support\Invoices\InvoiceSellerSnapshot;
 use App\Support\Navigation\AuthorizedLandingPage;
@@ -46,6 +51,7 @@ class InvoiceController extends Controller
         private readonly SubscriptionBillingSchedule $billingSchedule,
         private readonly InvoiceSellerSnapshot $sellerSnapshot,
         private readonly UpdateInvoice $updateInvoice,
+        private readonly CompanyActivityRecorder $activityRecorder,
     ) {}
 
     /**
@@ -429,6 +435,7 @@ class InvoiceController extends Controller
             $validated,
             array_values($validated['lines']),
             canonicalizeSubjectAmounts: true,
+            actor: $request->user(),
         );
 
         return $this->mutationRedirect($invoice)
@@ -761,7 +768,9 @@ class InvoiceController extends Controller
     ) {
         Gate::authorize('issue', $invoice);
 
-        DB::transaction(function () use ($invoice, $applyCreditToInvoice) {
+        $actor = auth()->user();
+
+        DB::transaction(function () use ($invoice, $applyCreditToInvoice, $actor) {
             /*
          * Блокируем инвойс, чтобы его нельзя было
          * выставить одновременно двумя запросами.
@@ -907,6 +916,16 @@ class InvoiceController extends Controller
          * успешного выставления черновика.
          */
             $applyCreditToInvoice->execute($invoice);
+
+            $this->activityRecorder->record(
+                CompanyActivitySnapshot::companyFor($contract),
+                CompanyActivityEventType::InvoiceIssued,
+                CompanyActivityCategory::Invoices,
+                CompanyActivityVisibilityScope::Financials,
+                subject: $invoice,
+                metadata: CompanyActivitySnapshot::invoice($invoice, $contract),
+                actor: $actor,
+            );
         });
 
         $invoice->refresh();
@@ -923,7 +942,9 @@ class InvoiceController extends Controller
     {
         Gate::authorize('cancel', $invoice);
 
-        DB::transaction(function () use ($invoice) {
+        $actor = auth()->user();
+
+        DB::transaction(function () use ($invoice, $actor) {
             /*
          * Блокируем инвойс, чтобы два запроса
          * не могли отменить его одновременно.
@@ -1064,6 +1085,16 @@ class InvoiceController extends Controller
                 $subscription->next_billing_date = $date;
                 $subscription->save();
             }
+
+            $this->activityRecorder->record(
+                CompanyActivitySnapshot::companyFor($invoice->contract),
+                CompanyActivityEventType::InvoiceCancelled,
+                CompanyActivityCategory::Invoices,
+                CompanyActivityVisibilityScope::Financials,
+                subject: $invoice,
+                metadata: CompanyActivitySnapshot::invoice($invoice, $invoice->contract),
+                actor: $actor,
+            );
         });
 
         return $this->mutationRedirect($invoice)
@@ -1081,7 +1112,7 @@ class InvoiceController extends Controller
         Gate::authorize('delete', $invoice);
 
         try {
-            $deleteInvoice->execute($invoice);
+            $deleteInvoice->execute($invoice, auth()->user());
         } catch (InvoiceDeletionException $exception) {
             return back()->withErrors(['delete' => $exception->getMessage()]);
         }

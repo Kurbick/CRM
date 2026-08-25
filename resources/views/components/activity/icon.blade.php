@@ -39,6 +39,14 @@
                 <path d="M9 17h4" />
             </svg>
             @break
+        @case('invoice-cancelled')
+        @case('invoice-deleted')
+            <svg class="h-[22px] w-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6.75 3.75h7.5l3 3v13.5H6.75V3.75Z" />
+                <path d="M14.25 3.75v3h3" />
+                <path d="m9.5 12.5 5 5M14.5 12.5l-5 5" />
+            </svg>
+            @break
         @case('document')
             <svg class="h-[22px] w-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                 <path d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l9.193-9.193a3 3 0 1 1 4.243 4.243l-9.193 9.193a1.5 1.5 0 0 1-2.122-2.122l7.693-7.693" />

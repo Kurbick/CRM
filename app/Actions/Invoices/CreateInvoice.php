@@ -8,8 +8,14 @@ use App\Models\Invoice;
 use App\Models\InvoiceLine;
 use App\Models\Order;
 use App\Models\Subscription;
+use App\Models\User;
+use App\Services\CompanyActivityRecorder;
 use App\Services\InvoiceDueDateCalculator;
 use App\Services\SubscriptionBillingSchedule;
+use App\Support\CompanyActivityCategory;
+use App\Support\CompanyActivityEventType;
+use App\Support\CompanyActivitySnapshot;
+use App\Support\CompanyActivityVisibilityScope;
 use App\Support\Invoices\InvoiceSellerSnapshot;
 use Carbon\Carbon;
 use Carbon\CarbonImmutable;
@@ -23,6 +29,7 @@ final class CreateInvoice
         private readonly InvoiceDueDateCalculator $dueDateCalculator,
         private readonly SubscriptionBillingSchedule $billingSchedule,
         private readonly InvoiceSellerSnapshot $sellerSnapshot,
+        private readonly CompanyActivityRecorder $activityRecorder,
     ) {}
 
     /**
@@ -35,9 +42,10 @@ final class CreateInvoice
         array $attributes,
         array $lines,
         bool $canonicalizeSubjectAmounts = false,
+        ?User $actor = null,
     ): Invoice {
         try {
-            return DB::transaction(function () use ($company, $contract, $attributes, $lines, $canonicalizeSubjectAmounts): Invoice {
+            return DB::transaction(function () use ($company, $contract, $attributes, $lines, $canonicalizeSubjectAmounts, $actor): Invoice {
                 $lockedCompany = Company::query()
                     ->select(['id', 'name', 'short_name', 'voen'])
                     ->whereKey($company->getKey())
@@ -113,6 +121,16 @@ final class CreateInvoice
                     $invoice->lines()->create($line);
                 }
 
+                $this->activityRecorder->record(
+                    $lockedCompany,
+                    CompanyActivityEventType::InvoiceCreated,
+                    CompanyActivityCategory::Invoices,
+                    CompanyActivityVisibilityScope::Financials,
+                    subject: $invoice,
+                    metadata: CompanyActivitySnapshot::invoice($invoice, $lockedContract),
+                    actor: $actor,
+                );
+
                 return $invoice;
             });
         } catch (UniqueConstraintViolationException $exception) {
@@ -136,8 +154,7 @@ final class CreateInvoice
         array $lines,
         Contract $contract,
         bool $canonicalizeSubjectAmounts,
-    ): array
-    {
+    ): array {
         $orders = [];
         $subscriptions = [];
         $seenOrders = [];

@@ -75,6 +75,7 @@ class InvoiceController extends Controller
             $contract,
             $validated,
             array_values($validated['lines']),
+            actor: $request->user(),
         );
 
         $invoice->load(['company', 'contract', 'lines']);
@@ -110,12 +111,12 @@ class InvoiceController extends Controller
         return response()->json($this->detailProjectionFor($invoice));
     }
 
-    public function destroy(Invoice $invoice, DeleteInvoice $deleteInvoice): JsonResponse
+    public function destroy(Request $request, Invoice $invoice, DeleteInvoice $deleteInvoice): JsonResponse
     {
         Gate::authorize('delete', $invoice);
 
         try {
-            $deleteInvoice->execute($invoice);
+            $deleteInvoice->execute($invoice, $request->user());
         } catch (InvoiceDeletionException $exception) {
             return response()->json([
                 'message' => 'The given data was invalid.',

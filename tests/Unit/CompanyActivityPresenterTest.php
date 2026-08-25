@@ -50,6 +50,65 @@ class CompanyActivityPresenterTest extends TestCase
         $this->assertSame('CTR-2026-001 · 1 200,00 ₼', $presentation['context']);
     }
 
+    public function test_created_invoice_uses_draft_wording_and_contract_context(): void
+    {
+        $presentation = $this->present(CompanyActivityEventType::InvoiceCreated, [
+            'invoice_number' => 'INV-254D47',
+            'contract_number' => 'CTR-2026-001',
+            'amount_minor' => 120000,
+            'currency' => '₼',
+        ]);
+
+        $this->assertSame('Создан черновик инвойса INV-254D47', $presentation['title']);
+        $this->assertSame('CTR-2026-001 · 1 200,00 ₼', $presentation['context']);
+    }
+
+    public function test_cancelled_invoice_uses_number_contract_context_and_red_icon(): void
+    {
+        $presentation = $this->present(CompanyActivityEventType::InvoiceCancelled, [
+            'invoice_number' => 'INV-254D47',
+            'contract_number' => 'CTR-2026-001',
+            'amount_minor' => 120000,
+            'currency' => '₼',
+        ]);
+
+        $this->assertSame('Инвойс INV-254D47 отменён', $presentation['title']);
+        $this->assertSame('CTR-2026-001 · 1 200,00 ₼', $presentation['context']);
+        $this->assertSame('invoice-cancelled', $presentation['icon']);
+        $this->assertSame('red', $presentation['tone']);
+    }
+
+    public function test_deleted_draft_invoice_uses_draft_wording_and_never_links_to_invoice(): void
+    {
+        $presentation = $this->present(CompanyActivityEventType::InvoiceDeleted, [
+            'invoice_number' => 'INV-254D47',
+            'status' => 'draft',
+            'contract_number' => 'CTR-2026-001',
+            'amount_minor' => 120000,
+            'currency' => '₼',
+        ]);
+
+        $this->assertSame('Удалён черновик инвойса INV-254D47', $presentation['title']);
+        $this->assertSame('CTR-2026-001 · 1 200,00 ₼', $presentation['context']);
+        $this->assertSame('invoice-deleted', $presentation['icon']);
+        $this->assertSame('red', $presentation['tone']);
+        $this->assertNull($presentation['subject_url']);
+    }
+
+    public function test_invoice_presentations_fall_back_without_broken_context_punctuation(): void
+    {
+        foreach ([
+            [CompanyActivityEventType::InvoiceCreated, 'Создан черновик инвойса'],
+            [CompanyActivityEventType::InvoiceIssued, 'Инвойс выставлен'],
+            [CompanyActivityEventType::InvoiceCancelled, 'Инвойс отменён'],
+        ] as [$type, $title]) {
+            $presentation = $this->present($type, []);
+
+            $this->assertSame($title, $presentation['title']);
+            $this->assertNull($presentation['context']);
+        }
+    }
+
     public function test_issued_invoice_falls_back_without_inventing_contract_number(): void
     {
         $presentation = $this->present(CompanyActivityEventType::InvoiceIssued, [

@@ -20,6 +20,7 @@ enum CompanyActivityEventType: string
     case InvoiceCreated = 'invoice.created';
     case InvoiceIssued = 'invoice.issued';
     case InvoiceCancelled = 'invoice.cancelled';
+    case InvoiceDeleted = 'invoice.deleted';
     case PaymentPendingCreated = 'payment.pending_created';
     case PaymentConfirmed = 'payment.confirmed';
     case PaymentCancelled = 'payment.cancelled';

@@ -4,8 +4,10 @@ namespace App\Support;
 
 use App\Models\Company;
 use App\Models\Contract;
+use App\Models\Invoice;
 use App\Models\Order;
 use App\Models\Subscription;
+use DateTimeInterface;
 
 final class CompanyActivitySnapshot
 {
@@ -37,6 +39,30 @@ final class CompanyActivitySnapshot
         ], static fn (mixed $value): bool => $value !== null);
     }
 
+    /** @return array<string, mixed> */
+    public static function invoice(Invoice $invoice, ?Contract $contract = null): array
+    {
+        $contractNumber = $contract?->contract_number;
+        if ($contractNumber === null && $invoice->relationLoaded('contract')) {
+            $contractNumber = $invoice->contract?->contract_number;
+        }
+        if ($contractNumber === null) {
+            $contractNumber = $invoice->contract_reference;
+        }
+
+        return array_filter([
+            'invoice_number' => self::text($invoice->invoice_number),
+            'status' => self::text($invoice->status),
+            'amount_minor' => self::minorAmount($invoice->total_amount),
+            'currency' => '₼',
+            'contract_number' => self::text($contractNumber),
+            'issue_date' => self::dateValue($invoice->issue_date),
+            'due_date' => self::dateValue($invoice->due_date),
+            'period_start' => self::dateValue($invoice->period_start),
+            'period_end' => self::dateValue($invoice->period_end),
+        ], static fn (mixed $value): bool => $value !== null);
+    }
+
     public static function companyFor(Contract $contract): Company
     {
         if ($contract->relationLoaded('company') && $contract->company instanceof Company) {
@@ -44,6 +70,11 @@ final class CompanyActivitySnapshot
         }
 
         return (new Company)->forceFill(['id' => $contract->company_id]);
+    }
+
+    public static function companyForInvoice(Invoice $invoice): Company
+    {
+        return (new Company)->forceFill(['id' => $invoice->company_id]);
     }
 
     public static function minorAmount(mixed $amount): ?int
@@ -69,5 +100,14 @@ final class CompanyActivitySnapshot
     private static function text(mixed $value): ?string
     {
         return is_scalar($value) && trim((string) $value) !== '' ? trim((string) $value) : null;
+    }
+
+    private static function dateValue(mixed $value): ?string
+    {
+        if ($value instanceof DateTimeInterface) {
+            return $value->format('Y-m-d');
+        }
+
+        return self::text($value);
     }
 }

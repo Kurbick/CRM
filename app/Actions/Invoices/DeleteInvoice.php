@@ -9,7 +9,13 @@ use App\Models\InvoiceLine;
 use App\Models\Payment;
 use App\Models\PaymentAllocation;
 use App\Models\Subscription;
+use App\Models\User;
+use App\Services\CompanyActivityRecorder;
 use App\Services\SubscriptionBillingSchedule;
+use App\Support\CompanyActivityCategory;
+use App\Support\CompanyActivityEventType;
+use App\Support\CompanyActivitySnapshot;
+use App\Support\CompanyActivityVisibilityScope;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -18,11 +24,12 @@ final class DeleteInvoice
 {
     public function __construct(
         private readonly SubscriptionBillingSchedule $billingSchedule,
+        private readonly CompanyActivityRecorder $activityRecorder,
     ) {}
 
-    public function execute(Invoice $invoice): void
+    public function execute(Invoice $invoice, ?User $actor = null): void
     {
-        DB::transaction(function () use ($invoice): void {
+        DB::transaction(function () use ($invoice, $actor): void {
             $lockedInvoice = Invoice::query()
                 ->whereKey($invoice->getKey())
                 ->lockForUpdate()
@@ -130,6 +137,16 @@ final class DeleteInvoice
             }
 
             $lockedInvoice->delete();
+
+            $this->activityRecorder->record(
+                CompanyActivitySnapshot::companyForInvoice($lockedInvoice),
+                CompanyActivityEventType::InvoiceDeleted,
+                CompanyActivityCategory::Invoices,
+                CompanyActivityVisibilityScope::Financials,
+                subject: $lockedInvoice,
+                metadata: CompanyActivitySnapshot::invoice($lockedInvoice),
+                actor: $actor,
+            );
         });
     }
 

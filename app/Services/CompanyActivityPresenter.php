@@ -86,14 +86,30 @@ final class CompanyActivityPresenter
                 'document-deleted',
                 'red',
             ],
-            CompanyActivityEventType::InvoiceCreated => ['Инвойс создан', $this->joinContext($invoiceNumber, $amount), 'invoice', 'blue'],
+            CompanyActivityEventType::InvoiceCreated => [
+                $invoiceNumber === null ? 'Создан черновик инвойса' : 'Создан черновик инвойса '.$invoiceNumber,
+                $this->joinContext($contractNumber, $amount),
+                'invoice',
+                'blue',
+            ],
             CompanyActivityEventType::InvoiceIssued => [
                 $invoiceNumber === null ? 'Инвойс выставлен' : 'Инвойс '.$invoiceNumber.' выставлен',
                 $this->joinContext($contractNumber, $amount),
                 'invoice',
                 'blue',
             ],
-            CompanyActivityEventType::InvoiceCancelled => ['Инвойс отменён', $invoiceNumber, 'invoice', 'red'],
+            CompanyActivityEventType::InvoiceCancelled => [
+                $invoiceNumber === null ? 'Инвойс отменён' : 'Инвойс '.$invoiceNumber.' отменён',
+                $this->joinContext($contractNumber, $amount),
+                'invoice-cancelled',
+                'red',
+            ],
+            CompanyActivityEventType::InvoiceDeleted => [
+                $this->deletedInvoiceTitle($invoiceNumber, $metadata),
+                $this->joinContext($contractNumber, $amount),
+                'invoice-deleted',
+                'red',
+            ],
             CompanyActivityEventType::PaymentPendingCreated => [
                 $amount === null
                     ? 'Платёж ожидает подтверждения'
@@ -176,6 +192,10 @@ final class CompanyActivityPresenter
 
     private function subjectUrl(CompanyActivityEvent $event, User $user, array $availableSubjects): ?string
     {
+        if ($event->event_type === CompanyActivityEventType::InvoiceDeleted->value) {
+            return null;
+        }
+
         $id = $event->subject_id === null ? null : (int) $event->subject_id;
         if ($id === null) {
             return null;
@@ -253,6 +273,15 @@ final class CompanyActivityPresenter
     private function paymentTitle(?string $amount, string $suffix): string
     {
         return $amount === null ? 'Платёж '.$suffix : 'Платёж '.$amount.' '.$suffix;
+    }
+
+    private function deletedInvoiceTitle(?string $invoiceNumber, array $metadata): string
+    {
+        $invoice = $invoiceNumber === null ? 'Инвойс' : 'Инвойс '.$invoiceNumber;
+
+        return ($this->text($metadata, 'status') ?? '') === 'draft'
+            ? str_replace('Инвойс', 'Удалён черновик инвойса', $invoice)
+            : $invoice.' удалён';
     }
 
     private function billingPeriod(array $metadata): ?string

@@ -310,7 +310,7 @@ class CompanyActivityTest extends TestCase
 
         $response->assertViewHas('activeTab', 'activity')
             ->assertViewHas('activityCategory', CompanyActivityCategory::Invoices)
-            ->assertSee('Инвойс создан')
+            ->assertSee('Создан черновик инвойса')
             ->assertDontSee('Контакт создан')
             ->assertSee('value="activity"', false)
             ->assertSee('name="activity_category" x-model="selectedCategory"', false);
