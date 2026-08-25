@@ -2,11 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Contacts\CreateContact;
+use App\Actions\Contacts\DeleteContact;
+use App\Actions\Contacts\UpdateContact;
 use App\Http\Requests\StoreCompanyContactRequest;
 use App\Http\Requests\UpdateCompanyContactRequest;
 use App\Models\Company;
 use App\Models\CompanyContact;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
 class CompanyContactController extends Controller
@@ -45,9 +49,12 @@ class CompanyContactController extends Controller
      * Создать контактное лицо для компании.
      * company_id берём из URL — не из тела запроса.
      */
-    public function store(StoreCompanyContactRequest $request, Company $company): JsonResponse
-    {
-        $contact = $company->contacts()->create($request->validated());
+    public function store(
+        StoreCompanyContactRequest $request,
+        Company $company,
+        CreateContact $createContact,
+    ): JsonResponse {
+        $contact = $createContact->execute($company, $request->validated(), $request->user());
 
         return response()->json($this->contactProjection($contact, $company), 201);
     }
@@ -62,9 +69,12 @@ class CompanyContactController extends Controller
         ));
     }
 
-    public function update(UpdateCompanyContactRequest $request, CompanyContact $contact): JsonResponse
-    {
-        $contact->update($request->validated());
+    public function update(
+        UpdateCompanyContactRequest $request,
+        CompanyContact $contact,
+        UpdateContact $updateContact,
+    ): JsonResponse {
+        $contact = $updateContact->execute($contact, $request->validated(), $request->user());
 
         return response()->json($this->contactProjection(
             $contact,
@@ -72,11 +82,14 @@ class CompanyContactController extends Controller
         ));
     }
 
-    public function destroy(CompanyContact $contact): JsonResponse
-    {
+    public function destroy(
+        Request $request,
+        CompanyContact $contact,
+        DeleteContact $deleteContact,
+    ): JsonResponse {
         Gate::authorize('delete', $contact);
 
-        $contact->delete();
+        $deleteContact->execute($contact, $request->user());
 
         return response()->json(['message' => 'Контакт удалён'], 200);
     }

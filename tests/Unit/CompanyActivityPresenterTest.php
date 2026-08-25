@@ -39,6 +39,35 @@ class CompanyActivityPresenterTest extends TestCase
         $this->assertSame('blue', $presentation['tone']);
     }
 
+    public function test_contact_events_use_compact_name_and_context_presentation(): void
+    {
+        $created = $this->present(CompanyActivityEventType::ContactCreated, [
+            'contact_name' => 'Иван Иванов',
+            'position' => 'Директор',
+            'phone' => '+994500000001',
+        ]);
+        $updated = $this->present(CompanyActivityEventType::ContactUpdated, [
+            'contact_name' => 'Иван Иванов',
+            'position' => 'Бухгалтер',
+            'email' => 'ivan@example.test',
+        ]);
+        $deleted = $this->present(CompanyActivityEventType::ContactDeleted, [
+            'contact_name' => 'Иван Иванов',
+            'position' => 'Бухгалтер',
+        ]);
+
+        $this->assertSame('Добавлен контакт Иван Иванов', $created['title']);
+        $this->assertSame('Директор · +994500000001', $created['context']);
+        $this->assertSame('contact-created', $created['icon']);
+        $this->assertSame('Контакт Иван Иванов изменён', $updated['title']);
+        $this->assertSame('Бухгалтер · ivan@example.test', $updated['context']);
+        $this->assertSame('contact-updated', $updated['icon']);
+        $this->assertSame('Удалён контакт Иван Иванов', $deleted['title']);
+        $this->assertSame('Бухгалтер', $deleted['context']);
+        $this->assertSame('contact-deleted', $deleted['icon']);
+        $this->assertSame('red', $deleted['tone']);
+    }
+
     public function test_pending_payment_includes_amount_without_duplicating_it_in_context(): void
     {
         $presentation = $this->present(CompanyActivityEventType::PaymentPendingCreated, [

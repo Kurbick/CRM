@@ -48,9 +48,24 @@ final class CompanyActivityPresenter
         return match ($type) {
             CompanyActivityEventType::CompanyCreated => ['Компания создана', null, 'company', 'blue'],
             CompanyActivityEventType::CompanyUpdated => ['Данные компании обновлены', null, 'company', 'slate'],
-            CompanyActivityEventType::ContactCreated => ['Контакт создан', $contactName, 'contact', 'slate'],
-            CompanyActivityEventType::ContactUpdated => ['Контакт обновлён', $contactName, 'contact', 'slate'],
-            CompanyActivityEventType::ContactDeleted => ['Контакт удалён', $contactName, 'contact', 'slate'],
+            CompanyActivityEventType::ContactCreated => [
+                $contactName === null ? 'Добавлен контакт' : 'Добавлен контакт '.$contactName,
+                $this->contactContext($metadata),
+                'contact-created',
+                'blue',
+            ],
+            CompanyActivityEventType::ContactUpdated => [
+                $contactName === null ? 'Контакт изменён' : 'Контакт '.$contactName.' изменён',
+                $this->contactContext($metadata),
+                'contact-updated',
+                'blue',
+            ],
+            CompanyActivityEventType::ContactDeleted => [
+                $contactName === null ? 'Удалён контакт' : 'Удалён контакт '.$contactName,
+                $this->contactContext($metadata),
+                'contact-deleted',
+                'red',
+            ],
             CompanyActivityEventType::ContractCreated => [
                 $contractNumber === null ? 'Договор создан' : 'Создан договор '.$contractNumber,
                 $this->contractDates($metadata),
@@ -278,6 +293,14 @@ final class CompanyActivityPresenter
     private function paymentTitle(?string $amount, string $suffix): string
     {
         return $amount === null ? 'Платёж '.$suffix : 'Платёж '.$amount.' '.$suffix;
+    }
+
+    private function contactContext(array $metadata): ?string
+    {
+        return $this->joinContext(
+            $this->text($metadata, 'position'),
+            $this->text($metadata, 'phone') ?? $this->text($metadata, 'email'),
+        ) ?? $this->text($metadata, 'contact_name');
     }
 
     private function deletedInvoiceTitle(?string $invoiceNumber, array $metadata): string

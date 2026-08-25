@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers\Web;
 
+use App\Actions\Contacts\CreateContact;
+use App\Actions\Contacts\DeleteContact;
+use App\Actions\Contacts\UpdateContact;
 use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\CompanyContact;
@@ -22,7 +25,7 @@ class CompanyContactController extends Controller
         return view('contacts.create', compact('company', 'companyContext', 'backUrl'));
     }
 
-    public function store(Request $request, Company $company)
+    public function store(Request $request, Company $company, CreateContact $createContact)
     {
         Gate::authorize('create', [CompanyContact::class, $company]);
 
@@ -36,7 +39,7 @@ class CompanyContactController extends Controller
             'comment' => 'nullable|string',
         ]);
 
-        $company->contacts()->create($validated);
+        $createContact->execute($company, $validated, $request->user());
 
         return $this->redirectAfterMutation(
             $request,
@@ -56,7 +59,7 @@ class CompanyContactController extends Controller
         return view('contacts.edit', compact('contact', 'company', 'companyContext', 'backUrl'));
     }
 
-    public function update(Request $request, CompanyContact $contact)
+    public function update(Request $request, CompanyContact $contact, UpdateContact $updateContact)
     {
         Gate::authorize('update', $contact);
 
@@ -70,21 +73,21 @@ class CompanyContactController extends Controller
             'comment' => 'nullable|string',
         ]);
 
-        $contact->update($validated);
+        $updatedContact = $updateContact->execute($contact, $validated, $request->user());
 
         return $this->redirectAfterMutation(
             $request,
-            $contact->company,
+            $updatedContact->company,
             'Контакт обновлён.'
         );
     }
 
-    public function destroy(Request $request, CompanyContact $contact)
+    public function destroy(Request $request, CompanyContact $contact, DeleteContact $deleteContact)
     {
         Gate::authorize('delete', $contact);
 
         $company = $contact->company;
-        $contact->delete();
+        $deleteContact->execute($contact, $request->user());
 
         return $this->redirectAfterMutation(
             $request,

@@ -77,6 +77,27 @@
                 <path d="m15.5 15.5 4 4M19.5 15.5l-4 4" />
             </svg>
             @break
+        @case('contact-created')
+            <svg class="h-[22px] w-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21a8 8 0 0 0-16 0" />
+                <circle cx="12" cy="7" r="4" />
+                <path d="M18 8v5M15.5 10.5h5" />
+            </svg>
+            @break
+        @case('contact-updated')
+            <svg class="h-[22px] w-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21a8 8 0 0 0-16 0" />
+                <circle cx="12" cy="7" r="4" />
+                <path d="m16.5 14.5 3-3 1.5 1.5-3 3-2.25.75.75-2.25Z" />
+            </svg>
+            @break
+        @case('contact-deleted')
+            <svg class="h-[22px] w-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21a8 8 0 0 0-16 0" />
+                <circle cx="12" cy="7" r="4" />
+                <path d="m16 15 4 4M20 15l-4 4" />
+            </svg>
+            @break
         @case('contact')
             <svg class="h-[22px] w-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M20 21a8 8 0 0 0-16 0" />

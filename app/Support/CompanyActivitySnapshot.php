@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\Company;
+use App\Models\CompanyContact;
 use App\Models\Contract;
 use App\Models\Invoice;
 use App\Models\Order;
@@ -91,6 +92,22 @@ final class CompanyActivitySnapshot
         ], static fn (mixed $value): bool => $value !== null);
     }
 
+    /** @return array<string, mixed> */
+    public static function contact(CompanyContact $contact): array
+    {
+        $name = trim(implode(' ', array_filter([
+            self::text($contact->first_name),
+            self::text($contact->last_name),
+        ])));
+
+        return array_filter([
+            'contact_name' => $name !== '' ? $name : null,
+            'position' => self::text($contact->position),
+            'phone' => self::text($contact->phone),
+            'email' => self::text($contact->email),
+        ], static fn (mixed $value): bool => $value !== null);
+    }
+
     public static function companyFor(Contract $contract): Company
     {
         if ($contract->relationLoaded('company') && $contract->company instanceof Company) {
@@ -103,6 +120,11 @@ final class CompanyActivitySnapshot
     public static function companyForInvoice(Invoice $invoice): Company
     {
         return (new Company)->forceFill(['id' => $invoice->company_id]);
+    }
+
+    public static function companyForContact(CompanyContact $contact): Company
+    {
+        return (new Company)->forceFill(['id' => $contact->company_id]);
     }
 
     public static function minorAmount(mixed $amount): ?int
