@@ -139,15 +139,20 @@ class InvoiceActivityProducerTest extends AuthorizationTestCase
         $this->post(route('invoices.issue', $invoice))->assertRedirect();
 
         $this->assertSame('paid', $invoice->fresh()->status);
-        $this->assertSame(1, $this->activityCount($invoice->company));
+        $this->assertSame(2, $this->activityCount($invoice->company));
         $this->assertDatabaseHas('company_activity_events', [
             'company_id' => $invoice->company_id,
             'event_type' => CompanyActivityEventType::InvoiceIssued->value,
             'metadata->invoice_number' => $invoice->invoice_number,
         ]);
+        $this->assertDatabaseHas('company_activity_events', [
+            'company_id' => $invoice->company_id,
+            'event_type' => CompanyActivityEventType::CreditApplied->value,
+            'metadata->amount_minor' => 10000,
+        ]);
         $this->assertDatabaseMissing('company_activity_events', [
             'company_id' => $invoice->company_id,
-            'event_type' => 'credit.applied',
+            'event_type' => CompanyActivityEventType::PaymentConfirmed->value,
         ]);
     }
 
@@ -350,7 +355,7 @@ class InvoiceActivityProducerTest extends AuthorizationTestCase
         $this->assertSame(0, $this->activityCount($cancelledCandidate->company));
     }
 
-    public function test_payment_and_manual_credit_operations_create_no_invoice_events(): void
+    public function test_payment_and_manual_credit_operations_create_financial_events_without_invoice_events(): void
     {
         $invoice = $this->invoice('issued', 'INV-ACT-NOISE');
         $pending = app(CreatePendingPayment::class)->execute($invoice, [
@@ -367,7 +372,19 @@ class InvoiceActivityProducerTest extends AuthorizationTestCase
         ]);
         app(ApplyCreditToInvoice::class)->execute($invoice->fresh());
 
-        $this->assertSame(0, $this->activityCount($invoice->company));
+        $this->assertSame(3, $this->activityCount($invoice->company));
+        $this->assertDatabaseHas('company_activity_events', [
+            'company_id' => $invoice->company_id,
+            'event_type' => CompanyActivityEventType::PaymentPendingCreated->value,
+        ]);
+        $this->assertDatabaseHas('company_activity_events', [
+            'company_id' => $invoice->company_id,
+            'event_type' => CompanyActivityEventType::PaymentConfirmed->value,
+        ]);
+        $this->assertDatabaseHas('company_activity_events', [
+            'company_id' => $invoice->company_id,
+            'event_type' => CompanyActivityEventType::CreditApplied->value,
+        ]);
         $this->assertDatabaseMissing('company_activity_events', [
             'company_id' => $invoice->company_id,
             'event_type' => CompanyActivityEventType::InvoiceIssued->value,

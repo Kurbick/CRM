@@ -6,8 +6,14 @@ use App\Models\CreditBalance;
 use App\Models\CreditBalanceEntry;
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Models\User;
+use App\Services\CompanyActivityRecorder;
 use App\Services\InvoicePaymentAllocationWriter;
 use App\Services\InvoicePaymentAvailabilityService;
+use App\Support\CompanyActivityCategory;
+use App\Support\CompanyActivityEventType;
+use App\Support\CompanyActivitySnapshot;
+use App\Support\CompanyActivityVisibilityScope;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use LogicException;
@@ -17,14 +23,15 @@ final class CancelPayment
     public function __construct(
         private readonly InvoicePaymentAllocationWriter $allocationWriter,
         private readonly InvoicePaymentAvailabilityService $money,
+        private readonly CompanyActivityRecorder $activityRecorder,
     ) {}
 
-    public function execute(Payment $payment, string $reason): Payment
+    public function execute(Payment $payment, string $reason, ?User $actor = null): Payment
     {
         $paymentId = (int) $payment->getKey();
         $invoiceId = (int) $payment->invoice_id;
 
-        return DB::transaction(function () use ($invoiceId, $paymentId, $reason): Payment {
+        return DB::transaction(function () use ($invoiceId, $paymentId, $reason, $actor): Payment {
             $invoice = Invoice::query()
                 ->whereKey($invoiceId)
                 ->lockForUpdate()
@@ -66,41 +73,51 @@ final class CancelPayment
                     throw new LogicException('Credit-funded Payment must be confirmed before cancellation.');
                 }
 
-                return $this->markCancelled($lockedPayment, $reason);
+                $cancelledPayment = $this->markCancelled($lockedPayment, $reason);
+            } else {
+                if (! in_array($invoice->status, ['issued', 'partially_paid', 'paid'], true)) {
+                    throw ValidationException::withMessages([
+                        'cancel_reason' => 'Нельзя отменить платёж этого инвойса.',
+                    ]);
+                }
+
+                $remainingConfirmedAmount = round(
+                    (float) $invoice->payments()
+                        ->where('status', 'confirmed')
+                        ->whereKeyNot($lockedPayment->getKey())
+                        ->sum('amount'),
+                    2
+                );
+
+                if ($appliedEntry !== null) {
+                    $this->reverseAppliedCredit($invoice, $lockedPayment, $appliedEntry);
+                } else {
+                    $this->reverseExactUnusedTopUp($invoice, $lockedPayment);
+                }
+
+                $cancelledPayment = $this->markCancelled($lockedPayment, $reason);
+
+                $invoice->forceFill([
+                    'status' => $this->resolveInvoiceStatus(
+                        confirmedAmount: $remainingConfirmedAmount,
+                        invoiceTotal: (float) $invoice->total_amount
+                    ),
+                ])->save();
+
+                $this->allocationWriter->synchronize($invoice);
             }
 
-            if (! in_array($invoice->status, ['issued', 'partially_paid', 'paid'], true)) {
-                throw ValidationException::withMessages([
-                    'cancel_reason' => 'Нельзя отменить платёж этого инвойса.',
-                ]);
-            }
-
-            $remainingConfirmedAmount = round(
-                (float) $invoice->payments()
-                    ->where('status', 'confirmed')
-                    ->whereKeyNot($lockedPayment->getKey())
-                    ->sum('amount'),
-                2
+            $this->activityRecorder->record(
+                CompanyActivitySnapshot::companyForInvoice($invoice),
+                CompanyActivityEventType::PaymentCancelled,
+                CompanyActivityCategory::Payments,
+                CompanyActivityVisibilityScope::Financials,
+                subject: $invoice,
+                metadata: CompanyActivitySnapshot::payment($cancelledPayment, $invoice),
+                actor: $actor,
             );
 
-            if ($appliedEntry !== null) {
-                $this->reverseAppliedCredit($invoice, $lockedPayment, $appliedEntry);
-            } else {
-                $this->reverseExactUnusedTopUp($invoice, $lockedPayment);
-            }
-
-            $this->markCancelled($lockedPayment, $reason);
-
-            $invoice->forceFill([
-                'status' => $this->resolveInvoiceStatus(
-                    confirmedAmount: $remainingConfirmedAmount,
-                    invoiceTotal: (float) $invoice->total_amount
-                ),
-            ])->save();
-
-            $this->allocationWriter->synchronize($invoice);
-
-            return $lockedPayment;
+            return $cancelledPayment;
         });
     }
 

@@ -25,6 +25,20 @@ class CompanyActivityPresenterTest extends TestCase
         $this->assertSame('INV-254D47 · Безналичный', $presentation['context']);
     }
 
+    public function test_credit_application_has_balance_wording_and_invoice_context(): void
+    {
+        $presentation = $this->present(CompanyActivityEventType::CreditApplied, [
+            'amount_minor' => 60000,
+            'currency' => '₼',
+            'invoice_number' => 'INV-254D47',
+        ]);
+
+        $this->assertSame('Из баланса применено 600,00 ₼', $presentation['title']);
+        $this->assertSame('INV-254D47', $presentation['context']);
+        $this->assertSame('credit-applied', $presentation['icon']);
+        $this->assertSame('blue', $presentation['tone']);
+    }
+
     public function test_pending_payment_includes_amount_without_duplicating_it_in_context(): void
     {
         $presentation = $this->present(CompanyActivityEventType::PaymentPendingCreated, [

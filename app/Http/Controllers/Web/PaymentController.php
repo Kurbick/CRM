@@ -88,7 +88,7 @@ class PaymentController extends Controller
         ]);
 
         if ($validated['status'] === 'confirmed') {
-            $this->createConfirmedPayment->execute($invoice, $validated);
+            $this->createConfirmedPayment->execute($invoice, $validated, $request->user());
         } else {
             try {
                 $this->createPendingPayment->execute($invoice, [
@@ -96,7 +96,7 @@ class PaymentController extends Controller
                     'amount' => $validated['amount'],
                     'payment_method' => $validated['payment_method'],
                     'comment' => $validated['comment'] ?? null,
-                ]);
+                ], $request->user());
             } catch (ValidationException $exception) {
                 $errors = $exception->errors();
                 if (isset($errors['payment']) && ! isset($errors['amount'])) {
@@ -121,12 +121,13 @@ class PaymentController extends Controller
      * Финансовый lifecycle выполняется явно в ConfirmPayment.
      */
     public function confirm(
+        Request $request,
         Payment $payment
     ): RedirectResponse {
         Gate::authorize('confirm', $payment);
 
         try {
-            $confirmedPayment = $this->confirmPayment->execute($payment);
+            $confirmedPayment = $this->confirmPayment->execute($payment, $request->user());
         } catch (PaymentConfirmationException $exception) {
             throw ValidationException::withMessages([
                 'payment_confirm' => $exception->getMessage(),
@@ -180,7 +181,8 @@ class PaymentController extends Controller
 
         $cancelledPayment = $this->cancelPayment->execute(
             $payment,
-            $validated['cancel_reason']
+            $validated['cancel_reason'],
+            $request->user(),
         );
 
         return $this->mutationRedirect($cancelledPayment->invoice_id)

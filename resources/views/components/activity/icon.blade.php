@@ -30,6 +30,12 @@
                 <path d="m14.5 9.5-5 5" />
             </svg>
             @break
+        @case('credit-applied')
+            <svg class="h-[22px] w-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3.75" y="5.25" width="16.5" height="13.5" rx="2" />
+                <path d="M3.75 9.25h16.5M8 14h.01M12 14h4" />
+            </svg>
+            @break
         @case('invoice')
             <svg class="h-[22px] w-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M6.75 3.75h7.5l3 3v13.5H6.75V3.75Z" />

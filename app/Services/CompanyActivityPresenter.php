@@ -125,7 +125,12 @@ final class CompanyActivityPresenter
                 'payment-cancelled',
                 'red',
             ],
-            CompanyActivityEventType::CreditApplied => ['Кредит применён', $this->joinContext($invoiceNumber, $amount), 'payment-confirmed', 'green'],
+            CompanyActivityEventType::CreditApplied => [
+                $amount === null ? 'Из баланса применено' : 'Из баланса применено '.$amount,
+                $invoiceNumber,
+                'credit-applied',
+                'blue',
+            ],
             default => ['Событие компании', null, 'company', 'slate'],
         };
     }

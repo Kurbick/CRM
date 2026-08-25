@@ -6,6 +6,7 @@ use App\Models\Company;
 use App\Models\Contract;
 use App\Models\Invoice;
 use App\Models\Order;
+use App\Models\Payment;
 use App\Models\Subscription;
 use DateTimeInterface;
 
@@ -60,6 +61,33 @@ final class CompanyActivitySnapshot
             'due_date' => self::dateValue($invoice->due_date),
             'period_start' => self::dateValue($invoice->period_start),
             'period_end' => self::dateValue($invoice->period_end),
+        ], static fn (mixed $value): bool => $value !== null);
+    }
+
+    /** @return array<string, mixed> */
+    public static function payment(Payment $payment, ?Invoice $invoice = null): array
+    {
+        $invoiceNumber = $invoice?->invoice_number;
+        if ($invoiceNumber === null && $payment->relationLoaded('invoice')) {
+            $invoiceNumber = $payment->invoice?->invoice_number;
+        }
+
+        return array_filter([
+            'amount_minor' => self::minorAmount($payment->getRawOriginal('amount')),
+            'currency' => '₼',
+            'invoice_number' => self::text($invoiceNumber),
+            'payment_method' => self::text($payment->payment_method),
+            'reason' => self::text($payment->cancel_reason),
+        ], static fn (mixed $value): bool => $value !== null);
+    }
+
+    /** @return array<string, mixed> */
+    public static function creditApplied(Invoice $invoice, int $amountMinor): array
+    {
+        return array_filter([
+            'amount_minor' => $amountMinor,
+            'currency' => '₼',
+            'invoice_number' => self::text($invoice->invoice_number),
         ], static fn (mixed $value): bool => $value !== null);
     }
 

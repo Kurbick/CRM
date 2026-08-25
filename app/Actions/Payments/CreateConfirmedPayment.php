@@ -4,7 +4,13 @@ namespace App\Actions\Payments;
 
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Models\User;
+use App\Services\CompanyActivityRecorder;
 use App\Services\InvoicePaymentAvailabilityService;
+use App\Support\CompanyActivityCategory;
+use App\Support\CompanyActivityEventType;
+use App\Support\CompanyActivitySnapshot;
+use App\Support\CompanyActivityVisibilityScope;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -14,13 +20,14 @@ final class CreateConfirmedPayment
 
     public function __construct(
         private readonly InvoicePaymentAvailabilityService $availabilityService,
-        private readonly ApplyConfirmedPaymentLifecycle $lifecycle
+        private readonly ApplyConfirmedPaymentLifecycle $lifecycle,
+        private readonly CompanyActivityRecorder $activityRecorder,
     ) {}
 
     /** @param array{payment_date: string, amount: mixed, payment_method: string, comment?: string|null} $attributes */
-    public function execute(Invoice $invoice, array $attributes): Payment
+    public function execute(Invoice $invoice, array $attributes, ?User $actor = null): Payment
     {
-        return DB::transaction(function () use ($invoice, $attributes): Payment {
+        return DB::transaction(function () use ($invoice, $attributes, $actor): Payment {
             $lockedInvoice = Invoice::query()
                 ->whereKey($invoice->getKey())
                 ->lockForUpdate()
@@ -58,7 +65,19 @@ final class CreateConfirmedPayment
                 'comment' => $attributes['comment'] ?? null,
             ]));
 
-            return $this->lifecycle->execute($lockedInvoice, $payment);
+            $confirmedPayment = $this->lifecycle->execute($lockedInvoice, $payment);
+
+            $this->activityRecorder->record(
+                CompanyActivitySnapshot::companyForInvoice($lockedInvoice),
+                CompanyActivityEventType::PaymentConfirmed,
+                CompanyActivityCategory::Payments,
+                CompanyActivityVisibilityScope::Financials,
+                subject: $lockedInvoice,
+                metadata: CompanyActivitySnapshot::payment($confirmedPayment, $lockedInvoice),
+                actor: $actor,
+            );
+
+            return $confirmedPayment;
         });
     }
 }

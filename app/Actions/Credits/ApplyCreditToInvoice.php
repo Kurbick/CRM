@@ -6,7 +6,13 @@ use App\Actions\Payments\ApplyConfirmedPaymentLifecycle;
 use App\Models\CreditBalance;
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Models\User;
+use App\Services\CompanyActivityRecorder;
 use App\Services\InvoicePaymentAvailabilityService;
+use App\Support\CompanyActivityCategory;
+use App\Support\CompanyActivityEventType;
+use App\Support\CompanyActivitySnapshot;
+use App\Support\CompanyActivityVisibilityScope;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
@@ -19,11 +25,13 @@ final class ApplyCreditToInvoice
     public function __construct(
         private readonly InvoicePaymentAvailabilityService $money,
         private readonly ApplyConfirmedPaymentLifecycle $paymentLifecycle,
+        private readonly CompanyActivityRecorder $activityRecorder,
     ) {}
 
     public function execute(
         Invoice $invoice,
         ?int $requestedAmountMinor = null,
+        ?User $actor = null,
     ): AppliedCreditResult {
         $this->validateRequestedAmount($requestedAmountMinor);
 
@@ -31,6 +39,7 @@ final class ApplyCreditToInvoice
             invoice: $invoice,
             requestedAmountMinor: $requestedAmountMinor,
             strict: false,
+            actor: $actor,
         );
     }
 
@@ -43,6 +52,7 @@ final class ApplyCreditToInvoice
         int $requestedAmountMinor,
         int $expectedCreditBalanceMinor,
         int $expectedAvailableMinor,
+        ?User $actor = null,
     ): AppliedCreditResult {
         $this->validateRequestedAmount($requestedAmountMinor);
 
@@ -57,6 +67,7 @@ final class ApplyCreditToInvoice
             strict: true,
             expectedCreditBalanceMinor: $expectedCreditBalanceMinor,
             expectedAvailableMinor: $expectedAvailableMinor,
+            actor: $actor,
         );
     }
 
@@ -66,6 +77,7 @@ final class ApplyCreditToInvoice
         bool $strict,
         ?int $expectedCreditBalanceMinor = null,
         ?int $expectedAvailableMinor = null,
+        ?User $actor = null,
     ): AppliedCreditResult {
         return DB::transaction(function () use (
             $invoice,
@@ -73,6 +85,7 @@ final class ApplyCreditToInvoice
             $strict,
             $expectedCreditBalanceMinor,
             $expectedAvailableMinor,
+            $actor,
         ): AppliedCreditResult {
             $lockedInvoice = Invoice::query()
                 ->whereKey($invoice->getKey())
@@ -209,12 +222,24 @@ final class ApplyCreditToInvoice
             $entry->forceFill(['payment_id' => $payment->getKey()])->saveQuietly();
             $this->paymentLifecycle->execute($lockedInvoice, $payment);
 
-            return AppliedCreditResult::applied(
+            $result = AppliedCreditResult::applied(
                 appliedAmountMinor: $appliedMinor,
                 paymentId: (int) $payment->getKey(),
                 entryId: (int) $entry->getKey(),
                 creditBalanceId: (int) $creditBalance->getKey(),
             );
+
+            $this->activityRecorder->record(
+                CompanyActivitySnapshot::companyForInvoice($lockedInvoice),
+                CompanyActivityEventType::CreditApplied,
+                CompanyActivityCategory::Payments,
+                CompanyActivityVisibilityScope::Financials,
+                subject: $lockedInvoice,
+                metadata: CompanyActivitySnapshot::creditApplied($lockedInvoice, $appliedMinor),
+                actor: $actor,
+            );
+
+            return $result;
         });
     }
 

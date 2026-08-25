@@ -601,6 +601,7 @@ class InvoiceController extends Controller
                 requestedAmountMinor: $requestedMinor,
                 expectedCreditBalanceMinor: (int) $validated['expected_credit_balance_minor'],
                 expectedAvailableMinor: (int) $validated['expected_available_minor'],
+                actor: $request->user(),
             );
         } catch (ValidationException $exception) {
             $errors = $exception->errors();
@@ -922,7 +923,7 @@ class InvoiceController extends Controller
          * Применяем кредитный баланс только после
          * успешного выставления черновика.
          */
-            $applyCreditToInvoice->execute($invoice);
+            $applyCreditToInvoice->execute($invoice, actor: $actor);
 
             $this->activityRecorder->record(
                 CompanyActivitySnapshot::companyFor($contract),

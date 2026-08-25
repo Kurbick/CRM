@@ -10,6 +10,7 @@ use App\Models\Invoice;
 use App\Models\InvoiceLine;
 use App\Models\Payment;
 use App\Models\PaymentAllocation;
+use App\Services\CompanyActivityRecorder;
 use App\Services\InvoicePaymentAllocationWriter;
 use App\Services\InvoicePaymentAvailabilityService;
 use App\Support\Access\PermissionName;
@@ -215,7 +216,8 @@ class PaymentConfirmationActionTest extends AuthorizationTestCase
         $invalidParser->shouldReceive('toMinorUnits')->once()->andThrow(new LogicException('internal parser detail'));
         $invalidAction = new ConfirmPayment(
             $invalidParser,
-            app(ApplyConfirmedPaymentLifecycle::class)
+            app(ApplyConfirmedPaymentLifecycle::class),
+            app(CompanyActivityRecorder::class),
         );
 
         $this->expectBusinessConflict(fn () => $invalidAction->execute($invalidPayment));
@@ -226,7 +228,8 @@ class PaymentConfirmationActionTest extends AuthorizationTestCase
         $overflowParser->shouldReceive('toMinorUnits')->once()->andReturn(10_000_000_000);
         $overflowAction = new ConfirmPayment(
             $overflowParser,
-            app(ApplyConfirmedPaymentLifecycle::class)
+            app(ApplyConfirmedPaymentLifecycle::class),
+            app(CompanyActivityRecorder::class),
         );
 
         $this->expectBusinessConflict(fn () => $overflowAction->execute($overflowPayment));

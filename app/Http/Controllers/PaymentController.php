@@ -59,7 +59,7 @@ class PaymentController extends Controller
 
     public function store(StorePaymentRequest $request, Invoice $invoice): JsonResponse
     {
-        $payment = $this->createPendingPayment->execute($invoice, $request->validated());
+        $payment = $this->createPendingPayment->execute($invoice, $request->validated(), $request->user());
 
         return response()->json($this->paymentProjection($payment), 201);
     }
@@ -80,7 +80,7 @@ class PaymentController extends Controller
         ConfirmPayment $confirmPayment
     ): JsonResponse {
         try {
-            $confirmedPayment = $confirmPayment->execute($payment);
+            $confirmedPayment = $confirmPayment->execute($payment, $request->user());
         } catch (PaymentConfirmationException $exception) {
             throw ValidationException::withMessages([
                 'payment' => $exception->getMessage(),

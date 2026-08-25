@@ -5,7 +5,13 @@ namespace App\Actions\Payments;
 use App\Exceptions\Payments\PaymentConfirmationException;
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Models\User;
+use App\Services\CompanyActivityRecorder;
 use App\Services\InvoicePaymentAvailabilityService;
+use App\Support\CompanyActivityCategory;
+use App\Support\CompanyActivityEventType;
+use App\Support\CompanyActivitySnapshot;
+use App\Support\CompanyActivityVisibilityScope;
 use Illuminate\Support\Facades\DB;
 use LogicException;
 
@@ -15,12 +21,13 @@ final class ConfirmPayment
 
     public function __construct(
         private readonly InvoicePaymentAvailabilityService $paymentAvailabilityService,
-        private readonly ApplyConfirmedPaymentLifecycle $lifecycle
+        private readonly ApplyConfirmedPaymentLifecycle $lifecycle,
+        private readonly CompanyActivityRecorder $activityRecorder,
     ) {}
 
-    public function execute(Payment $payment): Payment
+    public function execute(Payment $payment, ?User $actor = null): Payment
     {
-        return DB::transaction(function () use ($payment): Payment {
+        return DB::transaction(function () use ($payment, $actor): Payment {
             $lockedInvoice = Invoice::query()
                 ->whereKey($payment->invoice_id)
                 ->lockForUpdate()
@@ -65,7 +72,19 @@ final class ConfirmPayment
                 'cancel_reason' => null,
             ])->saveQuietly();
 
-            return $this->lifecycle->execute($lockedInvoice, $lockedPayment);
+            $confirmedPayment = $this->lifecycle->execute($lockedInvoice, $lockedPayment);
+
+            $this->activityRecorder->record(
+                CompanyActivitySnapshot::companyForInvoice($lockedInvoice),
+                CompanyActivityEventType::PaymentConfirmed,
+                CompanyActivityCategory::Payments,
+                CompanyActivityVisibilityScope::Financials,
+                subject: $lockedInvoice,
+                metadata: CompanyActivitySnapshot::payment($confirmedPayment, $lockedInvoice),
+                actor: $actor,
+            );
+
+            return $confirmedPayment;
         });
     }
 }

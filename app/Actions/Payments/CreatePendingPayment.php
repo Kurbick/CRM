@@ -4,20 +4,27 @@ namespace App\Actions\Payments;
 
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Models\User;
+use App\Services\CompanyActivityRecorder;
 use App\Services\InvoicePaymentAvailabilityService;
+use App\Support\CompanyActivityCategory;
+use App\Support\CompanyActivityEventType;
+use App\Support\CompanyActivitySnapshot;
+use App\Support\CompanyActivityVisibilityScope;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 final class CreatePendingPayment
 {
     public function __construct(
-        private readonly InvoicePaymentAvailabilityService $availabilityService
+        private readonly InvoicePaymentAvailabilityService $availabilityService,
+        private readonly CompanyActivityRecorder $activityRecorder,
     ) {}
 
     /** @param array{payment_date: string, amount: string, payment_method: string, comment?: string|null} $attributes */
-    public function execute(Invoice $invoice, array $attributes): Payment
+    public function execute(Invoice $invoice, array $attributes, ?User $actor = null): Payment
     {
-        return DB::transaction(function () use ($invoice, $attributes): Payment {
+        return DB::transaction(function () use ($invoice, $attributes, $actor): Payment {
             $lockedInvoice = Invoice::query()
                 ->whereKey($invoice->getKey())
                 ->lockForUpdate()
@@ -45,7 +52,7 @@ final class CreatePendingPayment
                 ]);
             }
 
-            return Payment::query()->create([
+            $payment = Payment::query()->create([
                 'invoice_id' => $lockedInvoice->getKey(),
                 'company_id' => $lockedInvoice->company_id,
                 'payment_date' => $attributes['payment_date'],
@@ -54,6 +61,18 @@ final class CreatePendingPayment
                 'status' => 'pending',
                 'comment' => $attributes['comment'] ?? null,
             ]);
+
+            $this->activityRecorder->record(
+                CompanyActivitySnapshot::companyForInvoice($lockedInvoice),
+                CompanyActivityEventType::PaymentPendingCreated,
+                CompanyActivityCategory::Payments,
+                CompanyActivityVisibilityScope::Financials,
+                subject: $lockedInvoice,
+                metadata: CompanyActivitySnapshot::payment($payment, $lockedInvoice),
+                actor: $actor,
+            );
+
+            return $payment;
         });
     }
 }
