@@ -69,6 +69,11 @@
         itemsUrl: @js(route('ajax.items', ['contract' => '__CONTRACT__'])),
     })" x-init="init()" x-on:submit="if (!lines.length) { $event.preventDefault(); linesError = true }">
     @csrf
+    @if ($companyContext['active'] ?? false)
+        @foreach ($companyContext['query'] as $name => $value)
+            <input type="hidden" name="{{ $name }}" value="{{ $value }}">
+        @endforeach
+    @endif
 
     <div data-testid="invoice-create-form-workspace" class="max-w-5xl overflow-visible border-y border-slate-200 bg-white">
         <section class="px-4 py-5 sm:px-5">

@@ -99,7 +99,7 @@
 
                 @can('delete', $invoice)
                     @if ($invoice->status === 'draft')
-                        <form action="{{ route('invoices.destroy', $invoice) }}" method="POST"
+                        <form action="{{ route('invoices.destroy', ['invoice' => $invoice, ...$companyContext['query']]) }}" method="POST"
                             onsubmit="return confirm('Вы уверены, что хотите удалить этот счет? Действие необратимо.')">
                             @csrf
                             @method('DELETE')

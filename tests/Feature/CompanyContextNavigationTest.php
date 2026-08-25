@@ -7,7 +7,12 @@ use App\Models\CompanyContact;
 use App\Models\Contract;
 use App\Models\Invoice;
 use App\Models\User;
+use App\Services\CompanyActivityRecorder;
 use App\Support\Access\PermissionName;
+use App\Support\CompanyActivityCategory;
+use App\Support\CompanyActivityEventType;
+use App\Support\CompanyActivitySnapshot;
+use App\Support\CompanyActivityVisibilityScope;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\Feature\FinancialTestCase as TestCase;
@@ -43,6 +48,162 @@ class CompanyContextNavigationTest extends TestCase
             ->assertSee(route('invoices.edit', ['invoice' => $invoice, 'origin' => 'company', 'tab' => 'invoices']));
 
         $this->get(route('invoices.show', $invoice))->assertOk()->assertSee('Назад к списку');
+    }
+
+    public function test_activity_invoice_link_and_delete_return_to_the_same_activity_tab(): void
+    {
+        [$company, $contract] = $this->companyAndContract();
+        $invoice = Invoice::create([
+            'company_id' => $company->id,
+            'contract_id' => $contract->id,
+            'invoice_number' => 'INV-ACTIVITY-CONTEXT',
+            'issue_date' => '2026-07-01',
+            'due_date' => '2026-07-10',
+            'total_amount' => '100.00',
+            'status' => 'draft',
+        ]);
+        $invoice->lines()->create(['description' => 'Activity context line', 'amount' => '100.00']);
+        app(CompanyActivityRecorder::class)->record(
+            $company,
+            CompanyActivityEventType::InvoiceCreated,
+            CompanyActivityCategory::Invoices,
+            CompanyActivityVisibilityScope::Financials,
+            subject: $invoice,
+            metadata: [
+                ...CompanyActivitySnapshot::invoice($invoice, $contract),
+                'invoice_id' => $invoice->id,
+            ],
+        );
+
+        $activityInvoiceUrl = route('invoices.show', [
+            'invoice' => $invoice,
+            'origin' => 'company',
+            'tab' => 'activity',
+        ]);
+        $this->get(route('companies.show', ['company' => $company, 'tab' => 'activity']))
+            ->assertOk()
+            ->assertSee($activityInvoiceUrl);
+
+        $this->get($activityInvoiceUrl)
+            ->assertOk()
+            ->assertSee(route('companies.show', ['company' => $company, 'tab' => 'activity']))
+            ->assertSee(route('invoices.edit', ['invoice' => $invoice, 'origin' => 'company', 'tab' => 'activity']))
+            ->assertSee(route('invoices.destroy', ['invoice' => $invoice, 'origin' => 'company', 'tab' => 'activity']));
+        $this->get(route('invoices.edit', ['invoice' => $invoice, 'origin' => 'company', 'tab' => 'activity']))
+            ->assertOk()
+            ->assertSee('name="tab" value="activity"', false);
+
+        $this->delete(route('invoices.destroy', [
+            'invoice' => $invoice,
+            'origin' => 'company',
+            'tab' => 'activity',
+        ]))->assertRedirect(route('companies.show', ['company' => $company, 'tab' => 'activity']));
+    }
+
+    public function test_company_invoice_link_and_delete_return_to_the_invoices_tab(): void
+    {
+        [$company, $contract] = $this->companyAndContract();
+        $invoice = Invoice::create([
+            'company_id' => $company->id,
+            'contract_id' => $contract->id,
+            'invoice_number' => 'INV-INVOICES-CONTEXT',
+            'issue_date' => '2026-07-01',
+            'due_date' => '2026-07-10',
+            'total_amount' => '100.00',
+            'status' => 'draft',
+        ]);
+        $invoice->lines()->create(['description' => 'Invoices context line', 'amount' => '100.00']);
+        $invoiceUrl = route('invoices.show', [
+            'invoice' => $invoice,
+            'origin' => 'company',
+            'tab' => 'invoices',
+        ]);
+
+        $this->get(route('companies.show', ['company' => $company, 'tab' => 'invoices']))
+            ->assertOk()
+            ->assertSee($invoiceUrl);
+
+        $this->get($invoiceUrl)
+            ->assertOk()
+            ->assertSee(route('invoices.destroy', ['invoice' => $invoice, 'origin' => 'company', 'tab' => 'invoices']));
+
+        $this->delete(route('invoices.destroy', [
+            'invoice' => $invoice,
+            'origin' => 'company',
+            'tab' => 'invoices',
+        ]))->assertRedirect(route('companies.show', ['company' => $company, 'tab' => 'invoices']));
+    }
+
+    public function test_forged_company_context_never_redirects_to_the_supplied_company(): void
+    {
+        [$companyA, $contract] = $this->companyAndContract();
+        [$companyB] = $this->companyAndContract();
+        $invoice = Invoice::create([
+            'company_id' => $companyA->id,
+            'contract_id' => $contract->id,
+            'invoice_number' => 'INV-FORGED-CONTEXT',
+            'issue_date' => '2026-07-01',
+            'due_date' => '2026-07-10',
+            'total_amount' => '100.00',
+            'status' => 'draft',
+        ]);
+
+        $response = $this->delete(route('invoices.destroy', [
+            'invoice' => $invoice,
+            'origin' => 'company',
+            'company_id' => $companyB->id,
+            'tab' => 'invoices',
+        ]));
+
+        $response->assertRedirect(route('companies.show', ['company' => $companyA, 'tab' => 'invoices']));
+        $this->assertStringNotContainsString('/companies/'.$companyB->id, (string) $response->headers->get('Location'));
+    }
+
+    public function test_unknown_company_context_uses_the_global_invoice_fallback(): void
+    {
+        [$company, $contract] = $this->companyAndContract();
+        $invoice = Invoice::create([
+            'company_id' => $company->id,
+            'contract_id' => $contract->id,
+            'invoice_number' => 'INV-INVALID-CONTEXT',
+            'issue_date' => '2026-07-01',
+            'due_date' => '2026-07-10',
+            'total_amount' => '100.00',
+            'status' => 'draft',
+        ]);
+
+        $this->delete(route('invoices.destroy', [
+            'invoice' => $invoice,
+            'origin' => 'unknown',
+            'tab' => 'activity',
+            'return_to' => 'https://evil.test',
+        ]))->assertRedirect(route('invoices.index'));
+    }
+
+    public function test_company_context_does_not_bypass_company_authorization(): void
+    {
+        [$company, $contract] = $this->companyAndContract();
+        $invoice = Invoice::create([
+            'company_id' => $company->id,
+            'contract_id' => $contract->id,
+            'invoice_number' => 'INV-UNAUTHORIZED-CONTEXT',
+            'issue_date' => '2026-07-01',
+            'due_date' => '2026-07-10',
+            'total_amount' => '100.00',
+            'status' => 'draft',
+        ]);
+        $user = User::factory()->create(['is_active' => true, 'must_change_password' => false]);
+        $user->givePermissionTo([
+            PermissionName::InvoicesView->value,
+            PermissionName::InvoicesDelete->value,
+        ]);
+        $this->actingAs($user, 'web');
+
+        $this->delete(route('invoices.destroy', [
+            'invoice' => $invoice,
+            'origin' => 'company',
+            'tab' => 'activity',
+        ]))->assertRedirect(route('invoices.index'));
     }
 
     public function test_invoice_payment_tab_context_returns_to_payments_without_payment_show_route(): void
@@ -149,7 +310,11 @@ class CompanyContextNavigationTest extends TestCase
     public function test_company_invoice_create_action_uses_the_shared_create_route_only_with_permission(): void
     {
         [$company] = $this->companyAndContract();
-        $url = route('invoices.create', ['company_id' => $company]);
+        $url = route('invoices.create', [
+            'company_id' => $company,
+            'origin' => 'company',
+            'tab' => 'invoices',
+        ]);
         $this->actingAs($this->invoiceViewer());
 
         $this->get(route('companies.show', ['company' => $company, 'tab' => 'invoices']))
@@ -160,7 +325,7 @@ class CompanyContextNavigationTest extends TestCase
 
         $this->get(route('companies.show', ['company' => $company, 'tab' => 'invoices']))
             ->assertOk()
-            ->assertSee($url, false)
+            ->assertSee($url)
             ->assertSee('Выставить счёт');
     }
 
@@ -198,7 +363,7 @@ class CompanyContextNavigationTest extends TestCase
     private function companyAndContract(): array
     {
         $company = Company::create(['name' => 'Context Company', 'status' => 'active']);
-        $contract = Contract::create(['company_id' => $company->id, 'contract_number' => 'CTX-1', 'start_date' => '2026-01-01', 'status' => 'active']);
+        $contract = Contract::create(['company_id' => $company->id, 'contract_number' => 'CTX-'.$company->id, 'start_date' => '2026-01-01', 'status' => 'active']);
 
         return [$company, $contract];
     }

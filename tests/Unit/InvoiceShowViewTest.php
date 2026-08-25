@@ -75,7 +75,10 @@ class InvoiceShowViewTest extends TestCase
         );
         $this->assertStringNotContainsString('class="w-full rounded bg-blue-600', $source);
         $this->assertStringContainsString("route('invoices.edit', \$invoice)", $source);
-        $this->assertStringContainsString("route('invoices.destroy', \$invoice)", $source);
+        $this->assertStringContainsString(
+            "route('invoices.destroy', ['invoice' => \$invoice, ...\$companyContext['query']])",
+            $source
+        );
         $this->assertStringContainsString("@method('DELETE')", $source);
     }
 

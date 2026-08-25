@@ -2,9 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Models\CompanyActivityEvent;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
 use App\Models\Organization;
+use App\Support\Access\PermissionName;
+use App\Support\CompanyActivityEventType;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\Feature\FinancialTestCase as TestCase;
@@ -68,14 +71,112 @@ class InvoiceFormAndStoreTest extends TestCase
 
     public function test_company_context_prefills_only_the_company_and_returns_to_its_invoices_tab(): void
     {
+        $this->authenticatedUser->givePermissionTo(PermissionName::CompaniesView->value);
         [$companyId] = $this->companyAndContract('Context company');
 
-        $this->get(route('invoices.create', ['company_id' => $companyId]))
+        $this->get(route('invoices.create', [
+            'company_id' => $companyId,
+            'origin' => 'company',
+            'tab' => 'invoices',
+        ]))
             ->assertOk()
             ->assertSee("selectedCompanyId: '{$companyId}'", false)
             ->assertSee("selectedContractId: ''", false)
+            ->assertSee('name="origin" value="company"', false)
+            ->assertSee('name="tab" value="invoices"', false)
             ->assertSee(route('companies.show', ['company' => $companyId, 'tab' => 'invoices']), false)
             ->assertSee('Назад к Context company');
+    }
+
+    public function test_company_create_store_show_delete_preserves_the_invoices_context(): void
+    {
+        $this->authenticatedUser->givePermissionTo([
+            PermissionName::CompaniesView->value,
+            PermissionName::CompaniesFinancialsView->value,
+        ]);
+        [$companyId, $contractId] = $this->companyAndContract('Create context company');
+        $createUrl = route('invoices.create', [
+            'company_id' => $companyId,
+            'origin' => 'company',
+            'tab' => 'invoices',
+        ]);
+
+        $this->get($createUrl)
+            ->assertOk()
+            ->assertSee('name="origin" value="company"', false)
+            ->assertSee('name="tab" value="invoices"', false);
+
+        $storeResponse = $this->post(route('invoices.store'), [
+            ...$this->basePayload($companyId, $contractId),
+            'origin' => 'company',
+            'tab' => 'invoices',
+        ]);
+        $invoice = Invoice::query()->sole();
+        $showUrl = route('invoices.show', [
+            'invoice' => $invoice,
+            'origin' => 'company',
+            'tab' => 'invoices',
+        ]);
+
+        $storeResponse->assertRedirect($showUrl);
+        $this->assertSame(1, CompanyActivityEvent::query()
+            ->where('company_id', $companyId)
+            ->where('event_type', CompanyActivityEventType::InvoiceCreated->value)
+            ->count());
+
+        $line = $invoice->lines()->sole();
+        $editUrl = route('invoices.edit', [
+            'invoice' => $invoice,
+            'origin' => 'company',
+            'tab' => 'invoices',
+        ]);
+        $this->get($editUrl)
+            ->assertOk()
+            ->assertSee('name="origin" value="company"', false)
+            ->assertSee('name="tab" value="invoices"', false);
+        $this->put(route('invoices.update', [
+            'invoice' => $invoice,
+            'origin' => 'company',
+            'tab' => 'invoices',
+        ]), [
+            'invoice_number' => $invoice->invoice_number,
+            'issue_date' => '2026-07-20',
+            'due_date' => '2026-08-19',
+            'comment' => 'Updated from Company context',
+            'origin' => 'company',
+            'tab' => 'invoices',
+            'lines' => [[
+                'id' => $line->id,
+                'description' => $line->description,
+                'amount' => $line->amount,
+                'subscription_id' => null,
+                'order_id' => $line->order_id,
+                'period_start' => null,
+                'period_end' => null,
+            ]],
+        ])->assertRedirect($showUrl);
+
+        $this->get($showUrl)
+            ->assertOk()
+            ->assertSee(route('invoices.destroy', [
+                'invoice' => $invoice,
+                'origin' => 'company',
+                'tab' => 'invoices',
+            ]));
+
+        $this->delete(route('invoices.destroy', [
+            'invoice' => $invoice,
+            'origin' => 'company',
+            'tab' => 'invoices',
+        ]))->assertRedirect(route('companies.show', [
+            'company' => $companyId,
+            'tab' => 'invoices',
+        ]));
+
+        $this->assertSame(1, CompanyActivityEvent::query()
+            ->where('company_id', $companyId)
+            ->where('event_type', CompanyActivityEventType::InvoiceDeleted->value)
+            ->count());
     }
 
     public function test_contract_context_derives_company_initialises_defaults_and_keeps_contract_items_available(): void

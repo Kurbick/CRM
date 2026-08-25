@@ -303,6 +303,10 @@ class InvoiceController extends Controller
             $backLabel = 'Назад к инвойсам';
         }
 
+        $companyContext = $prefilledCompany !== null && Gate::allows('view', $prefilledCompany)
+            ? CompanyPageContext::resolve($request, $prefilledCompany, 'invoices')
+            : null;
+
         $oldContractId = $this->validFilterId(old('contract_id'), Contract::class);
         $oldCompanyId = $this->validFilterId(old('company_id'), Company::class);
         $oldSubscriptionIds = collect(old('lines', []))
@@ -362,6 +366,7 @@ class InvoiceController extends Controller
             'backLabel',
             'prefilledCompany',
             'prefilledContract',
+            'companyContext',
             'oldSubscriptionAmounts',
             'oldSubscriptionOccurrences',
         ));
@@ -438,7 +443,9 @@ class InvoiceController extends Controller
             actor: $request->user(),
         );
 
-        return $this->mutationRedirect($invoice)
+        $companyContext = $this->invoiceCompanyContext($request, $invoice);
+
+        return $this->mutationRedirect($invoice, $companyContext['query'])
             ->with('success', 'Черновик инвойса успешно сохранён.');
     }
 
@@ -1107,9 +1114,13 @@ class InvoiceController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Invoice $invoice, DeleteInvoice $deleteInvoice)
+    public function destroy(Request $request, Invoice $invoice, DeleteInvoice $deleteInvoice)
     {
         Gate::authorize('delete', $invoice);
+
+        // Resolve the authorized Company destination before the invoice is removed.
+        $companyContext = $this->invoiceCompanyContext($request, $invoice);
+        $companyRedirect = $this->authorizedCompanyRedirect($companyContext, $invoice);
 
         try {
             $deleteInvoice->execute($invoice, auth()->user());
@@ -1117,9 +1128,9 @@ class InvoiceController extends Controller
             return back()->withErrors(['delete' => $exception->getMessage()]);
         }
 
-        $redirect = Gate::allows('viewAny', Invoice::class)
+        $redirect = $companyRedirect ?? (Gate::allows('viewAny', Invoice::class)
             ? redirect()->route('invoices.index')
-            : redirect()->to($this->landingUrl());
+            : redirect()->to($this->landingUrl()));
 
         return $redirect
             ->with(
@@ -1283,9 +1294,32 @@ class InvoiceController extends Controller
 
     private function invoiceCompanyContext(Request $request, Invoice $invoice): array
     {
-        $tab = $request->input('tab') === 'payments' ? 'payments' : 'invoices';
+        $tab = in_array($request->input('tab'), ['activity', 'invoices', 'payments'], true)
+            ? $request->input('tab')
+            : 'invoices';
 
         return CompanyPageContext::resolve($request, $invoice->company, $tab);
+    }
+
+    private function authorizedCompanyRedirect(array $companyContext, Invoice $invoice): ?RedirectResponse
+    {
+        if (! $companyContext['active']) {
+            return null;
+        }
+
+        $company = $invoice->company;
+        if (! Gate::allows('view', $company) || ! Gate::allows('viewFinancials', $company)) {
+            return null;
+        }
+
+        if ($companyContext['tab'] === 'invoices' && ! Gate::allows('viewAny', Invoice::class)) {
+            return null;
+        }
+
+        return redirect()->route('companies.show', [
+            'company' => $company,
+            'tab' => $companyContext['tab'],
+        ]);
     }
 
     private function editabilityMessage(?string $reason): string
