@@ -28,6 +28,15 @@ use Illuminate\Support\Str;
 
 class CompanyController extends Controller
 {
+    /** @var list<string> */
+    private const COMPANY_INVOICE_DISPLAY_STATUSES = [
+        'draft',
+        'issued',
+        'partially_paid',
+        'paid',
+        'cancelled',
+    ];
+
     private const RUSSIAN_MONTHS = [
         1 => 'Январь',
         2 => 'Февраль',
@@ -252,6 +261,7 @@ class CompanyController extends Controller
 
         if ($canViewInvoices) {
             $relations['invoices'] = function ($q) use ($paymentSourceResolver) {
+                $q->whereIn('status', self::COMPANY_INVOICE_DISPLAY_STATUSES);
                 $q->withSum([
                     'payments as confirmed_paid_amount' => fn ($paymentQuery) => $paymentQuery
                         ->where('status', 'confirmed'),
@@ -262,7 +272,9 @@ class CompanyController extends Controller
                 ], 'amount');
                 $paymentSourceResolver->addAggregates($q->getQuery());
 
-                return $q->orderBy('due_date', 'desc');
+                return $q
+                    ->orderBy('issue_date', 'desc')
+                    ->orderByDesc('id');
             };
         }
 

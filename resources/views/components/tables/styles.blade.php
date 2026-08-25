@@ -31,6 +31,21 @@
         overflow-x: auto;
     }
 
+    .crm-table-collection-scroll {
+        max-height: 380px;
+        overflow-x: auto;
+        overflow-y: auto;
+        padding-right: 0.75rem;
+        scrollbar-gutter: stable;
+    }
+
+    .crm-table-collection-scroll .crm-table thead {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: #f8fafc;
+    }
+
     .crm-table {
         width: 100%;
         min-width: 100%;

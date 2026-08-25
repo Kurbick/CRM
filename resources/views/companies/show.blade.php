@@ -517,7 +517,7 @@
 
             {{-- Таб: Контакты --}}
             <div x-show="tab === 'contacts'" class="p-4 sm:p-5">
-                <div class="crm-table-scroll">
+                <div class="crm-table-collection-scroll">
                     <table class="crm-table">
                         <thead>
                             <tr>
@@ -601,7 +601,7 @@
             {{-- Таб: Договоры --}}
             @can('viewAny', \App\Models\Contract::class)
             <div x-show="tab === 'contracts'" x-cloak class="p-4 sm:p-5">
-                <div class="crm-table-scroll">
+                <div class="crm-table-collection-scroll">
                     <table class="crm-table">
                         <thead>
                             <tr>
@@ -644,7 +644,7 @@
             @can('viewFinancials', $company)
             @can('viewAny', \App\Models\Invoice::class)
             <div x-show="tab === 'invoices'" x-cloak class="p-4 sm:p-5">
-                <div class="crm-table-scroll">
+                <div class="crm-table-collection-scroll">
                     <table class="crm-table">
                         <thead>
                             <tr>
@@ -721,7 +721,7 @@
             @can('viewFinancials', $company)
             @can('viewAny', \App\Models\Payment::class)
             <div x-show="tab === 'payments'" x-cloak class="p-4 sm:p-5">
-                <div class="crm-table-scroll">
+                <div class="crm-table-collection-scroll">
                     <table class="crm-table">
                         <thead>
                             <tr>
