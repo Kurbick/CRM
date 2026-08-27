@@ -11,8 +11,12 @@ class Invoice extends Model
 {
     protected $fillable = [
         'company_id',
+        'issuer_organization_id',
         'contract_id',
         'invoice_number',
+        'invoice_number_year',
+        'invoice_number_sequence',
+        'invoice_number_code',
         'issue_date',
         'due_date',
         'period_start',
@@ -32,9 +36,19 @@ class Invoice extends Model
         'comment',
     ];
 
+    protected $casts = [
+        'invoice_number_year' => 'integer',
+        'invoice_number_sequence' => 'integer',
+    ];
+
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
+    }
+
+    public function issuerOrganization(): BelongsTo
+    {
+        return $this->belongsTo(Organization::class, 'issuer_organization_id');
     }
 
     public function contract(): BelongsTo

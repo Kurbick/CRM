@@ -33,12 +33,13 @@
         ->map(fn (array $messages): string => $messages[0])
         ->all();
     $formErrors = collect($errors->getMessages())
-        ->reject(fn ($messages, $key): bool => preg_match('/^lines\.\d+\.(?:period_count|subscription_id)$/', $key) === 1)
+        ->reject(fn ($messages, $key): bool => preg_match('/^lines\.\d+\.(?:period_count|subscription_id)$/', $key) === 1
+            || $key === 'invoice_number_sequence')
         ->flatten()
         ->unique()
         ->values();
-    $defaultInvoiceNumber = 'INV-' . strtoupper(substr(uniqid(), -6));
     $defaultIssueDate = now()->toDateString();
+    $numberPreview = $numberPreview ?? null;
 @endphp
 
 <div class="mb-5">
@@ -58,10 +59,14 @@
         oldLines: @js($oldLines),
         lineErrors: @js($lineErrors),
         invoiceNumber: @js(old('invoice_number', '')),
+        invoiceSequence: @js(old('invoice_number_sequence', $numberPreview['sequence'] ?? '')),
+        invoiceNumberManual: @js((bool) old('invoice_number_manual', false)),
+        invoiceCode: @js($numberPreview['code'] ?? ''),
+        invoiceYear: @js($numberPreview['year'] ?? ''),
+        numberPreview: @js($numberPreview),
         issueDate: @js(old('issue_date', '')),
         dueDate: @js(old('due_date', '')),
         comment: @js(old('comment', '')),
-        defaultInvoiceNumber: @js($defaultInvoiceNumber),
         defaultIssueDate: @js($defaultIssueDate),
         hasOldInput: @js(session()->hasOldInput()),
         hasOldDueDate: @js(old('due_date') !== null),
@@ -88,6 +93,7 @@
         ]),
         contractsUrl: @js(route('ajax.contracts', ['company' => '__COMPANY__'])),
         itemsUrl: @js(route('ajax.items', ['contract' => '__CONTRACT__'])),
+        numberPreviewUrl: @js(route('invoices.number-preview')),
     })" x-init="init()" x-on:submit="if (!lines.length) { $event.preventDefault(); linesError = true }">
     @csrf
     @if ($companyContext['active'] ?? false)
@@ -170,8 +176,17 @@
                 <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
                     <div>
                         <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.invoice_number') }} <span class="text-red-500">*</span></label>
-                        <input name="invoice_number" x-model="invoiceNumber" required
-                            class="w-full font-mono @error('invoice_number') border-red-300 @else border-gray-200 @enderror">
+                        <div class="flex items-center gap-2">
+                            <input name="invoice_number_sequence" type="number" min="1" step="1" x-model="invoiceSequence" x-on:input="invoiceNumberManual = true" required
+                                class="w-24 font-mono @error('invoice_number_sequence') border-red-300 @else border-gray-200 @enderror">
+                            <span class="font-mono text-sm text-slate-500" x-text="numberSuffix()">/{{ $numberPreview['code'] ?? '—' }}-{{ isset($numberPreview['year']) ? substr((string) $numberPreview['year'], -2) : '—' }}</span>
+                        </div>
+                        <input type="hidden" name="invoice_number_manual" :value="invoiceNumberManual ? '1' : '0'">
+                        @if (filled(old('invoice_number')) && ! filled(old('invoice_number_sequence')))
+                            <input type="hidden" name="invoice_number" value="{{ old('invoice_number') }}">
+                        @endif
+                        @if ($numberingError) <p class="mt-1 text-xs text-red-500">{{ $numberingError }}</p> @endif
+                        @error('invoice_number_sequence') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
                         @error('invoice_number') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
                     </div>
                     <div>
@@ -335,6 +350,8 @@ document.addEventListener('alpine:init', () => {
             this.availableItems = [];
             this.lines = [];
             this.invoiceNumber = '';
+            this.invoiceSequence = '';
+            this.invoiceNumberManual = false;
             this.issueDate = '';
             this.dueDate = '';
             this.comment = '';
@@ -353,7 +370,11 @@ document.addEventListener('alpine:init', () => {
             this.loadingContracts = false;
         },
         initialiseNewInvoice() {
-            this.invoiceNumber = this.defaultInvoiceNumber;
+            this.invoiceNumber = '';
+            this.invoiceSequence = this.numberPreview?.sequence || '';
+            this.invoiceNumberManual = false;
+            this.invoiceCode = this.numberPreview?.code || '';
+            this.invoiceYear = this.numberPreview?.year || '';
             this.issueDate = this.defaultIssueDate;
             this.dueDate = '';
             this.comment = '';
@@ -426,7 +447,18 @@ document.addEventListener('alpine:init', () => {
         periodSummary(line) { const count = Number(line.period_count) || 1; const noun = count === 1 ? this.strings.periodOne : (count >= 2 && count <= 4 ? this.strings.periodFew : this.strings.periodMany); return count === 1 ? `1 ${noun} · ${this.money(line.amount)}` : `${count} ${noun} × ${this.money(line.amount)} = ${this.money(this.lineTotal(line))}` },
         removeLine(index) { this.lines.splice(index, 1); this.afterLinesChanged() },
         afterLinesChanged() { this.linesError = false; this.recalculateDueDate() },
-        issueDateChanged() { if (this.hasAutomaticPaymentTerms) this.recalculateDueDate() },
+        async issueDateChanged() { if (this.hasAutomaticPaymentTerms) this.recalculateDueDate(); await this.refreshNumberPreview() },
+        numberSuffix() { return this.invoiceCode && this.invoiceYear ? `/${this.invoiceCode}-${String(this.invoiceYear).slice(-2)}` : '—' },
+        async refreshNumberPreview() {
+            if (!this.issueDate) return;
+            try {
+                const response = await fetch(`${this.numberPreviewUrl}?issue_date=${encodeURIComponent(this.issueDate)}`, { headers: { Accept: 'application/json' } });
+                if (!response.ok) return;
+                const data = await response.json();
+                this.invoiceCode = data.code; this.invoiceYear = data.year;
+                if (!this.invoiceNumberManual) this.invoiceSequence = data.sequence;
+            } catch (_) {}
+        },
         recalculateDueDate() { if (!this.hasAutomaticPaymentTerms) { if (this.dueDateWasAutomatic) this.dueDate = ''; this.dueDateWasAutomatic = false; this.dueDateIsManual = true; return } this.dueDateIsManual = false; this.dueDateWasAutomatic = true; if (!this.issueDate) { this.dueDate = ''; return } const date = this.parseDate(this.issueDate); date.setDate(date.getDate() + this.minimumPaymentTerms); this.dueDate = this.inputDate(date) },
         contractLabel(c) { return `№ ${c.contract_number}` },
         contractDates(c) { return c.end_date ? `${this.formatDate(c.start_date)} — ${this.formatDate(c.end_date)}` : this.strings.indefiniteFrom.replace(':date', this.formatDate(c.start_date)) },

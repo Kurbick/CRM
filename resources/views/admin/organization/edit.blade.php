@@ -27,6 +27,12 @@
                         <input id="voen" name="voen" type="text" value="{{ old('voen', $organization?->voen) }}" class="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
                         @error('voen')<p class="mt-1 text-xs text-red-600">{{ $message }}</p>@enderror
                     </div>
+                    <div>
+                        <label for="invoice_number_code" class="mb-1.5 block text-sm font-medium text-gray-700">{{ __('admin.organization.fields.invoice_number_code') }}</label>
+                        <input id="invoice_number_code" name="invoice_number_code" type="text" value="{{ old('invoice_number_code', $organization?->invoice_number_code) }}" maxlength="12" pattern="[A-Za-z0-9]+" class="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm uppercase outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                        <p class="mt-1 text-xs text-gray-500">{{ __('admin.organization.help.invoice_number_code') }}</p>
+                        @error('invoice_number_code')<p class="mt-1 text-xs text-red-600">{{ $message }}</p>@enderror
+                    </div>
                 </div>
             </section>
 

@@ -72,7 +72,7 @@ class OrganizationAdministrationTest extends TestCase
             ->assertSee('data-organization-empty-value', false)
             ->assertSee('text-gray-400', false)
             ->assertDontSee('name="bank_name"', false);
-        $this->assertSame(6, substr_count($response->getContent(), 'data-organization-empty-value'));
+        $this->assertSame(7, substr_count($response->getContent(), 'data-organization-empty-value'));
     }
 
     public function test_edit_preserves_old_input_and_returns_to_show_when_cancelled(): void

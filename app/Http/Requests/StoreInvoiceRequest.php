@@ -25,7 +25,9 @@ class StoreInvoiceRequest extends FormRequest
                     $this->route('company')->id
                 ),
             ],
-            'invoice_number' => 'required|string|max:50|unique:invoices,invoice_number',
+            'invoice_number' => 'required_without:invoice_number_sequence|nullable|string|max:50|unique:invoices,invoice_number',
+            'invoice_number_sequence' => ['nullable', 'integer', 'min:1'],
+            'invoice_number_manual' => ['nullable', 'boolean'],
             'issue_date' => 'required|date',
             'due_date' => 'required|date|after_or_equal:issue_date',
             'period_start' => 'nullable|date',

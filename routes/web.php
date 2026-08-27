@@ -290,6 +290,11 @@ Route::middleware(['auth', 'active', 'password.changed'])->group(function (): vo
         [InvoiceController::class, 'cancel']
     )->name('invoices.cancel');
 
+    Route::get(
+        'invoices/number-preview',
+        [InvoiceController::class, 'numberPreview']
+    )->name('invoices.number-preview');
+
     Route::resource(
         'invoices',
         InvoiceController::class

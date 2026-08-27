@@ -13,11 +13,14 @@ class UpdateOrganizationRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        $fields = ['name', 'voen', 'bank_name', 'iban', 'bank_code', 'bank_voen', 'swift'];
+        $fields = ['name', 'voen', 'bank_name', 'iban', 'bank_code', 'bank_voen', 'swift', 'invoice_number_code'];
         $normalized = [];
 
         foreach ($fields as $field) {
             $value = trim((string) $this->input($field));
+            if ($field === 'invoice_number_code') {
+                $value = strtoupper($value);
+            }
             $normalized[$field] = $value === '' ? null : $value;
         }
 
@@ -34,6 +37,7 @@ class UpdateOrganizationRequest extends FormRequest
             'bank_code' => ['nullable', 'string', 'max:20'],
             'bank_voen' => ['nullable', 'string', 'max:20'],
             'swift' => ['nullable', 'string', 'max:20'],
+            'invoice_number_code' => ['nullable', 'string', 'max:12', 'regex:/^[A-Z0-9]+$/'],
         ];
     }
 
@@ -48,6 +52,8 @@ class UpdateOrganizationRequest extends FormRequest
             'bank_code.max' => __('admin.organization.validation.bank_code_max'),
             'bank_voen.max' => __('admin.organization.validation.bank_voen_max'),
             'swift.max' => __('admin.organization.validation.swift_max'),
+            'invoice_number_code.max' => __('admin.organization.validation.invoice_number_code_max'),
+            'invoice_number_code.regex' => __('admin.organization.validation.invoice_number_code_format'),
         ];
     }
 }

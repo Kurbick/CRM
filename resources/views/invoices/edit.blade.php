@@ -51,6 +51,9 @@
             return $line;
         })
         ->values();
+    $structuredNumber = $invoice->invoice_number_year !== null
+        && $invoice->invoice_number_sequence !== null
+        && filled($invoice->invoice_number_code);
 @endphp
 <div class="mb-5">
     <a href="{{ route('invoices.show', ['invoice' => $invoice, ...$companyContext['query']]) }}" class="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-900">
@@ -70,6 +73,12 @@
 <form method="POST" action="{{ route('invoices.update', $invoice) }}" x-data="{
     lines: @js($editLines),
     issueDate: @js(old('issue_date', \Illuminate\Support\Carbon::parse($invoice->issue_date)->toDateString())),
+    invoiceSequence: @js(old('invoice_number_sequence', $invoice->invoice_number_sequence)),
+    invoiceNumberManual: @js((bool) old('invoice_number_manual', false)),
+    invoiceCode: @js(old('invoice_number_code', $invoice->invoice_number_code)),
+    invoiceYear: @js(old('invoice_number_year', $invoice->invoice_number_year)),
+    structuredNumber: @js($structuredNumber),
+    numberPreviewUrl: @js(route('invoices.number-preview')),
     dueDate: @js(old('due_date', \Illuminate\Support\Carbon::parse($invoice->due_date)->toDateString())),
     strings: @js([
         'dueDateNotSet' => __('invoices.form.due_date_not_set'),
@@ -90,7 +99,18 @@
     get dueDateHint() { if (!this.hasAutomaticPaymentTerms) return this.strings.dueDateNotSet; if (this.hasDifferentPaymentTerms) return this.strings.differentPaymentTerms.replace('__DAYS__', this.minimumPaymentTerms); return this.strings.automaticPaymentTerms.replace('__DAYS__', this.minimumPaymentTerms) },
     init() { this.recalculateDueDate() },
     removeLine(index) { this.lines.splice(index, 1); this.recalculateDueDate() },
-    issueDateChanged() { if (this.hasAutomaticPaymentTerms) this.recalculateDueDate() },
+    async issueDateChanged() { if (this.hasAutomaticPaymentTerms) this.recalculateDueDate(); if (this.structuredNumber) await this.refreshNumberPreview() },
+    numberSuffix() { return this.invoiceCode && this.invoiceYear ? `/${this.invoiceCode}-${String(this.invoiceYear).slice(-2)}` : '—' },
+    async refreshNumberPreview() {
+        if (!this.issueDate) return;
+        try {
+            const response = await fetch(`${this.numberPreviewUrl}?issue_date=${encodeURIComponent(this.issueDate)}&invoice_id={{ $invoice->id }}`, { headers: { Accept: 'application/json' } });
+            if (!response.ok) return;
+            const data = await response.json();
+            this.invoiceCode = data.code; this.invoiceYear = data.year;
+            if (!this.invoiceNumberManual) this.invoiceSequence = data.sequence;
+        } catch (_) {}
+    },
     recalculateDueDate() { if (!this.hasAutomaticPaymentTerms) { if (this.dueDateWasAutomatic) this.dueDate = ''; this.dueDateWasAutomatic = false; return } this.dueDateWasAutomatic = true; if (!this.issueDate) { this.dueDate = ''; return } const date = this.parseDate(this.issueDate); date.setDate(date.getDate() + this.minimumPaymentTerms); this.dueDate = this.inputDate(date) },
     subscriptionGroup(line) { return this.lines.filter(candidate => candidate.subscription_id && candidate.subscription_id === line.subscription_id).sort((a, b) => String(a.period_start).localeCompare(String(b.period_start)) || Number(a.id) - Number(b.id)) },
     isSubscriptionLeader(line) { return !line.subscription_id || this.subscriptionGroup(line)[0]?.id === line.id },
@@ -146,8 +166,18 @@
                 </div>
                 <div class="md:col-span-2">
                     <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.invoice_number') }} <span class="text-red-500">*</span></label>
-                    <input name="invoice_number" value="{{ old('invoice_number', $invoice->invoice_number) }}" required class="w-full font-mono @error('invoice_number') border-red-300 @else border-gray-200 @enderror">
-                    @error('invoice_number') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                    @if ($structuredNumber)
+                        <div class="flex items-center gap-2">
+                            <input name="invoice_number_sequence" type="number" min="1" step="1" x-model="invoiceSequence" x-on:input="invoiceNumberManual = true" required
+                                class="w-24 font-mono @error('invoice_number_sequence') border-red-300 @else border-gray-200 @enderror">
+                            <span class="font-mono text-sm text-slate-500" x-text="numberSuffix()">/{{ $invoice->invoice_number_code }}-{{ substr((string) $invoice->invoice_number_year, -2) }}</span>
+                        </div>
+                        <input type="hidden" name="invoice_number_manual" :value="invoiceNumberManual ? '1' : '0'">
+                        @error('invoice_number_sequence') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                    @else
+                        <input name="invoice_number" value="{{ old('invoice_number', $invoice->invoice_number) }}" required class="w-full font-mono @error('invoice_number') border-red-300 @else border-gray-200 @enderror">
+                        @error('invoice_number') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                    @endif
                 </div>
                 <div>
                     <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.issue_date') }} <span class="text-red-500">*</span></label>

@@ -29,6 +29,10 @@
                         <dt class="text-gray-500">VÖEN</dt>
                         <dd class="mt-1 font-medium {{ $valueClass($organization?->voen) }}" @if (blank($organization?->voen)) data-organization-empty-value @endif>{{ $value($organization?->voen) }}</dd>
                     </div>
+                    <div>
+                        <dt class="text-gray-500">{{ __('admin.organization.fields.invoice_number_code') }}</dt>
+                        <dd class="mt-1 font-medium {{ $valueClass($organization?->invoice_number_code) }}" @if (blank($organization?->invoice_number_code)) data-organization-empty-value @endif>{{ $value($organization?->invoice_number_code) }}</dd>
+                    </div>
                 </dl>
             </section>
 

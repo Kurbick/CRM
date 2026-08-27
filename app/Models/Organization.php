@@ -17,6 +17,7 @@ class Organization extends Model
         'bank_code',
         'bank_voen',
         'swift',
+        'invoice_number_code',
     ];
 
     public function scopeCurrent(Builder $query): Builder

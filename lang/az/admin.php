@@ -5,10 +5,11 @@ return [
     'organization' => [
         'title' => 'Təşkilatımız', 'edit_title' => 'Təşkilata düzəliş', 'description' => 'Yeni invoyslarda istifadə olunan təşkilat rekvizitləri.', 'back' => '← Təşkilata qayıt',
         'sections' => ['general' => 'Əsas məlumatlar', 'banking' => 'Bank rekvizitləri'],
-        'fields' => ['name' => 'Ad', 'organization_name' => 'Təşkilatın adı', 'voen' => 'VÖEN', 'bank' => 'Bank', 'iban' => 'IBAN / hesab', 'bank_code' => 'Bank kodu', 'bank_voen' => 'Bankın VÖEN-i', 'swift' => 'SWIFT'],
+        'fields' => ['name' => 'Ad', 'organization_name' => 'Təşkilatın adı', 'voen' => 'VÖEN', 'bank' => 'Bank', 'iban' => 'IBAN / hesab', 'bank_code' => 'Bank kodu', 'bank_voen' => 'Bankın VÖEN-i', 'swift' => 'SWIFT', 'invoice_number_code' => 'İnvoys nömrələmə kodu'],
+        'help' => ['invoice_number_code' => 'Məsələn, ZL. 102/ZL-26 formatlı nömrələrdə istifadə olunur.'],
         'actions' => ['edit' => 'Düzəliş et', 'cancel' => 'Ləğv et', 'save' => 'Yadda saxla'],
         'flash' => ['updated' => 'Təşkilatımızın məlumatları yadda saxlanıldı.'],
-        'validation' => ['name_required' => 'Təşkilatımızın adını daxil edin.', 'name_max' => 'Təşkilatın adı 255 simvoldan çox ola bilməz.', 'voen_max' => 'VÖEN 20 simvoldan çox ola bilməz.', 'bank_name_max' => 'Bankın adı 255 simvoldan çox ola bilməz.', 'iban_max' => 'IBAN 50 simvoldan çox ola bilməz.', 'bank_code_max' => 'Bank kodu 20 simvoldan çox ola bilməz.', 'bank_voen_max' => 'Bankın VÖEN-i 20 simvoldan çox ola bilməz.', 'swift_max' => 'SWIFT 20 simvoldan çox ola bilməz.'],
+        'validation' => ['name_required' => 'Təşkilatımızın adını daxil edin.', 'name_max' => 'Təşkilatın adı 255 simvoldan çox ola bilməz.', 'voen_max' => 'VÖEN 20 simvoldan çox ola bilməz.', 'bank_name_max' => 'Bankın adı 255 simvoldan çox ola bilməz.', 'iban_max' => 'IBAN 50 simvoldan çox ola bilməz.', 'bank_code_max' => 'Bank kodu 20 simvoldan çox ola bilməz.', 'bank_voen_max' => 'Bankın VÖEN-i 20 simvoldan çox ola bilməz.', 'swift_max' => 'SWIFT 20 simvoldan çox ola bilməz.', 'invoice_number_code_max' => 'İnvoys nömrələmə kodu 12 simvoldan çox ola bilməz.', 'invoice_number_code_format' => 'İnvoys nömrələmə kodu yalnız latın hərfləri və rəqəmlərdən ibarət ola bilər.'],
     ],
     'users' => [
         'title' => 'İstifadəçilər', 'description' => 'Daxili hesabların və CRM-ə girişin idarə edilməsi.', 'create_title' => 'İstifadəçi əlavə et', 'create_description' => 'Daxili hesab yaradın və ona giriş qrupu təyin edin.', 'edit_title' => 'Düzəliş et', 'back' => '← İstifadəçilərə qayıt',

@@ -8,9 +8,11 @@ use App\Models\Subscription;
 use App\Services\InvoiceDueDateCalculator;
 use App\Services\InvoiceEditabilityService;
 use App\Services\InvoicePaymentAvailabilityService;
+use App\Services\InvoiceNumberService;
 use App\Services\SubscriptionBillingSchedule;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -20,6 +22,7 @@ final class UpdateInvoice
         private readonly InvoiceDueDateCalculator $dueDateCalculator,
         private readonly InvoiceEditabilityService $editabilityService,
         private readonly InvoicePaymentAvailabilityService $paymentAvailabilityService,
+        private readonly InvoiceNumberService $invoiceNumberService,
         private readonly SubscriptionBillingSchedule $billingSchedule,
     ) {}
 
@@ -34,7 +37,8 @@ final class UpdateInvoice
         bool $preserveSubjectAmounts = false,
         array $subscriptionPeriodCounts = [],
     ): Invoice {
-        return DB::transaction(function () use ($invoice, $attributes, $lines, $preserveSubjectAmounts, $subscriptionPeriodCounts): Invoice {
+        try {
+            return DB::transaction(function () use ($invoice, $attributes, $lines, $preserveSubjectAmounts, $subscriptionPeriodCounts): Invoice {
             $lockedInvoice = Invoice::query()
                 ->whereKey($invoice->getKey())
                 ->lockForUpdate()
@@ -64,7 +68,10 @@ final class UpdateInvoice
                 ->get();
 
             if ($lines === null) {
-                $changes = $this->metadataChanges($lockedInvoice, $attributes, $lockedLines);
+                $numbering = $this->numberingChanges($lockedInvoice, $attributes);
+                $metadataAttributes = $this->metadataAttributes($attributes, $numbering);
+                $changes = $this->metadataChanges($lockedInvoice, $metadataAttributes, $lockedLines);
+                $changes = array_merge($changes, $numbering);
                 if ($changes !== []) {
                     $lockedInvoice->update($changes);
                 }
@@ -212,18 +219,31 @@ final class UpdateInvoice
             }
 
             $remainingLinkedLines = $originalLines->only($processedExistingIds);
+            $numbering = $this->numberingChanges($lockedInvoice, $attributes);
+            $metadataAttributes = $this->metadataAttributes($attributes, $numbering);
             $changes = $this->metadataChanges(
                 $lockedInvoice,
-                $attributes,
+                $metadataAttributes,
                 $remainingLinkedLines,
                 true,
             );
+            $changes = array_merge($changes, $numbering);
             $changes['total_amount'] = $this->paymentAvailabilityService->fromMinorUnits($newTotalMinor);
 
             $lockedInvoice->update($changes);
 
             return $lockedInvoice->fresh();
-        });
+            });
+        } catch (UniqueConstraintViolationException $exception) {
+            if (str_contains($exception->getMessage(), 'invoice_number')
+                || str_contains($exception->getMessage(), 'invoices_issuer_year_sequence_unique')) {
+                throw ValidationException::withMessages([
+                    'invoice_number_sequence' => __('invoices.errors.number_sequence_taken'),
+                ]);
+            }
+
+            throw $exception;
+        }
     }
 
     /**
@@ -426,6 +446,34 @@ final class UpdateInvoice
         }
 
         return $changes;
+    }
+
+    /** @param array<string,mixed> $attributes @return array<string,mixed> */
+    private function numberingChanges(Invoice $invoice, array $attributes): array
+    {
+        if ($invoice->status === 'issued' && (
+            array_key_exists('invoice_number', $attributes)
+            || array_key_exists('invoice_number_sequence', $attributes)
+            || array_key_exists('invoice_number_manual', $attributes)
+        )) {
+            return ['invoice_number' => $invoice->invoice_number];
+        }
+
+        return $this->invoiceNumberService->changesForUpdate($invoice, $attributes);
+    }
+
+    /** @param array<string,mixed> $attributes @param array<string,mixed> $numbering @return array<string,mixed> */
+    private function metadataAttributes(array $attributes, array $numbering): array
+    {
+        unset($attributes['invoice_number_sequence'], $attributes['invoice_number_manual']);
+
+        if (! array_key_exists('invoice_number', $numbering)) {
+            unset($attributes['invoice_number']);
+        } else {
+            $attributes['invoice_number'] = $numbering['invoice_number'];
+        }
+
+        return $attributes;
     }
 
     /**

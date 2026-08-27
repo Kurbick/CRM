@@ -223,5 +223,10 @@ return [
         'period_exists' => '«:description» abunəliyi üzrə bu dövr üçün artıq invoys var.',
         'contract_company_mismatch' => 'Seçilmiş müqavilə seçilmiş şirkətə aid deyil.',
         'subscription_contract_mismatch' => 'Abunəliklərdən biri invoys müqaviləsinə aid deyil.',
+        'number_sequence_invalid' => 'Sıra nömrəsi müsbət tam ədəd olmalıdır.',
+        'organization_not_configured' => 'Əvvəlcə administrasiya bölməsində təşkilatımızı sazlayın.',
+        'organization_number_code_missing' => 'Administrasiya bölməsində təşkilatımızın invoys nömrələmə kodunu sazlayın.',
+        'organization_number_code_invalid' => 'Təşkilatın invoys nömrələmə kodu düzgün sazlanmayıb.',
+        'number_sequence_taken' => 'Bu invoys nömrəsi seçilmiş il üçün artıq istifadə olunur.',
     ],
 ];

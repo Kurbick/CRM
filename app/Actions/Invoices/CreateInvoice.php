@@ -11,6 +11,7 @@ use App\Models\Subscription;
 use App\Models\User;
 use App\Services\CompanyActivityRecorder;
 use App\Services\InvoiceDueDateCalculator;
+use App\Services\InvoiceNumberService;
 use App\Services\SubscriptionBillingSchedule;
 use App\Support\CompanyActivityCategory;
 use App\Support\CompanyActivityEventType;
@@ -27,6 +28,7 @@ final class CreateInvoice
 {
     public function __construct(
         private readonly InvoiceDueDateCalculator $dueDateCalculator,
+        private readonly InvoiceNumberService $invoiceNumberService,
         private readonly SubscriptionBillingSchedule $billingSchedule,
         private readonly InvoiceSellerSnapshot $sellerSnapshot,
         private readonly CompanyActivityRecorder $activityRecorder,
@@ -101,9 +103,11 @@ final class CreateInvoice
                     $normalizedLines
                 ));
 
+                $numbering = $this->invoiceNumberService->allocateForCreate($attributes);
+
                 $invoice = $lockedCompany->invoices()->create([
                     'contract_id' => $lockedContract->id,
-                    'invoice_number' => $attributes['invoice_number'],
+                    ...$numbering,
                     'issue_date' => $attributes['issue_date'],
                     'due_date' => $dueDate,
                     'period_start' => null,
@@ -134,15 +138,22 @@ final class CreateInvoice
                 return $invoice;
             });
         } catch (UniqueConstraintViolationException $exception) {
-            if (! str_contains($exception->getMessage(), 'billing_occurrence_key')) {
-                throw $exception;
+            $message = $exception->getMessage();
+            if (str_contains($message, 'billing_occurrence_key')) {
+                throw ValidationException::withMessages(
+                    $canonicalizeSubjectAmounts
+                        ? ['lines' => 'Этот расчётный период уже зарезервирован другим инвойсом.']
+                        : ['lines' => 'Эта billing occurrence уже зарезервирована.'],
+                );
             }
 
-            throw ValidationException::withMessages(
-                $canonicalizeSubjectAmounts
-                    ? ['lines' => 'Этот расчётный период уже зарезервирован другим инвойсом.']
-                    : ['lines' => 'Эта billing occurrence уже зарезервирована.'],
-            );
+            if (str_contains($message, 'invoice_number') || str_contains($message, 'invoices_issuer_year_sequence_unique')) {
+                throw ValidationException::withMessages([
+                    'invoice_number_sequence' => __('invoices.errors.number_sequence_taken'),
+                ]);
+            }
+
+            throw $exception;
         }
     }
 

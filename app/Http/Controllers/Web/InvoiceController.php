@@ -12,6 +12,7 @@ use App\Models\Company;
 use App\Models\Contract;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
+use App\Models\Organization;
 use App\Models\Payment;
 use App\Models\Subscription;
 use App\Services\CompanyActivityRecorder;
@@ -21,6 +22,7 @@ use App\Services\InvoiceEditabilityService;
 use App\Services\InvoicePaymentAvailabilityService;
 use App\Services\InvoicePaymentBreakdownPresenter;
 use App\Services\InvoicePaymentSourceResolver;
+use App\Services\InvoiceNumberService;
 use App\Services\SubscriptionBillingSchedule;
 use App\Support\Access\PermissionName;
 use App\Support\CompanyActivityCategory;
@@ -52,6 +54,7 @@ class InvoiceController extends Controller
         private readonly InvoiceSellerSnapshot $sellerSnapshot,
         private readonly UpdateInvoice $updateInvoice,
         private readonly CompanyActivityRecorder $activityRecorder,
+        private readonly InvoiceNumberService $invoiceNumberService,
     ) {}
 
     /**
@@ -360,6 +363,23 @@ class InvoiceController extends Controller
                     ->all()];
             });
 
+        $numberPreview = null;
+        $numberingError = null;
+        try {
+            $organization = Organization::query()->current()->first();
+            if (! $organization) {
+                throw ValidationException::withMessages([
+                    'organization' => __('invoices.errors.organization_not_configured'),
+                ]);
+            }
+            $numberPreview = $this->invoiceNumberService->preview(
+                $organization,
+                CarbonImmutable::parse(old('issue_date', now()->toDateString()))->year,
+            );
+        } catch (ValidationException $exception) {
+            $numberingError = (string) ($exception->errors()['organization'][0] ?? $exception->getMessage());
+        }
+
         return view('invoices.create', compact(
             'companies',
             'backUrl',
@@ -369,6 +389,35 @@ class InvoiceController extends Controller
             'companyContext',
             'oldSubscriptionAmounts',
             'oldSubscriptionOccurrences',
+            'numberPreview',
+            'numberingError',
+        ));
+    }
+
+    public function numberPreview(Request $request)
+    {
+        $validated = $request->validate([
+            'issue_date' => ['required', 'date'],
+            'invoice_id' => ['nullable', 'integer', 'exists:invoices,id'],
+        ]);
+
+        if (! empty($validated['invoice_id'])) {
+            $invoice = Invoice::query()->findOrFail($validated['invoice_id']);
+            Gate::authorize('update', $invoice);
+        } else {
+            Gate::authorize('create', Invoice::class);
+        }
+
+        $organization = Organization::query()->current()->first();
+        if (! $organization) {
+            throw ValidationException::withMessages([
+                'organization' => __('invoices.errors.organization_not_configured'),
+            ]);
+        }
+
+        return response()->json($this->invoiceNumberService->preview(
+            $organization,
+            CarbonImmutable::parse($validated['issue_date'])->year,
         ));
     }
 
@@ -382,7 +431,9 @@ class InvoiceController extends Controller
         $validated = $request->validate([
             'company_id' => 'required|exists:companies,id',
             'contract_id' => 'required|exists:contracts,id',
-            'invoice_number' => 'required|string|max:50|unique:invoices,invoice_number',
+            'invoice_number' => 'nullable|string|max:50|unique:invoices,invoice_number',
+            'invoice_number_sequence' => ['nullable', 'integer', 'min:1'],
+            'invoice_number_manual' => ['nullable', 'boolean'],
             'issue_date' => 'required|date',
             'due_date' => 'nullable|date',
             'seller_name' => 'prohibited',
@@ -722,12 +773,9 @@ class InvoiceController extends Controller
 
         $companyContext = $this->invoiceCompanyContext($request, $invoice);
         $validated = $request->validate([
-            'invoice_number' => [
-                'required',
-                'string',
-                'max:50',
-                'unique:invoices,invoice_number,'.$invoice->id,
-            ],
+            'invoice_number' => ['nullable', 'string', 'max:50', 'unique:invoices,invoice_number,'.$invoice->id],
+            'invoice_number_sequence' => ['nullable', 'integer', 'min:1'],
+            'invoice_number_manual' => ['nullable', 'boolean'],
             'issue_date' => ['required', 'date'],
             'due_date' => ['nullable', 'date'],
             'comment' => ['nullable', 'string'],

@@ -29,6 +29,8 @@ class UpdateInvoiceRequest extends FormRequest
                     $invoice instanceof Invoice ? $invoice->getKey() : null
                 ),
             ],
+            'invoice_number_sequence' => ['sometimes', 'nullable', 'integer', 'min:1'],
+            'invoice_number_manual' => ['sometimes', 'nullable', 'boolean'],
             'issue_date' => ['sometimes', 'date_format:Y-m-d'],
             'due_date' => ['sometimes', 'date_format:Y-m-d'],
             'comment' => ['sometimes', 'nullable', 'string'],
