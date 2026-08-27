@@ -49,13 +49,13 @@ class ContractDocumentController extends Controller
 
         if ($file->getSize() === false || $file->getSize() <= 0) {
             throw ValidationException::withMessages([
-                'document' => 'Файл не должен быть пустым.',
+                'document' => __('contracts.documents.errors.empty'),
             ]);
         }
 
         if (! SafeDocumentName::isAcceptableOriginalPath($file->getClientOriginalPath())) {
             throw ValidationException::withMessages([
-                'document' => 'Имя файла содержит недопустимые символы или слишком длинное.',
+                'document' => __('contracts.documents.errors.name'),
             ]);
         }
 
@@ -66,7 +66,7 @@ class ContractDocumentController extends Controller
             || ! SafeDocumentName::extensionMatches($file->getClientOriginalPath(), $serverExtension)
         ) {
             throw ValidationException::withMessages([
-                'document' => 'Расширение файла не соответствует его содержимому.',
+                'document' => __('contracts.documents.errors.extension'),
             ]);
         }
 
@@ -80,11 +80,11 @@ class ContractDocumentController extends Controller
             );
         } catch (ContractDocumentStorageException $exception) {
             return $this->mutationRedirect($contract)
-                ->with('error', $exception->getMessage());
+                ->with('error', __('contracts.documents.errors.storage'));
         }
 
         return $this->mutationRedirect($contract)
-            ->with('success', 'Документ успешно загружен.');
+            ->with('success', __('contracts.documents.flash.uploaded'));
     }
 
     public function download(string $document): StreamedResponse
@@ -95,15 +95,15 @@ class ContractDocumentController extends Controller
 
         $path = (string) $document->file_path;
 
-        abort_unless(ContractDocumentPath::isAllowed($document, $path), 404, 'Файл не найден.');
+        abort_unless(ContractDocumentPath::isAllowed($document, $path), 404, __('contracts.documents.errors.not_found'));
 
         try {
             $stream = Storage::disk(ContractDocumentPath::DISK)->readStream($path);
         } catch (Throwable) {
-            abort(404, 'Файл не найден.');
+            abort(404, __('contracts.documents.errors.not_found'));
         }
 
-        abort_unless(is_resource($stream), 404, 'Файл не найден.');
+        abort_unless(is_resource($stream), 404, __('contracts.documents.errors.not_found'));
 
         return response()->streamDownload(
             static function () use ($stream): void {
@@ -138,11 +138,11 @@ class ContractDocumentController extends Controller
             $deleteDocument->handle($document, auth()->user());
         } catch (ContractDocumentDeletionException $exception) {
             return $this->mutationRedirect($contract)
-                ->with('error', $exception->getMessage());
+                ->with('error', __('contracts.documents.errors.delete_storage'));
         }
 
         return $this->mutationRedirect($contract)
-            ->with('success', 'Документ удалён.');
+            ->with('success', __('contracts.documents.flash.deleted'));
     }
 
     private function mutationRedirect(Contract $contract): RedirectResponse

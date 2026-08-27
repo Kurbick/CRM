@@ -203,7 +203,7 @@ class InvoicePaymentBreakdownTest extends TestCase
 
         $response->assertOk()
             ->assertSee('Платежи')
-            ->assertSee('Открыть историю платежей')
+            ->assertSee('История платежей')
             ->assertDontSee('Детали')
             ->assertSee('Подтверждён')
             ->assertSee('Ожидает')
@@ -238,7 +238,7 @@ class InvoicePaymentBreakdownTest extends TestCase
 
         $this->get(route('invoices.show', $invoice))
             ->assertOk()
-            ->assertSee('Платежей пока нет.')
+            ->assertSee('Платежей по счёту пока нет.')
             ->assertDontSee('Открыть историю');
     }
 

@@ -2,11 +2,10 @@
 
 namespace Tests\Feature;
 
-use App\Models\CreditBalance;
-use App\Models\CreditBalanceEntry;
-use App\Models\Payment;
 use App\Actions\Credits\ApplyCreditToInvoice;
 use App\Actions\Payments\CancelPayment;
+use App\Models\CreditBalanceEntry;
+use App\Models\Payment;
 use App\Support\Access\PermissionName;
 use Tests\Feature\Authorization\AuthorizationTestCase;
 
@@ -18,12 +17,27 @@ class InvoiceManualCreditApplicationTest extends AuthorizationTestCase
         $balance = $invoice->company->creditBalance()->create(['amount' => '50.00']);
         $this->actingAsPermissions($this->creditPermissions());
 
-        $this->get(route('invoices.show', $invoice))
+        $response = $this->get(route('invoices.show', $invoice));
+
+        $response
             ->assertOk()
             ->assertSee('Баланс компании')
-            ->assertSee('Использовать баланс')
+            ->assertSee('Оплатить с баланса')
+            ->assertSee('Оплата с баланса')
+            ->assertSee('Инвойс '.$invoice->invoice_number)
+            ->assertSee('Задолженность по инвойсу:')
+            ->assertSee('Максимальная сумма оплаты с баланса:')
+            ->assertSee('Сумма оплаты (₼)')
+            ->assertSee('Отмена')
+            ->assertDontSee('rounded-full bg-blue-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-blue-700', false)
+            ->assertDontSee('Использовать баланс')
             ->assertSee('expected_credit_balance_minor', false)
             ->assertSee('expected_available_minor', false);
+
+        $this->assertMatchesRegularExpression(
+            '/<button type="submit"[^>]*>\s*Оплатить\s*<\/button>/u',
+            $response->getContent(),
+        );
 
         $response = $this->post(route('invoices.apply-credit', $invoice), [
             'amount' => '30.00',
@@ -99,7 +113,7 @@ class InvoiceManualCreditApplicationTest extends AuthorizationTestCase
         $this->get(route('invoices.show', $invoice))
             ->assertOk()
             ->assertDontSee('Баланс компании')
-            ->assertDontSee('Использовать баланс');
+            ->assertDontSee('Оплатить с баланса');
 
         $this->post(route('invoices.apply-credit', $invoice), [
             'amount' => '30.00',

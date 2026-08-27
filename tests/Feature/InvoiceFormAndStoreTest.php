@@ -266,7 +266,7 @@ class InvoiceFormAndStoreTest extends TestCase
             ->assertSee('data-step="invoice-lines"', false)
             ->assertSee('x-show="selectedContractId"', false)
             ->assertSee('contractLabel(c) { return `№ ${c.contract_number}` }', false)
-            ->assertSee('`с ${this.formatDate(c.start_date)}, бессрочный`', false)
+            ->assertSee("this.strings.indefiniteFrom.replace(':date', this.formatDate(c.start_date))", false)
             ->assertSee(':disabled="!selectedCompanyId || !selectedContractId || !lines.length"', false);
     }
 

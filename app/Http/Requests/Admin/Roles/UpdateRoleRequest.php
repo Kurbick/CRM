@@ -37,10 +37,10 @@ class UpdateRoleRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'display_name.required' => 'Введите название группы.',
-            'display_name.unique' => 'Группа с таким названием уже существует.',
-            'display_name.max' => 'Название группы не должно превышать 255 символов.',
-            'description.max' => 'Описание не должно превышать 1000 символов.',
+            'display_name.required' => __('admin.access.validation.group_name_required'),
+            'display_name.unique' => __('admin.access.validation.group_name_unique'),
+            'display_name.max' => __('admin.access.validation.group_name_max'),
+            'description.max' => __('admin.access.validation.description_max'),
         ];
     }
 }

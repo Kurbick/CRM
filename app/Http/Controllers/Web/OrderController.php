@@ -37,14 +37,14 @@ class OrderController extends Controller
             'status' => 'required|in:in_progress,completed,cancelled',
             'comment' => 'nullable|string',
         ], [
-            'payment_terms.required' => 'Укажите срок оплаты в днях.',
-            'payment_terms.integer' => 'Срок оплаты должен быть целым числом дней.',
+            'payment_terms.required' => __('orders.validation.payment_terms_required'),
+            'payment_terms.integer' => __('orders.validation.payment_terms_integer'),
         ]);
 
         $createOrder->handle($contract, $validated, $request->user());
 
         return $this->mutationRedirect($contract)
-            ->with('success', 'Разовая услуга успешно добавлена.');
+            ->with('success', __('orders.flash.created'));
     }
 
     public function edit(Order $order)
@@ -76,8 +76,8 @@ class OrderController extends Controller
             'status' => 'required|in:in_progress,completed,cancelled',
             'comment' => 'nullable|string',
         ], [
-            'payment_terms.required' => 'Укажите срок оплаты в днях.',
-            'payment_terms.integer' => 'Срок оплаты должен быть целым числом дней.',
+            'payment_terms.required' => __('orders.validation.payment_terms_required'),
+            'payment_terms.integer' => __('orders.validation.payment_terms_integer'),
         ]);
 
         $validated['title'] = trim($validated['title']);
@@ -90,7 +90,7 @@ class OrderController extends Controller
             ->firstOrFail();
 
         return $this->mutationRedirect($contract)
-            ->with('success', 'Разовая услуга обновлена.');
+            ->with('success', __('orders.flash.updated'));
     }
 
     public function destroy(Request $request, Order $order, DeleteOrder $deleteOrder)
@@ -105,11 +105,11 @@ class OrderController extends Controller
             $deleteOrder->handle($order, $request->user());
         } catch (OrderDeletionException $exception) {
             return $this->mutationRedirect($contract)
-                ->with('error', $exception->getMessage());
+                ->with('error', __('orders.errors.delete_invoice'));
         }
 
         return $this->mutationRedirect($contract)
-            ->with('success', 'Разовая услуга удалена.');
+            ->with('success', __('orders.flash.deleted'));
     }
 
     private function backUrl(Contract $contract): string

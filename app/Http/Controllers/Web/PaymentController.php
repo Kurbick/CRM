@@ -64,27 +64,27 @@ class PaymentController extends Controller
                 'max:2000',
             ],
         ], [
-            'payment_date.required' => 'Укажите дату платежа.',
+            'payment_date.required' => __('payments.validation.date_required'),
 
-            'payment_date.date' => 'Укажите корректную дату платежа.',
+            'payment_date.date' => __('payments.validation.date_date'),
 
-            'amount.required' => 'Укажите сумму платежа.',
+            'amount.required' => __('payments.validation.amount_required'),
 
-            'amount.numeric' => 'Сумма платежа должна быть числом.',
+            'amount.numeric' => __('payments.validation.amount_numeric'),
 
-            'amount.decimal' => 'Сумма платежа должна содержать не более двух знаков после запятой.',
+            'amount.decimal' => __('payments.validation.amount_decimal'),
 
-            'amount.min' => 'Сумма платежа должна быть больше нуля.',
+            'amount.min' => __('payments.validation.amount_min'),
 
-            'payment_method.required' => 'Выберите способ оплаты.',
+            'payment_method.required' => __('payments.validation.method_required'),
 
-            'payment_method.in' => 'Выбран некорректный способ оплаты.',
+            'payment_method.in' => __('payments.validation.method_in'),
 
-            'status.required' => 'Выберите статус платежа.',
+            'status.required' => __('payments.validation.status_required'),
 
-            'status.in' => 'Выбран некорректный статус платежа.',
+            'status.in' => __('payments.validation.status_in'),
 
-            'comment.max' => 'Комментарий не должен превышать 2000 символов.',
+            'comment.max' => __('payments.validation.comment_max'),
         ]);
 
         if ($validated['status'] === 'confirmed') {
@@ -111,7 +111,7 @@ class PaymentController extends Controller
         return $this->mutationRedirect($invoice)
             ->with(
                 'success',
-                'Платёж успешно зарегистрирован.'
+                __('payments.flash.created')
             );
     }
 
@@ -137,7 +137,7 @@ class PaymentController extends Controller
         return $this->mutationRedirect($confirmedPayment->invoice_id)
             ->with(
                 'success',
-                'Платёж подтверждён. Сумма оплаты и статус инвойса пересчитаны.'
+                __('payments.flash.confirmed')
             );
     }
 
@@ -166,17 +166,17 @@ class PaymentController extends Controller
                 'max:1000',
             ],
         ], [
-            'cancel_payment_id.required' => 'Не удалось определить отменяемый платёж.',
+            'cancel_payment_id.required' => __('payments.validation.id_required'),
 
-            'cancel_payment_id.integer' => 'Указан некорректный платёж.',
+            'cancel_payment_id.integer' => __('payments.validation.id_integer'),
 
-            'cancel_payment_id.in' => 'Платёж в форме не совпадает с отменяемым платежом.',
+            'cancel_payment_id.in' => __('payments.validation.id_in'),
 
-            'cancel_reason.required' => 'Укажите причину отмены платежа.',
+            'cancel_reason.required' => __('payments.validation.reason_required'),
 
-            'cancel_reason.min' => 'Причина отмены должна содержать минимум 3 символа.',
+            'cancel_reason.min' => __('payments.validation.reason_min'),
 
-            'cancel_reason.max' => 'Причина отмены не должна превышать 1000 символов.',
+            'cancel_reason.max' => __('payments.validation.reason_max'),
         ]);
 
         $cancelledPayment = $this->cancelPayment->execute(
@@ -188,7 +188,7 @@ class PaymentController extends Controller
         return $this->mutationRedirect($cancelledPayment->invoice_id)
             ->with(
                 'success',
-                'Платёж отменён. Статус инвойса и Credit Balance пересчитаны.'
+                __('payments.flash.cancelled')
             );
     }
 

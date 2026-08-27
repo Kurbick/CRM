@@ -8,6 +8,6 @@ class LastAdministratorException extends DomainException
 {
     public function __construct()
     {
-        parent::__construct('Нельзя отключить или лишить группы последнего активного администратора.');
+        parent::__construct(__('admin.errors.last_administrator'));
     }
 }

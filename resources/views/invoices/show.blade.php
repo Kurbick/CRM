@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Счёт ' . $invoice->invoice_number)
+@section('title', __('invoices.show.document') . ' ' . $invoice->invoice_number)
 
 @section('content')
     @php
@@ -38,7 +38,7 @@
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
-                {{ $canReturnToCompany ? $companyContext['label'] : 'Назад к списку' }}
+                {{ $canReturnToCompany ? $companyContext['label'] : __('invoices.actions.back_to_list') }}
         </a>
 
         <div class="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-end sm:justify-between">
@@ -47,7 +47,7 @@
                     <h1 class="truncate font-mono text-xl font-semibold leading-tight text-slate-900">
                         {{ $invoice->invoice_number }}
                     </h1>
-                    @include('partials.badge', ['status' => $invoice->status])
+                    @include('partials.badge', ['status' => $invoice->status, 'label' => __('invoices.statuses.'.$invoice->status)])
                 </div>
 
                 <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
@@ -61,7 +61,7 @@
                             <span>{{ $invoice->company->name }}</span>
                         @endcan
                     @else
-                        <span>{{ $invoice->payer_name ?: 'Плательщик не указан' }}</span>
+                        <span>{{ $invoice->payer_name ?: __('invoices.show.payer_not_specified') }}</span>
                     @endif
 
                     @if ($invoice->contract)
@@ -84,7 +84,7 @@
             <div class="flex shrink-0 flex-wrap items-center gap-1">
                 @can('print', $invoice)
                     <button type="button" onclick="window.print()" class="crm-light-action">
-                        Печать
+                        {{ __('invoices.actions.print') }}
                     </button>
                 @endcan
 
@@ -92,7 +92,7 @@
                     @if ($editability['editable'])
                         <a href="{{ route('invoices.edit', $invoice) }}{{ $companyContext['active'] ? '?'.http_build_query($companyContext['query']) : '' }}"
                             class="crm-light-action">
-                            Редактировать
+                            {{ __('invoices.actions.edit') }}
                         </a>
                     @endif
                 @endcan
@@ -100,12 +100,12 @@
                 @can('delete', $invoice)
                     @if ($invoice->status === 'draft')
                         <form action="{{ route('invoices.destroy', ['invoice' => $invoice, ...$companyContext['query']]) }}" method="POST"
-                            onsubmit="return confirm('Вы уверены, что хотите удалить этот счет? Действие необратимо.')">
+                            onsubmit="return confirm(@js(__('invoices.actions.delete_confirm')))" >
                             @csrf
                             @method('DELETE')
                             <button type="submit"
                                 class="inline-flex items-center rounded px-1.5 py-1 text-xs font-semibold text-red-600 transition hover:bg-red-50 hover:text-red-700">
-                                Удалить
+                                {{ __('invoices.actions.delete') }}
                             </button>
                         </form>
                     @endif
@@ -153,13 +153,13 @@
 
                     {{-- Данные продавца (Мы) --}}
                     <div class="space-y-1">
-                        <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Поставщик услуг</div>
+                        <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider">{{ __('invoices.show.supplier') }}</div>
                         <h2 class="text-lg font-bold text-gray-900">{{ $invoice->seller_name ?? $sellerFallback['seller_name'] }}</h2>
                         <div class="text-sm text-gray-600 font-mono">VÖEN: {{ $invoice->seller_voen ?? $sellerFallback['seller_voen'] }}
                         </div>
                         @if ($invoice->seller_bank_name ?? $sellerFallback['seller_bank_name'])
                             <div class="text-sm text-gray-600 mt-1.5">
-                                <span class="font-medium text-gray-800">Банк:</span>
+                                <span class="font-medium text-gray-800">{{ __('invoices.show.bank') }}</span>
                                 {{ $invoice->seller_bank_name ?? $sellerFallback['seller_bank_name'] }}
                             </div>
                         @endif
@@ -176,35 +176,37 @@
                                         class="font-mono">{{ $invoice->seller_swift ?? $sellerFallback['seller_swift'] }}</span></div>
                             @endif
                             @if ($invoice->seller_bank_code ?? $sellerFallback['seller_bank_code'])
-                                <div><span class="font-medium text-gray-800">Код банка:</span> <span
+                                <div><span class="font-medium text-gray-800">{{ __('invoices.show.bank_code') }}</span> <span
                                         class="font-mono">{{ $invoice->seller_bank_code ?? $sellerFallback['seller_bank_code'] }}</span></div>
                             @endif
                             </div>
                         @endif
                         @if ($invoice->seller_bank_voen ?? $sellerFallback['seller_bank_voen'])
                             <div class="text-sm text-gray-600 font-mono">
-                                <span class="font-medium text-gray-800">VÖEN банка:</span> {{ $invoice->seller_bank_voen ?? $sellerFallback['seller_bank_voen'] }}
+                                <span class="font-medium text-gray-800">{{ __('invoices.show.bank_voen') }}</span> {{ $invoice->seller_bank_voen ?? $sellerFallback['seller_bank_voen'] }}
                             </div>
                         @endif
                     </div>
 
                     {{-- Метаданные инвойса --}}
                     <div class="space-y-2 md:text-right md:self-start">
-                        <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Счёт</div>
+                        <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider">{{ __('invoices.show.document') }}</div>
                         <h2 class="text-xl font-bold text-gray-900 font-mono">{{ $invoice->invoice_number }}</h2>
 
                         <div class="text-sm text-gray-600">
-                            <span class="font-medium text-gray-800">Дата выставления:</span> {{ $invoice->issue_date ? \Illuminate\Support\Carbon::parse($invoice->issue_date)->format('d/m/Y') : '—' }}
+                            <span class="font-medium text-gray-800">{{ __('invoices.show.issue_date') }}</span> {{ $invoice->issue_date ? \Illuminate\Support\Carbon::parse($invoice->issue_date)->format('d/m/Y') : '—' }}
                         </div>
                         <div class="text-sm text-gray-600">
-                            <span class="font-medium text-gray-800">Срок оплаты:</span> {{ $invoice->due_date ? \Illuminate\Support\Carbon::parse($invoice->due_date)->format('d/m/Y') : '—' }}
+                            <span class="font-medium text-gray-800">{{ __('invoices.show.due_date') }}</span> {{ $invoice->due_date ? \Illuminate\Support\Carbon::parse($invoice->due_date)->format('d/m/Y') : '—' }}
                         </div>
                         @if ($invoiceBillingPeriod['kind'] !== 'none')
                             <div class="text-sm text-gray-600">
-                                <span class="font-medium text-gray-800">Расчётный период:</span>
-                                <div class="text-xs text-gray-500 font-mono mt-0.5">{{ $invoiceBillingPeriod['label'] }}</div>
-                                @if ($invoiceBillingPeriod['count_label'])
-                                    <div class="text-xs text-gray-500 mt-0.5">{{ $invoiceBillingPeriod['count_label'] }}</div>
+                                <span class="font-medium text-gray-800">{{ __('invoices.show.billing_period') }}</span>
+                                <div class="text-xs text-gray-500 font-mono mt-0.5">{{ $invoiceBillingPeriod['kind'] === 'disjoint' ? __('invoices.form.multiple_periods') : $invoiceBillingPeriod['label'] }}</div>
+                                @if ($invoiceBillingPeriod['kind'] === 'continuous' && $invoiceBillingPeriod['period_count'] > 1)
+                                    <div class="text-xs text-gray-500 mt-0.5">
+                                        {{ $invoiceBillingPeriod['period_count'] }} {{ $invoiceBillingPeriod['period_count'] === 1 ? __('invoices.form.period_one') : ($invoiceBillingPeriod['period_count'] <= 4 ? __('invoices.form.period_few') : __('invoices.form.period_many')) }}
+                                    </div>
                                 @endif
                             </div>
                         @endif
@@ -215,8 +217,8 @@
                 <div
                     class="invoice-payer bg-gray-50 rounded-lg px-4 py-3.5 mb-6 grid grid-cols-1 md:grid-cols-2 gap-3 print:bg-gray-100 print:rounded-none">
                     <div>
-                        <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Плательщик</div>
-                        <h3 class="font-bold text-gray-900">{{ $invoice->payer_name ?: 'Не указан' }}</h3>
+                        <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">{{ __('invoices.show.payer') }}</div>
+                        <h3 class="font-bold text-gray-900">{{ $invoice->payer_name ?: __('invoices.show.no_payer') }}</h3>
                         @if (trim((string) $invoice->payer_voen) !== '')
                             <div class="text-sm text-gray-600 font-mono mt-0.5">VÖEN: {{ $invoice->payer_voen }}</div>
                         @endif
@@ -224,7 +226,7 @@
                     <div class="md:text-right md:self-center">
                         @if ($invoice->contract_reference)
                             <div class="text-sm text-gray-600">
-                                <span class="font-medium text-gray-800">Договор:</span>
+                                <span class="font-medium text-gray-800">{{ __('invoices.show.contract') }}</span>
                                 <span class="font-mono text-gray-900 font-semibold">{{ $invoice->contract_reference }}</span>
                             </div>
                         @endif
@@ -234,7 +236,7 @@
                 {{-- Позиции счета --}}
                 <section data-testid="invoice-line-items" class="mb-6">
                     <div class="mb-3 flex items-center justify-between gap-3">
-                        <h2 class="text-sm font-semibold text-slate-900">Позиции счета</h2>
+                        <h2 class="text-sm font-semibold text-slate-900">{{ __('invoices.show.lines') }}</h2>
                     </div>
                     <div class="overflow-x-auto print:overflow-visible">
                     <table class="crm-table w-full table-auto text-left text-sm">
@@ -242,13 +244,13 @@
                             <tr
                                 class="border-b border-gray-200 text-gray-400 font-semibold uppercase tracking-wider text-xs pb-3">
                                 <th class="w-8 pb-3 pr-2">№</th>
-                                <th class="pb-3 pr-4">Позиция</th>
-                                <th class="invoice-print-only hidden pb-3 pr-4">Описание / тип</th>
-                                <th class="invoice-print-only hidden pb-3 pr-4">Расчётный период</th>
-                                <th class="pb-3 text-left pr-4">Сумма</th>
-                                <th class="crm-print-hide pb-3 text-left pr-4 print:hidden">Оплачено</th>
-                                <th class="crm-print-hide pb-3 text-left pr-4 print:hidden">Остаток</th>
-                                <th class="crm-print-hide pb-3 print:hidden">Статус</th>
+                                <th class="pb-3 pr-4">{{ __('invoices.show.line') }}</th>
+                                <th class="invoice-print-only hidden pb-3 pr-4">{{ __('invoices.show.description_type') }}</th>
+                                <th class="invoice-print-only hidden pb-3 pr-4">{{ __('invoices.show.billing_period') }}</th>
+                                <th class="pb-3 text-left pr-4">{{ __('invoices.show.amount') }}</th>
+                                <th class="crm-print-hide pb-3 text-left pr-4 print:hidden">{{ __('invoices.show.paid') }}</th>
+                                <th class="crm-print-hide pb-3 text-left pr-4 print:hidden">{{ __('invoices.show.remaining') }}</th>
+                                <th class="crm-print-hide pb-3 print:hidden">{{ __('invoices.index.status') }}</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100 text-gray-700">
@@ -262,11 +264,18 @@
                                                 <div class="crm-print-hide mt-0.5 text-xs text-gray-500 break-words">{{ $line['period_label'] }}</div>
                                             @endif
                                         @else
-                                            <div class="crm-print-hide mt-0.5 text-xs text-gray-500 break-words">{{ $line['type_label'] }}</div>
+                                        <div class="crm-print-hide mt-0.5 text-xs text-gray-500 break-words">{{ match ($line['type']) {
+                                            'subscription' => __('invoices.form.subscription'),
+                                            'order' => __('invoices.form.one_time'),
+                                            default => __('invoices.form.manual_line'),
+                                        } }}</div>
                                         @endif
                                     </td>
                                     <td class="invoice-print-only hidden py-4 pr-4 text-xs text-gray-600">
-                                        {{ $line['type'] === 'subscription' ? '' : $line['type_label'] }}
+                                        {{ $line['type'] === 'subscription' ? '' : match ($line['type']) {
+                                            'order' => __('invoices.form.one_time'),
+                                            default => __('invoices.form.manual_line'),
+                                        } }}
                                     </td>
                                     <td class="invoice-print-only hidden py-4 pr-4 text-xs text-gray-600">
                                         {{ $line['period_label'] ?: '—' }}
@@ -287,7 +296,7 @@
                                             'bg-amber-50 text-amber-700' => $line['payment_state'] === 'partially_paid',
                                             'bg-gray-100 text-gray-600' => $line['payment_state'] === 'unpaid',
                                         ])>
-                                            {{ $line['payment_state_label'] }}
+                                            {{ __('invoices.show.payment_states.'.$line['payment_state']) }}
                                         </span>
                                     </td>
                                 </tr>
@@ -302,14 +311,14 @@
                     <section data-testid="invoice-payments" class="crm-print-hide mb-6 overflow-hidden border-y border-slate-200 print:hidden">
                         <div class="flex flex-wrap items-center gap-3 border-b border-slate-200 px-3 py-3">
                             <div class="flex items-baseline gap-3">
-                                <h2 class="text-sm font-semibold text-slate-900">Платежи</h2>
+                                <h2 class="text-sm font-semibold text-slate-900">{{ __('payments.labels.title') }}</h2>
                                 <span class="text-xs tabular-nums text-slate-500">{{ $paymentBreakdown['payments_count'] }}</span>
                             </div>
 
                             @if ($paymentBreakdown['payments_count'] > 0)
                                 <button type="button" x-ref="paymentHistoryTrigger" @click="$dispatch('open-payment-history')"
                                     class="ml-auto crm-table-action-link">
-                                    Открыть историю платежей
+                                    {{ __('payments.labels.history') }}
                                 </button>
                             @endif
                         </div>
@@ -326,10 +335,10 @@
                                     </colgroup>
                                     <thead>
                                         <tr>
-                                            <th>Дата</th>
-                                            <th>Сумма</th>
-                                            <th>Метод</th>
-                                            <th>Статус</th>
+                                            <th>{{ __('payments.labels.date') }}</th>
+                                            <th>{{ __('payments.labels.amount') }}</th>
+                                            <th>{{ __('payments.labels.method') }}</th>
+                                            <th>{{ __('invoices.index.status') }}</th>
                                             <th></th>
                                         </tr>
                                     </thead>
@@ -353,28 +362,28 @@
                                                 </td>
                                                 <td class="crm-table-numeric font-semibold text-slate-900">{{ $formatMoney($paymentRow['amount']) }}</td>
                                                 <td>
-                                                    <span>{{ $paymentRow['payment_method_label'] }}</span>
+                                                    <span>{{ __('payments.methods.'.$paymentRow['payment_method']) }}</span>
                                                     @if (in_array($paymentRow['id'], $paymentSource['credit_balance_payment_ids'], true))
                                                         <span data-testid="invoice-payment-source-balance"
                                                             class="mt-1 inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
-                                                            Из баланса
+                                                            {{ __('invoices.credit.from_balance') }}
                                                         </span>
                                                     @endif
                                                 </td>
                                                 <td>
-                                                    @include('partials.badge', ['status' => $paymentRow['status']])
+                                                    @include('partials.badge', ['status' => $paymentRow['status'], 'label' => __('payments.statuses.'.$paymentRow['status'])])
                                                 </td>
                                                 <td data-testid="invoice-payment-actions-{{ $payment->id }}" class="px-1 text-right">
                                                     @if ($payment->status === 'pending')
                                                     <div class="flex flex-wrap justify-end gap-1.5 text-xs font-medium">
                                                             @can('confirm', $payment)
                                                                 <form action="{{ route('payments.confirm', $payment) }}" method="POST"
-                                                                    onsubmit="return confirm('Подтвердить этот платёж? После подтверждения сумма оплаты, статус инвойса и Credit Balance будут пересчитаны.')">
+                                                                    onsubmit="return confirm(@js(__('payments.confirm_message')))" >
                                                                     @csrf
                                                                     @method('PATCH')
                                                                     <button type="submit" data-testid="invoice-payment-confirm-action"
                                                                         class="inline-flex !h-9 !min-h-0 !w-24 shrink-0 items-center justify-center whitespace-nowrap !rounded-md border !px-0 !py-0 !text-sm !font-medium transition focus:outline-none focus:ring-2 focus:ring-offset-1 border-green-200 bg-green-50 text-green-700 hover:bg-green-100 focus:ring-green-500">
-                                                                        Подтвердить
+                                                                        {{ __('payments.actions.confirm_short') }}
                                                                     </button>
                                                                 </form>
                                                             @endcan
@@ -384,7 +393,7 @@
                                                                         <button type="button" data-testid="invoice-payment-cancel-action" x-show="!cancelOpen"
                                                                             class="inline-flex !h-9 !min-h-0 !w-24 shrink-0 items-center justify-center whitespace-nowrap !rounded-md border !px-0 !py-0 !text-sm !font-medium transition focus:outline-none focus:ring-2 focus:ring-offset-1 border-red-200 bg-red-50 text-red-700 hover:bg-red-100 focus:ring-red-500"
                                                                             @click="cancelOpen = true; $nextTick(() => $refs.tableCancelReason.focus())">
-                                                                        Отменить
+                                                                        {{ __('payments.actions.cancel_short') }}
                                                                     </button>
                                                                 @endif
                                                             @endcan
@@ -408,7 +417,7 @@
                                                                         $event.currentTarget.reportValidity();
                                                                         return;
                                                                     }
-                                                                    if (!confirm('Отменить этот платёж? Он останется в истории, а суммы инвойса и Credit Balance будут пересчитаны.')) {
+                                                                    if (!confirm(@js(__('payments.cancel_message')))) {
                                                                         $event.preventDefault();
                                                                         return;
                                                                     }
@@ -418,12 +427,12 @@
                                                                 @method('PATCH')
                                                                 <input type="hidden" name="cancel_payment_id" value="{{ $payment->id }}">
                                                                 <label class="block text-xs font-semibold text-red-700" for="table_cancel_reason_{{ $payment->id }}">
-                                                                    Причина отмены
+                                                                    {{ __('payments.labels.cancel_reason') }}
                                                                 </label>
                                                                 <input id="table_cancel_reason_{{ $payment->id }}" name="cancel_reason"
                                                                     x-ref="tableCancelReason" required minlength="3" maxlength="1000"
                                                                     value="{{ $shouldOpenTableCancellation ? old('cancel_reason') : '' }}"
-                                                                    placeholder="Причина отмены"
+                                                                    placeholder="{{ __('payments.labels.cancel_reason_placeholder') }}"
                                                                     class="w-full rounded-md border border-red-200 bg-white px-2 py-1.5 text-xs text-gray-700 outline-none focus:border-red-400 focus:ring-1 focus:ring-red-300">
                                                                 @if ($shouldOpenTableCancellation)
                                                                     @error('cancel_reason')
@@ -433,11 +442,11 @@
                                                                 <div class="flex flex-wrap justify-end gap-2">
                                                                     <button type="button" @click="cancelOpen = false"
                                                                         class="inline-flex h-7 items-center rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-600 transition hover:bg-gray-50 hover:text-gray-900">
-                                                                        Не отменять
+                                                                        {{ __('payments.labels.do_not_cancel') }}
                                                                     </button>
                                                                     <button type="submit" :disabled="cancelSubmitting"
                                                                         class="inline-flex h-7 items-center rounded-md border border-red-200 bg-red-50 px-1.5 py-1 text-[11px] font-medium text-red-700 transition hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1">
-                                                                        Подтвердить отмену
+                                                                        {{ __('payments.labels.confirm_cancellation') }}
                                                                     </button>
                                                                 </div>
                                                             </form>
@@ -451,7 +460,7 @@
                                 </table>
                             </div>
                         @else
-                            <p class="px-3 py-4 text-sm text-slate-500">Платежей пока нет.</p>
+                            <p class="px-3 py-4 text-sm text-slate-500">{{ __('payments.labels.no_payments') }}</p>
                         @endif
                     </section>
                 @endcan
@@ -459,7 +468,7 @@
                 {{-- Расчет итога --}}
                 <div class="invoice-totals border-t border-gray-100 pt-6 flex flex-col items-end gap-2 text-sm text-gray-600">
                     <div class="flex justify-between w-64">
-                        <span>Итоговая сумма счёта:</span>
+                        <span>{{ __('invoices.show.total_invoice') }}</span>
 
                         <span class="font-bold text-gray-900 font-mono">
                             {{ $formatMoney($invoice->total_amount) }}
@@ -467,7 +476,7 @@
                     </div>
 
                     <div class="flex justify-between w-64 text-green-600">
-                        <span>Оплачено:</span>
+                        <span>{{ __('invoices.show.paid') }}:</span>
 
                         <span class="font-bold font-mono">
                             {{ $formatMoney($invoice->applied_amount) }}
@@ -476,7 +485,7 @@
 
                     @if ($paymentAvailability['pending_minor'] > 0)
                         <div class="flex justify-between w-64 text-amber-600">
-                            <span>Ожидает подтверждения:</span>
+                            <span>{{ __('invoices.show.pending_payment') }}</span>
 
                             <span class="font-bold font-mono">
                                 {{ $formatMoney($paymentAvailability['pending_minor'] / 100) }}
@@ -487,14 +496,14 @@
                     @can('viewAny', \App\Models\Payment::class)
                         @if ($paymentSource['credit_balance_applied_minor'] > 0)
                             <div class="w-64 text-right text-xs font-medium text-blue-700">
-                                Из баланса: {{ $formatMoney($paymentSource['credit_balance_applied_amount']) }}
+                                {{ __('invoices.show.from_balance') }} {{ $formatMoney($paymentSource['credit_balance_applied_amount']) }}
                             </div>
                         @endif
                     @endcan
 
                     @if ($invoice->overpayment_amount > 0)
                         <div class="flex justify-between w-64 text-blue-600">
-                            <span>Переплата:</span>
+                            <span>{{ __('invoices.show.overpayment') }}</span>
 
                             <span class="font-bold font-mono">
                                 {{ $formatMoney($invoice->overpayment_amount) }}
@@ -507,7 +516,7 @@
                         {{ $remainingColor }}">
 
                         <span class="font-semibold">
-                            Остаток к оплате:
+                            {{ __('invoices.show.remaining_to_pay') }}
                         </span>
 
                         <span class="font-bold font-mono">
@@ -524,7 +533,7 @@
                                 @csrf
                                 <button type="submit"
                                     class="inline-flex w-full items-center justify-center rounded bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-700 sm:w-auto">
-                                    Выставить счёт
+                                    {{ __('invoices.actions.issue') }}
                                 </button>
                             </form>
                         </div>
@@ -535,12 +544,12 @@
                     @if ($invoice->status === 'issued' && ! $hasPayments)
                         <div class="crm-print-hide mt-4 border-t border-slate-200 pt-3 print:hidden">
                             <form action="{{ route('invoices.cancel', $invoice) }}" method="POST"
-                                onsubmit="return confirm('Отменить выставленный инвойс? График подписок будет восстановлен.')">
+                                onsubmit="return confirm(@js(__('invoices.actions.cancel_confirm')))" >
                                 @csrf
                                 @method('PATCH')
                                 <button type="submit"
                                     class="text-xs font-semibold text-red-600 transition hover:text-red-700">
-                                    Отменить счёт
+                                    {{ __('invoices.actions.cancel_invoice') }}
                                 </button>
                             </form>
                         </div>
@@ -550,7 +559,7 @@
                 {{-- Примечание продавца --}}
                 @if (filled($invoice->comment))
                     <div class="invoice-comment mt-6 pt-4 border-t border-gray-100 text-sm break-words">
-                        <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Комментарий</div>
+                        <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">{{ __('invoices.show.comment') }}</div>
                         <p class="text-gray-600 whitespace-pre-line">{{ $invoice->comment }}</p>
                     </div>
                 @endif
@@ -583,29 +592,26 @@
                     <div class="rounded-xl border border-blue-200 bg-blue-50 p-5 shadow-sm">
                         <div class="flex items-start justify-between gap-3">
                             <div>
-                                <h3 class="text-sm font-semibold text-blue-900">Баланс компании</h3>
+                                <h3 class="text-sm font-semibold text-blue-900">{{ __('invoices.credit.title') }}</h3>
                                 <p class="mt-1 font-mono text-lg font-bold text-blue-800">
                                     {{ $formatMoney($creditBalanceMinor / 100) }}
                                 </p>
                             </div>
-                            <span class="rounded-full bg-blue-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-blue-700">
-                                Из баланса
-                            </span>
                         </div>
 
                         @if ($creditMaximumMinor > 0)
                             <button type="button" x-ref="creditTrigger" @click="openCredit()"
                                 class="mt-4 w-full rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1">
-                                Использовать баланс
+                                {{ __('invoices.credit.pay_from_balance') }}
                             </button>
                         @else
                             <button type="button" disabled
                                 class="mt-4 w-full cursor-not-allowed rounded-lg bg-blue-300 px-3 py-2.5 text-sm font-medium text-white opacity-80">
-                                Использовать баланс
+                                {{ __('invoices.credit.pay_from_balance') }}
                             </button>
                             @if ($paymentAvailability['pending_minor'] > 0)
                                 <p class="mt-2 text-xs leading-5 text-blue-800">
-                                    Весь остаток уже зарезервирован ожидающим платежом.
+                                    {{ __('invoices.credit.reserved') }}
                                 </p>
                             @endif
                         @endif
@@ -619,32 +625,32 @@
                                 <div class="flex items-start justify-between gap-4">
                                     <div>
                                         <h3 id="credit-dialog-title" class="text-base font-semibold text-slate-900">
-                                            Использовать баланс
+                                            {{ __('invoices.credit.payment_from_balance') }}
                                         </h3>
-                                        <p class="mt-1 text-xs text-slate-500">Счёт {{ $invoice->invoice_number }}</p>
+                                        <p class="mt-1 text-xs text-slate-500">{{ __('invoices.credit.invoice', ['number' => $invoice->invoice_number]) }}</p>
                                     </div>
                                     <button type="button" @click="closeCredit()"
                                         class="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-                                        aria-label="Закрыть диалог применения баланса">&times;</button>
+                                        aria-label="{{ __('invoices.credit.close') }}">&times;</button>
                                 </div>
 
                                 <div class="mt-4 space-y-2 rounded-lg bg-blue-50 p-3 text-sm text-blue-900">
                                     <div class="flex justify-between gap-3">
-                                        <span>Баланс компании:</span>
+                                        <span>{{ __('invoices.credit.company_balance') }}</span>
                                         <strong class="font-mono">{{ $formatMoney($creditBalanceMinor / 100) }}</strong>
                                     </div>
                                     <div class="flex justify-between gap-3">
-                                        <span>Остаток по счёту:</span>
+                                        <span>{{ __('invoices.credit.invoice_debt') }}</span>
                                         <strong class="font-mono">{{ $formatMoney($paymentAvailability['remaining_minor'] / 100) }}</strong>
                                     </div>
                                     @if ($paymentAvailability['pending_minor'] > 0)
                                         <div class="flex justify-between gap-3">
-                                            <span>Ожидает подтверждения:</span>
+                                            <span>{{ __('invoices.credit.pending') }}</span>
                                             <strong class="font-mono">{{ $formatMoney($paymentAvailability['pending_minor'] / 100) }}</strong>
                                         </div>
                                     @endif
                                     <div class="flex justify-between gap-3 border-t border-blue-200 pt-2">
-                                        <span>Доступно к погашению:</span>
+                                        <span>{{ __('invoices.credit.maximum') }}</span>
                                         <strong class="font-mono">{{ $formatMoney($creditMaximumMinor / 100) }}</strong>
                                     </div>
                                 </div>
@@ -655,8 +661,8 @@
                                     <input type="hidden" name="expected_credit_balance_minor" value="{{ $creditBalanceMinor }}">
                                     <input type="hidden" name="expected_available_minor" value="{{ $paymentAvailability['available_minor'] }}">
                                     <div>
-                                        <label for="credit_amount" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                            Использовать (₼)
+                                        <label for="credit_amount" class="block text-xs font-semibold tracking-wide text-slate-500">
+                                            {{ __('invoices.credit.amount') }}
                                         </label>
                                         <input type="number" name="amount" id="credit_amount" x-ref="creditAmount"
                                             value="{{ old('amount', number_format($creditMaximumMinor / 100, 2, '.', '')) }}"
@@ -669,11 +675,11 @@
                                     <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                                         <button type="button" @click="closeCredit()"
                                             class="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100">
-                                            Отмена
+                                            {{ __('invoices.credit.cancel') }}
                                         </button>
                                         <button type="submit" :disabled="creditSubmitting"
                                             class="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
-                                            Использовать баланс
+                                            {{ __('invoices.credit.pay') }}
                                         </button>
                                     </div>
                                 </form>
@@ -689,35 +695,34 @@
                 <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
                     <h3
                         class="font-bold text-gray-900 mb-4 pb-2 border-b border-gray-100 text-sm uppercase tracking-wider text-gray-500">
-                        Зарегистрировать платеж</h3>
+                        {{ __('payments.actions.register') }}</h3>
 
                     <form action="{{ route('payments.store', $invoice) }}" method="POST" class="space-y-4">
                         @csrf
 
                         <div>
                             <label for="payment_date"
-                                class="block text-xs font-semibold text-gray-500 uppercase mb-1">Дата платежа <span
+                                class="block text-xs font-semibold text-gray-500 uppercase mb-1">{{ __('payments.labels.date') }} <span
                                     class="text-red-500">*</span></label>
                             <x-form.date-input name="payment_date" id="payment_date"
                                 :value="old('payment_date', date('Y-m-d'))" required />
                         </div>
 
                         <div>
-                            <label for="amount" class="block text-xs font-semibold text-gray-500 uppercase mb-1">Сумма
-                                (₼) <span class="text-red-500">*</span></label>
+                            <label for="amount" class="block text-xs font-semibold text-gray-500 uppercase mb-1">{{ __('payments.labels.amount') }} (₼) <span class="text-red-500">*</span></label>
                             <input type="number" name="amount" id="amount"
                                 value="{{ session('credit_dialog_open') ? $paymentAvailability['available_amount'] : old('amount', $paymentAvailability['available_amount']) }}" required step="0.01"
                                 min="0.01" @disabled($paymentAvailability['available_minor'] === 0)
                                 class="w-full px-3 py-2 border @error('amount') border-red-300 @else border-gray-200 @enderror rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition font-mono"
                                 placeholder="0.00">
-                            <p class="text-[10px] text-gray-400 mt-1">Остаток к оплате:
+                            <p class="text-[10px] text-gray-400 mt-1">{{ __('invoices.show.remaining_to_pay') }}
                                 {{ $formatMoney($paymentAvailability['remaining_minor'] / 100) }}</p>
-                            <p class="text-[10px] text-gray-400 mt-1">Доступно для нового платежа:
+                            <p class="text-[10px] text-gray-400 mt-1">{{ __('payments.labels.available_for_new') }}
                                 {{ $formatMoney($paymentAvailability['available_amount']) }}</p>
                             @if ($paymentAvailability['available_minor'] === 0 && $paymentAvailability['pending_minor'] > 0)
                                 <p class="mt-2 text-xs leading-5 text-amber-700">
-                                    Весь остаток уже зарезервирован ожидающим платежом.<br>
-                                    Подтвердите или отмените ожидающий платёж ниже.
+                                    {{ __('invoices.credit.reserved') }}<br>
+                                    {{ __('payments.labels.pending_action_hint') }}
                                 </p>
                             @endif
                             @error('amount')
@@ -727,16 +732,14 @@
 
                         <div>
                             <label for="payment_method"
-                                class="block text-xs font-semibold text-gray-500 uppercase mb-1">Метод оплаты <span
+                                class="block text-xs font-semibold text-gray-500 uppercase mb-1">{{ __('payments.labels.method') }} <span
                                     class="text-red-500">*</span></label>
                             <select name="payment_method" id="payment_method" required
                                 class="w-full px-3 py-2 border @error('payment_method') border-red-300 @else border-gray-200 @enderror rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition">
                                 <option value="transfer" {{ old('payment_method') === 'transfer' ? 'selected' : '' }}>
-                                    Безналичный перевод (Банк)</option>
-                                <option value="card" {{ old('payment_method') === 'card' ? 'selected' : '' }}>Банковская
-                                    карта</option>
-                                <option value="cash" {{ old('payment_method') === 'cash' ? 'selected' : '' }}>Наличные
-                                </option>
+                                    {{ __('payments.form_methods.transfer') }}</option>
+                                <option value="card" {{ old('payment_method') === 'card' ? 'selected' : '' }}>{{ __('payments.form_methods.card') }}</option>
+                                <option value="cash" {{ old('payment_method') === 'cash' ? 'selected' : '' }}>{{ __('payments.form_methods.cash') }}</option>
                             </select>
                             @error('payment_method')
                                 <p class="text-xs text-red-500 mt-1">{{ $message }}</p>
@@ -745,15 +748,13 @@
 
                         <div>
                             <label for="status_payment"
-                                class="block text-xs font-semibold text-gray-500 uppercase mb-1">Статус платежа <span
+                                class="block text-xs font-semibold text-gray-500 uppercase mb-1">{{ __('payments.labels.status') }} <span
                                     class="text-red-500">*</span></label>
                             <select name="status" id="status_payment" required
                                 class="w-full px-3 py-2 border @error('status') border-red-300 @else border-gray-200 @enderror rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition">
                                 <option value="confirmed"
-                                    {{ old('status', 'confirmed') === 'confirmed' ? 'selected' : '' }}>Проведён /
-                                    подтверждён</option>
-                                <option value="pending" {{ old('status') === 'pending' ? 'selected' : '' }}>Ожидает
-                                    подтверждения</option>
+                                    {{ old('status', 'confirmed') === 'confirmed' ? 'selected' : '' }}>{{ __('payments.form_statuses.confirmed') }}</option>
+                                <option value="pending" {{ old('status') === 'pending' ? 'selected' : '' }}>{{ __('payments.form_statuses.pending') }}</option>
                             </select>
                             @error('status')
                                 <p class="text-xs text-red-500 mt-1">{{ $message }}</p>
@@ -762,11 +763,10 @@
 
                         <div>
                             <label for="comment_payment"
-                                class="block text-xs font-semibold text-gray-500 uppercase mb-1">Примечание к
-                                платежу</label>
+                                class="block text-xs font-semibold text-gray-500 uppercase mb-1">{{ __('payments.labels.comment') }}</label>
                             <textarea name="comment" id="comment_payment" rows="3"
                                 class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition resize-none"
-                                placeholder="Номер платежного поручения, имя плательщика и т.д...">{{ old('comment') }}</textarea>
+                                placeholder="{{ __('payments.labels.payment_note_placeholder') }}">{{ old('comment') }}</textarea>
                             @error('comment')
                                 <p class="text-xs text-red-500 mt-1">{{ $message }}</p>
                             @enderror
@@ -775,7 +775,7 @@
                         <button type="submit"
                             @disabled($paymentAvailability['available_minor'] === 0)
                             class="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg text-sm transition shadow-sm disabled:cursor-not-allowed disabled:opacity-50">
-                            Провести платёж
+                            {{ __('payments.actions.submit') }}
                         </button>
                     </form>
                 </div>
@@ -786,7 +786,7 @@
                 @if ($actionablePayments !== [])
                     <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
                         <h3 class="font-bold text-sm uppercase tracking-wider text-gray-500">
-                            Доступные действия с платежами
+                            {{ __('payments.labels.available_actions') }}
                         </h3>
 
                         <div class="mt-4 space-y-3">
@@ -794,10 +794,10 @@
                                 <div class="rounded-lg border border-gray-100 bg-gray-50 p-3 text-sm">
                                     <div class="flex items-center justify-between gap-3">
                                         <span class="font-medium text-gray-700">
-                                            Платёж #{{ $actionablePayment['id'] }}
+                                            {{ __('payments.labels.payment_number', ['id' => $actionablePayment['id']]) }}
                                         </span>
                                         <span class="text-xs text-gray-500">
-                                            {{ $actionablePayment['status'] === 'pending' ? 'Ожидает подтверждения' : 'Подтверждён' }}
+                                            {{ __('payments.statuses.'.$actionablePayment['status']) }}
                                         </span>
                                     </div>
 
@@ -810,7 +810,7 @@
 
                                             <button type="submit"
                                                 class="inline-flex items-center rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs font-medium text-green-700 transition hover:bg-green-100">
-                                                Подтвердить платёж
+                                                {{ __('payments.actions.confirm') }}
                                             </button>
                                         </form>
                                     @endif
@@ -826,7 +826,7 @@
 
                                             <label class="block text-xs font-medium text-gray-600"
                                                 for="action_cancel_reason_{{ $actionablePayment['id'] }}">
-                                                Причина отмены
+                                                {{ __('payments.labels.cancel_reason') }}
                                             </label>
                                             <textarea id="action_cancel_reason_{{ $actionablePayment['id'] }}"
                                                 name="cancel_reason" rows="2" required minlength="3" maxlength="1000"
@@ -834,7 +834,7 @@
 
                                             <button type="submit"
                                                 class="text-xs font-medium text-red-600 transition hover:text-red-800">
-                                                Отменить платёж
+                                                {{ __('payments.actions.cancel') }}
                                             </button>
                                         </form>
                                     @endif
@@ -909,15 +909,15 @@
                             class="absolute inset-y-0 right-0 flex w-full max-w-[480px] flex-col overflow-x-hidden bg-white shadow-2xl sm:w-[min(480px,calc(100vw-2rem))]">
                             <header class="sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-gray-200 bg-white px-5 py-4">
                                 <div>
-                                    <h3 id="payment-history-title" class="font-bold text-gray-900">История платежей</h3>
-                                    <p class="mt-0.5 text-xs text-gray-500">Счёт {{ $invoice->invoice_number }}</p>
+                                    <h3 id="payment-history-title" class="font-bold text-gray-900">{{ __('payments.labels.history') }}</h3>
+                                    <p class="mt-0.5 text-xs text-gray-500">{{ __('invoices.credit.invoice', ['number' => $invoice->invoice_number]) }}</p>
                                     @if ($invoice->company)
                                         <p class="mt-0.5 text-xs text-gray-500">{{ $invoice->company->name }}</p>
                                     @endif
-                                    <p class="mt-1 text-xs text-gray-400">Всего платежей: {{ $paymentBreakdown['payments_count'] }}</p>
+                                    <p class="mt-1 text-xs text-gray-400">{{ __('payments.labels.all_count', ['count' => $paymentBreakdown['payments_count']]) }}</p>
                                 </div>
                                 <button type="button" x-ref="paymentHistoryClose" @click="closePaymentHistory()"
-                                    aria-label="Закрыть историю платежей"
+                                    aria-label="{{ __('payments.labels.close_history') }}"
                                     class="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700">
                                     <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -963,6 +963,7 @@
 
                                 @include('partials.badge', [
                                     'status' => $payment->status,
+                                    'label' => __('payments.statuses.'.$payment->status),
                                 ])
                             </div>
 
@@ -974,7 +975,7 @@
                                 <span aria-hidden="true">·</span>
 
                                 <span class="font-medium">
-                                    {{ $paymentRow['payment_method_label'] }}
+                                    {{ __('payments.methods.'.$paymentRow['payment_method']) }}
                                 </span>
                             </div>
 
@@ -983,7 +984,7 @@
                                     class="mt-2 inline-flex items-center rounded-md bg-blue-50 px-2 py-1
                                            text-[11px] font-medium text-blue-700">
 
-                                    Из баланса
+                                    {{ __('invoices.credit.from_balance') }}
                                 </div>
                             @endif
 
@@ -991,7 +992,7 @@
                                 <div class="mt-3 space-y-1 text-xs text-gray-600">
                                     <div class="flex min-w-0 items-center justify-between gap-3">
                                         <div class="min-w-0">
-                                            Применено к счёту:
+                                            {{ __('payments.labels.applied') }}
                                             <span class="font-semibold text-gray-900 tabular-nums whitespace-nowrap">
                                                 {{ $formatMoney($paymentRow['applied_amount']) }}
                                             </span>
@@ -1001,7 +1002,7 @@
                                             <button type="button" @click="allocationOpen = !allocationOpen"
                                                 class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
                                                 :aria-expanded="allocationOpen.toString()"
-                                                :aria-label="allocationOpen ? 'Скрыть распределение' : 'Показать распределение'"
+                                                :aria-label="allocationOpen ? @js(__('payments.labels.hide_allocation')) : @js(__('payments.labels.show_allocation'))"
                                                 aria-controls="payment-allocation-{{ $paymentRow['id'] }}">
                                                 <svg x-show="!allocationOpen" aria-hidden="true" class="h-4 w-4" fill="none"
                                                     stroke="currentColor" viewBox="0 0 24 24">
@@ -1019,11 +1020,11 @@
 
                                     @if ($paymentRow['unallocated_amount'] !== '0.00')
                                         <div>
-                                            Переплата по платежу:
+                                            {{ __('payments.labels.overpayment') }}
                                             <span class="font-semibold text-blue-700 tabular-nums whitespace-nowrap">
                                                 {{ $formatMoney($paymentRow['unallocated_amount']) }}
                                             </span>
-                                            <span class="block text-[11px] text-gray-400">Сумма сверх стоимости счёта</span>
+                                            <span class="block text-[11px] text-gray-400">{{ __('payments.labels.overpayment_hint') }}</span>
                                         </div>
                                     @endif
                                 </div>
@@ -1032,7 +1033,7 @@
                                     <div class="mt-3">
                                         <div id="payment-allocation-{{ $paymentRow['id'] }}" x-show="allocationOpen" x-cloak
                                             class="mt-2 rounded-lg border border-gray-100 bg-gray-50 p-3">
-                                            <div class="mb-2 text-xs font-semibold text-gray-700">Текущее распределение</div>
+                                            <div class="mb-2 text-xs font-semibold text-gray-700">{{ __('payments.labels.allocation') }}</div>
 
                                             <div class="divide-y divide-gray-200">
                                                 @foreach ($paymentRow['allocations'] as $allocation)
@@ -1046,7 +1047,7 @@
                                                                     @if ($allocation['line_type'] === 'subscription')
                                                                         {{ $allocation['period_label'] }}
                                                                     @else
-                                                                        {{ $allocation['line_type_label'] }}
+                                                                        {{ $allocation['line_type'] === 'order' ? __('invoices.form.one_time') : __('invoices.form.manual_line') }}
                                                                     @endif
                                                                 </div>
                                                             @endif
@@ -1061,7 +1062,7 @@
                                     </div>
                                 @endif
                             @elseif ($payment->status === 'pending')
-                                <p class="mt-3 text-xs text-gray-500">Будет распределён после подтверждения.</p>
+                                <p class="mt-3 text-xs text-gray-500">{{ __('payments.labels.pending_hint') }}</p>
                             @endif
 
                             @if ($payment->comment)
@@ -1073,11 +1074,11 @@
                             {{-- Данные отменённого платежа --}}
                             @if ($payment->status === 'cancelled')
                                 <div data-testid="invoice-history-cancellation-{{ $payment->id }}" class="mt-2 text-xs text-red-600">
-                                    <span>Отменён:</span>
+                                    <span>{{ __('payments.labels.cancelled_at') }}</span>
                                     {{ $payment->cancelled_at ? $displayDateTime->format($payment->cancelled_at, 'd/m/Y H:i') : '—' }}
                                     @if ($payment->cancel_reason)
                                         <span class="text-red-400"> · </span>
-                                        <span>Причина: {{ $payment->cancel_reason }}</span>
+                                        <span>{{ __('payments.labels.reason') }} {{ $payment->cancel_reason }}</span>
                                     @endif
                                 </div>
                             @endif
@@ -1088,12 +1089,12 @@
                                     @if ($payment->status === 'pending')
                                         @can('confirm', $payment)
                                             <form action="{{ route('payments.confirm', $payment) }}" method="POST"
-                                                onsubmit="return confirm('Подтвердить этот платёж? После подтверждения сумма оплаты, статус инвойса и Credit Balance будут пересчитаны.')">
+                                                onsubmit="return confirm(@js(__('payments.confirm_message')))" >
                                                 @csrf
                                                 @method('PATCH')
                                                 <button type="submit" data-testid="invoice-history-confirm-action"
                                                     class="inline-flex !h-9 !min-h-0 !w-24 shrink-0 items-center justify-center whitespace-nowrap !rounded-md border !px-0 !py-0 !text-sm !font-medium transition focus:outline-none focus:ring-2 focus:ring-offset-1 border-green-200 bg-green-50 text-green-700 hover:bg-green-100 focus:ring-green-500">
-                                                    Подтвердить
+                                                    {{ __('payments.actions.confirm_short') }}
                                                 </button>
                                             </form>
                                         @endcan
@@ -1104,7 +1105,7 @@
                                             <button type="button" data-testid="invoice-history-cancel-action" x-show="!cancelOpen"
                                                 class="inline-flex !h-9 !min-h-0 !w-24 shrink-0 items-center justify-center whitespace-nowrap !rounded-md border !px-0 !py-0 !text-sm !font-medium transition focus:outline-none focus:ring-2 focus:ring-offset-1 border-red-200 bg-red-50 text-red-700 hover:bg-red-100 focus:ring-red-500"
                                                 @click="cancelOpen = true; $nextTick(() => $refs.cancelReason.focus())">
-                                                Отменить
+                                                {{ __('payments.actions.cancel_short') }}
                                             </button>
                                         @endif
                                     @endcan
@@ -1124,7 +1125,7 @@
                                                 $event.currentTarget.reportValidity();
                                                 return;
                                             }
-                                            if (!confirm('Отменить этот платёж? Он останется в истории, а суммы инвойса и Credit Balance будут пересчитаны.')) {
+                                            if (!confirm(@js(__('payments.cancel_message')))) {
                                                 $event.preventDefault();
                                                 return;
                                             }
@@ -1140,7 +1141,7 @@
                                             <label for="cancel_reason_{{ $payment->id }}"
                                                 class="block text-xs font-semibold text-red-700 mb-1">
 
-                                                Причина отмены
+                                                {{ __('payments.labels.cancel_reason') }}
                                                 <span class="text-red-500">*</span>
                                             </label>
 
@@ -1158,7 +1159,7 @@
                                                     bg-white px-3 py-2 text-sm text-gray-700
                                                     outline-none transition
                                                     focus:border-red-400 focus:ring-1 focus:ring-red-300"
-                                                placeholder="Например: платёж зарегистрирован ошибочно">{{ $shouldOpenCancellation ? old('cancel_reason') : '' }}</textarea>
+                                                placeholder="{{ __('payments.labels.cancel_reason_example') }}">{{ $shouldOpenCancellation ? old('cancel_reason') : '' }}</textarea>
 
                                             @if ($shouldOpenCancellation)
                                                 @error('cancel_reason')
@@ -1173,13 +1174,13 @@
                                             <button type="button" @click="cancelOpen = false"
                                                 class="inline-flex h-7 items-center rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-600 transition hover:bg-gray-50 hover:text-gray-900">
 
-                                                Не отменять
+                                                {{ __('payments.labels.do_not_cancel') }}
                                             </button>
 
                                             <button type="submit" :disabled="cancelSubmitting"
                                                 class="inline-flex h-7 items-center rounded-md border border-red-200 bg-red-50 px-1.5 py-1 text-[11px] font-medium text-red-700 transition hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1">
 
-                                                Подтвердить отмену
+                                                {{ __('payments.labels.confirm_cancellation') }}
                                             </button>
                                         </div>
                                     </form>
@@ -1188,7 +1189,7 @@
                         </div>
                     @empty
                         <p class="text-sm text-gray-400 py-1">
-                            Платежей по счёту пока нет.
+                            {{ __('payments.labels.no_history') }}
                         </p>
                     @endforelse
                 </div>

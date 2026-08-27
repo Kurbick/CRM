@@ -47,7 +47,7 @@ class CompanyContextNavigationTest extends TestCase
             ->assertSee(route('companies.show', ['company' => $company, 'tab' => 'invoices']))
             ->assertSee(route('invoices.edit', ['invoice' => $invoice, 'origin' => 'company', 'tab' => 'invoices']));
 
-        $this->get(route('invoices.show', $invoice))->assertOk()->assertSee('Назад к списку');
+        $this->get(route('invoices.show', $invoice))->assertOk()->assertSee('Назад к инвойсам');
     }
 
     public function test_activity_invoice_link_and_delete_return_to_the_same_activity_tab(): void

@@ -102,10 +102,10 @@
             this.$refs.visible.setCustomValidity(message);
         },
         validationMessage(parsed) {
-            if (!this.display && this.required) return 'Введите дату.';
-            if (this.display && !parsed) return 'Введите корректную дату в формате дд/мм/гггг.';
-            if (parsed && this.minimum && parsed < this.minimum) return `Дата должна быть не раньше ${this.toDisplay(this.minimum)}.`;
-            if (parsed && this.maximum && parsed > this.maximum) return `Дата должна быть не позже ${this.toDisplay(this.maximum)}.`;
+            if (!this.display && this.required) return @js(__('common.date.required'));
+            if (this.display && !parsed) return @js(__('common.date.invalid'));
+            if (parsed && this.minimum && parsed < this.minimum) return @js(__('common.date.min')).replace(':date', this.toDisplay(this.minimum));
+            if (parsed && this.maximum && parsed > this.maximum) return @js(__('common.date.max')).replace(':date', this.toDisplay(this.maximum));
             return '';
         },
         picked(event) {
@@ -137,7 +137,7 @@
             x-on:input="typed($event)"
             x-on:blur="blur($event)"
             x-on:invalid="invalid($event)"
-            placeholder="дд/мм/гггг"
+            placeholder="{{ __('common.date.placeholder') }}"
             inputmode="numeric"
             autocomplete="off"
             x-bind:required="required"
@@ -154,7 +154,7 @@
         @unless ($readonly)
             <button type="button" x-show="!disabled && !readonly" x-on:click="$refs.calendar.showPicker ? $refs.calendar.showPicker() : $refs.calendar.click()"
                 class="absolute inset-y-0 right-0 flex items-center justify-center px-3 text-gray-400 transition hover:text-gray-600"
-                aria-label="Открыть календарь">
+                aria-label="{{ __('common.date.calendar') }}">
                 <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M8 2v4m8-4v4M3 10h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z" />

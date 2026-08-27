@@ -55,6 +55,6 @@ class AccessPermissionController extends Controller
         $action->handle($role, $request->validated('permissions'));
 
         return redirect()->route('admin.access-permissions.index', ['role' => $role->getKey()])
-            ->with('success', 'Права доступа группы обновлены.');
+            ->with('success', __('admin.access.flash.permissions_updated'));
     }
 }

@@ -467,7 +467,7 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
         foreach ($matches[0] as $table) {
             $this->assertStringNotContainsString('text-right', $table);
             $this->assertStringNotContainsString('text-center', $table);
-            $this->assertStringContainsString('<th>Статус</th>', $table);
+            $this->assertStringContainsString("<th>{{ __('companies.financial.status') }}</th>", $table);
             $this->assertStringContainsString('class="crm-table-number', $table);
             $this->assertStringContainsString('<x-tables.clickable-row :url=', $table);
             $this->assertStringContainsString('@foreach ($companyDebtColumnWidths as $width)', $table);

@@ -31,11 +31,11 @@ class UpdateAccessPermissionsRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'permissions.present' => 'Передан некорректный список прав доступа.',
-            'permissions.array' => 'Передан некорректный список прав доступа.',
-            'permissions.*.string' => 'Выбрано неизвестное право доступа.',
-            'permissions.*.in' => 'Выбрано неизвестное право доступа.',
-            'permissions.*.distinct' => 'Одно право доступа передано несколько раз.',
+            'permissions.present' => __('admin.access.validation.permissions_invalid'),
+            'permissions.array' => __('admin.access.validation.permissions_invalid'),
+            'permissions.*.string' => __('admin.access.validation.permission_unknown'),
+            'permissions.*.in' => __('admin.access.validation.permission_unknown'),
+            'permissions.*.distinct' => __('admin.access.validation.permission_duplicate'),
         ];
     }
 

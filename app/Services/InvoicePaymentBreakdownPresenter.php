@@ -131,9 +131,9 @@ class InvoicePaymentBreakdownPresenter
                 'remaining_amount' => $this->formatMinorUnits($remaining),
                 'payment_state' => $state,
                 'payment_state_label' => match ($state) {
-                    'paid' => 'Оплачено',
-                    'partially_paid' => 'Частично оплачен',
-                    default => 'Не оплачено',
+                    'paid' => __('invoices.show.payment_states.paid'),
+                    'partially_paid' => __('invoices.show.payment_states.partially_paid'),
+                    default => __('invoices.show.payment_states.unpaid'),
                 },
                 'allocations_count' => $lineAllocationsCount[$line['id']],
             ];
@@ -182,16 +182,16 @@ class InvoicePaymentBreakdownPresenter
                 'payment_date' => $payment['payment_date'],
                 'payment_method' => $payment['payment_method'],
                 'payment_method_label' => match ($payment['payment_method']) {
-                    'transfer' => 'Безналичный',
-                    'card' => 'Карта',
-                    'cash' => 'Наличные',
+                    'transfer' => __('common.payment_methods.transfer'),
+                    'card' => __('common.payment_methods.card'),
+                    'cash' => __('common.payment_methods.cash'),
                     default => $payment['payment_method'],
                 },
                 'status' => $payment['status'],
                 'status_label' => match ($payment['status']) {
-                    'confirmed' => 'Подтверждён',
-                    'pending' => 'Ожидает',
-                    'cancelled' => 'Отменён',
+                    'confirmed' => __('payments.statuses.confirmed'),
+                    'pending' => __('invoices.show.payment_states.pending'),
+                    'cancelled' => __('payments.statuses.cancelled'),
                     default => $payment['status'],
                 },
                 'amount' => $this->formatMinorUnits($payment['amount_minor']),
@@ -287,9 +287,9 @@ class InvoicePaymentBreakdownPresenter
                 'description' => trim((string) $line->description),
                 'type' => $type,
                 'type_label' => match ($type) {
-                    'subscription' => 'Подписка',
-                    'order' => 'Разовая услуга',
-                    default => 'Ручная позиция',
+                    'subscription' => __('common.line_types.subscription'),
+                    'order' => __('common.line_types.order'),
+                    default => __('common.line_types.manual'),
                 },
                 'period_start' => $periodStart,
                 'period_end' => $periodEnd,
@@ -321,11 +321,11 @@ class InvoicePaymentBreakdownPresenter
         }
 
         if ($periodStart !== null) {
-            return 'с '.Carbon::parse($periodStart)->format('d/m/Y');
+            return __('invoices.billing.from', ['date' => Carbon::parse($periodStart)->format('d/m/Y')]);
         }
 
         if ($periodEnd !== null) {
-            return 'до '.Carbon::parse($periodEnd)->format('d/m/Y');
+            return __('invoices.billing.until', ['date' => Carbon::parse($periodEnd)->format('d/m/Y')]);
         }
 
         return null;

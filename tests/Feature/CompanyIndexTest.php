@@ -188,10 +188,10 @@ class CompanyIndexTest extends TestCase
             $filter,
         );
         $this->assertStringContainsString('x-for="statusOption in statuses.slice(1)"', $filter);
-        $this->assertStringContainsString("value: '', label: 'Все'", $filter);
-        $this->assertStringContainsString("value: 'active', label: 'Активные'", $filter);
-        $this->assertStringContainsString("value: 'suspended', label: 'Приостановленные'", $filter);
-        $this->assertStringContainsString("value: 'archived', label: 'Архивные'", $filter);
+        $this->assertStringContainsString("value: '', label: @js(__('companies.index.filters.all'))", $filter);
+        $this->assertStringContainsString("value: 'active', label: @js(__('companies.index.filters.active'))", $filter);
+        $this->assertStringContainsString("value: 'suspended', label: @js(__('companies.index.filters.suspended'))", $filter);
+        $this->assertStringContainsString("value: 'archived', label: @js(__('companies.index.filters.archived'))", $filter);
         $this->assertStringNotContainsString('x-show="statusOption.value === selectedStatus"', $filter);
         $this->assertStringNotContainsString('bg-blue-50 text-blue-700 font-medium', $filter);
         $this->assertStringNotContainsString('M5 13l4 4L19 7', $filter);

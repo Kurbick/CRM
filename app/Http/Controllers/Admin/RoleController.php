@@ -42,7 +42,7 @@ class RoleController extends Controller
         $role = $action->handle($request->validated());
 
         return $this->workspaceRedirect($request, $role)
-            ->with('success', 'Группа создана.');
+            ->with('success', __('admin.access.flash.group_created'));
     }
 
     public function update(UpdateRoleRequest $request, Role $role, UpdateRole $action): RedirectResponse
@@ -52,7 +52,7 @@ class RoleController extends Controller
         $action->handle($role, $request->validated());
 
         return $this->workspaceRedirect($request, $role)
-            ->with('success', 'Данные группы обновлены.');
+            ->with('success', __('admin.access.flash.group_updated'));
     }
 
     public function destroy(Request $request, Role $role, DeleteRole $action): RedirectResponse
@@ -66,7 +66,7 @@ class RoleController extends Controller
             return back()->with('error', $exception->getMessage())->with('openRole', $role->getKey());
         }
 
-        return $this->workspaceRedirect($request)->with('success', 'Группа удалена.');
+        return $this->workspaceRedirect($request)->with('success', __('admin.access.flash.group_deleted'));
     }
 
     private function workspaceRedirect(Request $request, ?Role $role = null): RedirectResponse

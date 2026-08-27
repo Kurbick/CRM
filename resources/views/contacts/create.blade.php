@@ -1,15 +1,15 @@
 @extends('layouts.app')
 
-@section('title', 'Новый контакт')
+@section('title', __('contacts.titles.new'))
 
 @section('content')
     <div class="mb-5">
         <a href="{{ $backUrl }}" class="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-900">
             <span aria-hidden="true">←</span>
-            Назад
+            {{ __('contacts.navigation.back') }}
         </a>
-        <h1 class="mt-3 text-xl font-semibold text-slate-900">Новый контакт</h1>
-        <p class="mt-1 text-sm text-slate-500">Контактное лицо компании {{ $company->name }}</p>
+        <h1 class="mt-3 text-xl font-semibold text-slate-900">{{ __('contacts.titles.new') }}</h1>
+        <p class="mt-1 text-sm text-slate-500">{{ __('contacts.navigation.company_contact', ['company' => $company->name]) }}</p>
     </div>
 
     <form action="{{ route('companies.contacts.store', $company) }}" method="POST" class="max-w-4xl">

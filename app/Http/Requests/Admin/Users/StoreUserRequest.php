@@ -36,18 +36,18 @@ class StoreUserRequest extends FormRequest
     public static function validationMessages(): array
     {
         return [
-            'name.required' => 'Введите имя пользователя.',
-            'email.required' => 'Введите email пользователя.',
-            'email.email' => 'Укажите корректный email.',
-            'email.unique' => 'Пользователь с таким email уже существует.',
-            'role_id.required' => 'Выберите группу пользователя.',
-            'role_id.exists' => 'Выбранная группа недоступна.',
-            'password.required' => 'Введите временный пароль.',
-            'password.confirmed' => 'Пароли не совпадают.',
-            'password.min' => 'Пароль должен содержать не менее 12 символов.',
-            'password.password.mixed' => 'Пароль должен содержать хотя бы одну заглавную и одну строчную букву.',
-            'password.password.numbers' => 'Пароль должен содержать хотя бы одну цифру.',
-            'password.password.symbols' => 'Пароль должен содержать хотя бы один специальный символ.',
+            'name.required' => __('admin.users.validation.name_required'),
+            'email.required' => __('admin.users.validation.email_required'),
+            'email.email' => __('admin.users.validation.email_email'),
+            'email.unique' => __('admin.users.validation.email_unique'),
+            'role_id.required' => __('admin.users.validation.role_required'),
+            'role_id.exists' => __('admin.users.validation.role_exists'),
+            'password.required' => __('admin.users.validation.password_required'),
+            'password.confirmed' => __('admin.users.validation.password_confirmed'),
+            'password.min' => __('admin.users.validation.password_min'),
+            'password.password.mixed' => __('admin.users.validation.password_mixed'),
+            'password.password.numbers' => __('admin.users.validation.password_numbers'),
+            'password.password.symbols' => __('admin.users.validation.password_symbols'),
         ];
     }
 }

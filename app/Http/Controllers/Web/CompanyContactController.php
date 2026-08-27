@@ -44,7 +44,7 @@ class CompanyContactController extends Controller
         return $this->redirectAfterMutation(
             $request,
             $company,
-            'Контакт успешно добавлен.'
+            __('contacts.flash.created')
         );
     }
 
@@ -78,7 +78,7 @@ class CompanyContactController extends Controller
         return $this->redirectAfterMutation(
             $request,
             $updatedContact->company,
-            'Контакт обновлён.'
+            __('contacts.flash.updated')
         );
     }
 
@@ -92,7 +92,7 @@ class CompanyContactController extends Controller
         return $this->redirectAfterMutation(
             $request,
             $company,
-            'Контакт удалён.'
+            __('contacts.flash.deleted')
         );
     }
 

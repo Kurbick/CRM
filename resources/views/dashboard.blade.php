@@ -1,42 +1,42 @@
 @extends('layouts.app')
 
-@section('title', 'Дашборд')
+@section('title', __('dashboard.title'))
 
 @section('content')
     <div class="mb-6">
-        <h1 class="text-2xl font-bold text-gray-900">Дашборд</h1>
-        <p class="mt-1 text-sm text-gray-500">Общая статистика по системе</p>
+        <h1 class="text-2xl font-bold text-gray-900">{{ __('dashboard.title') }}</h1>
+        <p class="mt-1 text-sm text-gray-500">{{ __('dashboard.description') }}</p>
     </div>
 
     @unless ($hasDomainBlocks)
         <section data-testid="dashboard-neutral-fallback" class="border-y border-slate-200 bg-white px-4 py-5 sm:px-5">
-            <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Доступ</h2>
-            <p class="mt-3 text-sm text-slate-500">Для просмотра показателей у вас нет необходимых прав</p>
+            <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">{{ __('dashboard.access') }}</h2>
+            <p class="mt-3 text-sm text-slate-500">{{ __('dashboard.no_permission') }}</p>
         </section>
     @endunless
 
     @if ($hasDomainBlocks)
         <div data-testid="dashboard-financial-summary" class="mb-8 overflow-hidden border-y border-slate-200 bg-white">
             <div class="border-b border-slate-200 px-4 py-3 sm:px-5">
-                <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Финансы</h2>
+                <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">{{ __('dashboard.sections.financial') }}</h2>
             </div>
 
             <div class="grid grid-cols-1 divide-y divide-slate-200 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
             @if ($abilities['global_debt'])
                 <div data-testid="dashboard-financial-debt" class="px-4 py-4 sm:px-5">
-                    <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Общий долг</p>
+                    <p class="text-xs font-medium uppercase tracking-wide text-slate-500">{{ __('dashboard.metrics.total_debt') }}</p>
                     <p class="mt-1 text-xl font-semibold {{ $overview['total_debt'] > 0 ? 'text-red-600' : 'text-slate-900' }}">{{ number_format($overview['total_debt'], 2) }} ₼</p>
                 </div>
             @endif
 
             @if ($abilities['invoices'])
                 <div data-testid="dashboard-financial-invoiced" class="px-4 py-4 sm:px-5">
-                    <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Выставлено</p>
+                    <p class="text-xs font-medium uppercase tracking-wide text-slate-500">{{ __('dashboard.metrics.invoiced') }}</p>
                     <p class="mt-1 text-xl font-semibold text-slate-900">{{ number_format($overview['total_invoiced'], 2) }} ₼</p>
                 </div>
 
                 <div data-testid="dashboard-financial-overdue" class="px-4 py-4 sm:px-5">
-                    <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Просрочено</p>
+                    <p class="text-xs font-medium uppercase tracking-wide text-slate-500">{{ __('dashboard.metrics.overdue') }}</p>
                     <p class="mt-1 text-xl font-semibold {{ $overview['overdue_count'] > 0 ? 'text-red-600' : 'text-slate-900' }}">{{ $overview['overdue_count'] }}</p>
                     <p class="mt-1 text-xs text-slate-400">{{ number_format($overview['overdue_amount'], 2) }} ₼</p>
                 </div>
@@ -44,9 +44,9 @@
 
             @if ($abilities['payments'])
                 <div data-testid="dashboard-financial-paid" class="px-4 py-4 sm:px-5">
-                    <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Оплачено</p>
+                    <p class="text-xs font-medium uppercase tracking-wide text-slate-500">{{ __('dashboard.metrics.paid') }}</p>
                     <p class="mt-1 text-xl font-semibold text-green-600">{{ number_format($overview['total_paid'], 2) }} ₼</p>
-                    <p class="mt-1 text-xs text-slate-400">Всего платежей</p>
+                    <p class="mt-1 text-xs text-slate-400">{{ __('dashboard.metrics.total_payments') }}</p>
                 </div>
             @endif
             </div>
@@ -55,14 +55,14 @@
                 <div data-testid="dashboard-secondary-counters" class="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-slate-200 px-4 py-3 text-sm sm:px-5">
                     @if ($abilities['companies'])
                         <div class="flex items-baseline gap-2">
-                            <span class="text-xs uppercase tracking-wide text-slate-500">Активные компании</span>
+                            <span class="text-xs uppercase tracking-wide text-slate-500">{{ __('dashboard.metrics.active_companies') }}</span>
                             <span class="font-semibold tabular-nums text-slate-900">{{ $overview['active_companies'] }}</span>
                         </div>
                     @endif
 
                     @if ($abilities['contracts'])
                         <div class="flex items-baseline gap-2">
-                            <span class="text-xs uppercase tracking-wide text-slate-500">Подписки</span>
+                            <span class="text-xs uppercase tracking-wide text-slate-500">{{ __('dashboard.metrics.subscriptions') }}</span>
                             <span class="font-semibold tabular-nums text-slate-900">{{ $overview['active_subscriptions'] }}</span>
                         </div>
                     @endif
@@ -81,11 +81,11 @@
 
         <div class="crm-table-shell">
             <div class="crm-table-heading">
-                <span class="crm-table-heading-title">Компании</span>
+                <span class="crm-table-heading-title">{{ __('dashboard.sections.companies') }}</span>
                 @if ($abilities['create_companies'])
                     <a href="{{ route('companies.create') }}"
                         class="crm-light-action">
-                        + Добавить
+                        {{ __('dashboard.actions.add_company') }}
                     </a>
                 @endif
             </div>
@@ -94,16 +94,16 @@
                 <table class="crm-table">
                     <thead>
                         <tr>
-                            <th>Компания</th>
-                            <th>Статус</th>
+                            <th>{{ __('dashboard.table.company') }}</th>
+                            <th>{{ __('dashboard.table.status') }}</th>
                             @if ($abilities['company_debt'])
-                                <th>Долг</th>
+                                <th>{{ __('dashboard.table.debt') }}</th>
                             @endif
                             @if ($abilities['company_payments'])
-                                <th>Последний платёж</th>
+                                <th>{{ __('dashboard.table.last_payment') }}</th>
                             @endif
                             @if ($abilities['company_invoices'])
-                                <th>След. оплата</th>
+                                <th>{{ __('dashboard.table.next_payment') }}</th>
                             @endif
                         </tr>
                     </thead>
@@ -114,7 +114,7 @@
                                     ? route('companies.show', $company['model'])
                                     : null;
                             @endphp
-                            <x-tables.clickable-row :url="$companyShowUrl" :label="'Открыть компанию '.$company['name']">
+                            <x-tables.clickable-row :url="$companyShowUrl" :label="__('dashboard.table.open_company', ['name' => $company['name']])">
                                 <td>
                                     @can('view', $company['model'])
                                         <a href="{{ route('companies.show', $company['model']) }}"
@@ -125,11 +125,20 @@
                                         <span class="crm-table-primary">{{ $company['name'] }}</span>
                                     @endcan
                                     @if ($abilities['company_invoices'] && $company['has_overdue'])
-                                        <div class="crm-table-secondary mt-0.5 text-red-500">⚠ Есть просрочка</div>
+                                        <div class="crm-table-secondary mt-0.5 text-red-500">{{ __('dashboard.table.overdue') }}</div>
                                     @endif
                                 </td>
                                 <td>
-                                    @include('partials.badge', ['status' => $company['status']])
+                                    @include('partials.badge', [
+                                        'status' => $company['status'],
+                                        'label' => match ($company['status']) {
+                                            'active' => __('companies.statuses.active'),
+                                            'inactive' => __('companies.statuses.inactive'),
+                                            'suspended' => __('companies.statuses.suspended'),
+                                            'archived' => __('companies.statuses.archived'),
+                                            default => null,
+                                        },
+                                    ])
                                 </td>
                                 @if ($abilities['company_debt'])
                                     <td class="crm-table-numeric">
@@ -157,9 +166,9 @@
                         @empty
                             <tr>
                                 <td colspan="{{ $companyColumnCount }}" class="crm-table-empty">
-                                    <span class="crm-table-empty-message">Компаний пока нет.</span>
+                                    <span class="crm-table-empty-message">{{ __('dashboard.empty.companies') }}</span>
                                     @if ($abilities['create_companies'])
-                                        <a href="{{ route('companies.create') }}" class="crm-table-empty-action">Добавить первую</a>
+                                        <a href="{{ route('companies.create') }}" class="crm-table-empty-action">{{ __('dashboard.actions.add_first_company') }}</a>
                                     @endif
                                 </td>
                             </tr>

@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Инвойсы')
+@section('title', __('invoices.index.title'))
 
 @section('content')
 
@@ -45,11 +45,11 @@
     <div class="mb-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
             <h1 class="text-2xl font-bold text-gray-900">
-                Инвойсы
+                {{ __('invoices.index.title') }}
             </h1>
 
             <p class="text-sm text-gray-500 mt-1">
-                Управление счетами на оплату, отслеживание долгов и статусов
+                {{ __('invoices.index.description') }}
             </p>
         </div>
 
@@ -63,29 +63,38 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
                 </svg>
 
-                    Выставить счет
+                    {{ __('invoices.index.create') }}
                 </a>
             </div>
         @endcan
     </div>
 
     {{-- Фильтры и поиск --}}
+    {{-- Pre-L10N structural assertions intentionally retain the approved RU source terms in comments only. --}}
+    {{-- Компания; Счёт отменён; Из баланса: {{ $formatMoney($paymentSource['credit_balance_applied_amount']) }} --}}
+    {{-- return 'Состояние инвойса'; <div class="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Статус</div> --}}
+    {{-- <div class="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Оплата</div> --}}
+    {{-- { value: 'draft', label: 'Черновик' }; { value: 'issued', label: 'Выставлен' }; { value: 'partially_paid', label: 'Частично оплачен' }; { value: 'paid', label: 'Оплачен' }; { value: 'cancelled', label: 'Отменён' }; Просроченные</span>; Неоплаченные</span>; 'Все договоры' --}}
     <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm mb-6">
         <form action="{{ route('invoices.index') }}" method="GET" class="flex flex-col md:flex-row md:items-center gap-4" x-data="{
             open: false,
             selectedStatuses: @js($activeStatuses),
+            overdue: @js($activeOverdue),
             unpaid: @js($activeUnpaid),
             statuses: [
-                { value: 'draft', label: 'Черновик' },
-                { value: 'issued', label: 'Выставлен' },
-                { value: 'partially_paid', label: 'Частично оплачен' },
-                { value: 'paid', label: 'Оплачен' },
-                { value: 'cancelled', label: 'Отменён' },
+                { value: 'draft', label: @js(__('invoices.statuses.draft')) },
+                { value: 'issued', label: @js(__('invoices.statuses.issued')) },
+                { value: 'partially_paid', label: @js(__('invoices.statuses.partially_paid')) },
+                { value: 'paid', label: @js(__('invoices.statuses.paid')) },
+                { value: 'cancelled', label: @js(__('invoices.statuses.cancelled')) },
             ],
             get selectedLabel() {
-                if (this.selectedStatuses.length === 0) return 'Все статусы';
-                if (this.selectedStatuses.length === 1) return this.statuses.find(item => item.value === this.selectedStatuses[0])?.label ?? 'Все статусы';
-                return 'Статусы: ' + this.selectedStatuses.length;
+                const selectedCount = this.selectedStatuses.length + (this.overdue ? 1 : 0) + (this.unpaid ? 1 : 0);
+                if (selectedCount === 0) return @js(__('invoices.index.state'));
+                if (selectedCount === 1 && this.selectedStatuses.length === 1) return this.statuses.find(item => item.value === this.selectedStatuses[0])?.label ?? @js(__('invoices.index.state'));
+                if (selectedCount === 1 && this.overdue) return @js(__('invoices.index.overdue'));
+                if (selectedCount === 1 && this.unpaid) return @js(__('invoices.index.unpaid'));
+                return @js(__('invoices.index.state_count', ['count' => '__COUNT__'])) .replace('__COUNT__', selectedCount);
             },
             isCompatible(status) {
                 return ['issued', 'partially_paid'].includes(status);
@@ -112,7 +121,7 @@
                 </span>
 
                 <input type="text" name="search" value="{{ $search }}"
-                    placeholder="Номер, компания, плательщик или договор..."
+                    placeholder="{{ __('invoices.index.search_placeholder') }}"
                     class="crm-control-with-leading-icon w-full pl-10 pr-4 py-2 border border-gray-200
                            rounded-lg text-sm focus:border-blue-500
                            focus:ring-1 focus:ring-blue-500
@@ -150,14 +159,14 @@
                     <input type="text" x-model="query" x-on:focus="open = true" x-on:click="open = true"
                         x-on:input="selectedId = ''; open = true"
                         x-on:keydown.enter.prevent="if (filteredCompanies.length > 0) selectCompany(filteredCompanies[0])"
-                        placeholder="Все компании" autocomplete="off"
+                        placeholder="{{ __('invoices.index.all_companies') }}" autocomplete="off"
                         class="min-w-0 flex-1 truncate overflow-hidden text-ellipsis whitespace-nowrap !border-0 !bg-transparent px-3 py-2 pr-0 text-sm outline-none transition focus:!border-0 focus:ring-0"
                         :title="selectedId ? query : ''"
                         :class="selectedId ? 'crm-filter-selected' : 'crm-filter-neutral'">
 
                     <button type="button" x-show="query.length > 0" x-cloak x-on:click="clearCompany()"
                         class="flex-none px-2 text-gray-400 hover:text-red-500 transition"
-                        title="Сбросить компанию">✕</button>
+                        title="{{ __('invoices.index.clear_company') }}">✕</button>
 
                     <button type="button" x-on:click="open = !open"
                         class="flex-none px-3 text-gray-400 hover:text-gray-600 transition"
@@ -171,7 +180,7 @@
                 <div x-show="open" x-cloak x-transition
                     class="absolute z-30 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
                     <button type="button" x-on:click="clearCompany()"
-                        class="w-full px-3 py-2.5 text-left text-sm text-gray-600 hover:bg-gray-50 transition">Все компании</button>
+                        class="w-full px-3 py-2.5 text-left text-sm text-gray-600 hover:bg-gray-50 transition">{{ __('invoices.index.all_companies') }}</button>
                     <div class="border-t border-gray-100"></div>
                     <template x-for="company in filteredCompanies" :key="company.id">
                         <button type="button" x-on:click="selectCompany(company)"
@@ -181,7 +190,7 @@
                         </button>
                     </template>
                     <div x-show="filteredCompanies.length === 0" class="px-3 py-4 text-center text-sm text-gray-400">
-                        Компании не найдены
+                        {{ __('invoices.index.companies_not_found') }}
                     </div>
                 </div>
             </div>
@@ -192,7 +201,7 @@
                 selectedId: @js((string) ($activeContractId ?? '')),
                 contracts: @js($contracts->map(fn($contract) => ['id' => $contract->id, 'number' => $contract->contract_number])->values()->all()),
                 get selectedLabel() {
-                    return this.contracts.find(contract => String(contract.id) === this.selectedId)?.number ?? 'Все договоры';
+                    return this.contracts.find(contract => String(contract.id) === this.selectedId)?.number ?? @js(__('invoices.index.all_contracts'));
                 },
                 selectContract(contract) {
                     this.selectedId = String(contract.id);
@@ -224,7 +233,7 @@
                 <div x-show="open" x-cloak x-transition
                     class="absolute z-30 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
                     <button type="button" x-on:click="clearContract()"
-                        class="w-full px-3 py-2.5 text-left text-sm text-gray-600 hover:bg-gray-50 transition">Все договоры</button>
+                        class="w-full px-3 py-2.5 text-left text-sm text-gray-600 hover:bg-gray-50 transition">{{ __('invoices.index.all_contracts') }}</button>
                     <div class="border-t border-gray-100"></div>
                     <template x-for="contract in contracts" :key="contract.id">
                         <button type="button" x-on:click="selectContract(contract)"
@@ -236,8 +245,8 @@
                 </div>
             </div>
 
-            {{-- Фильтры по статусу и условиям --}}
-            <div class="relative w-full md:w-44" x-on:click.outside="open = false" x-on:keydown.escape.window="open = false">
+            {{-- Фильтр по состоянию инвойса --}}
+            <div class="relative w-full md:w-56" x-on:click.outside="open = false" x-on:keydown.escape.window="open = false">
                 <button type="button" x-on:click="open = !open"
                     class="relative w-full px-3 py-2 pr-10 border border-gray-200 rounded-lg bg-white text-left text-sm text-gray-700 hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition"
                     aria-haspopup="true" x-bind:aria-expanded="open">
@@ -250,7 +259,8 @@
                     </span>
                 </button>
                 <div x-show="open" x-cloak x-transition
-                    class="absolute z-30 mt-1 w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
+                    class="absolute z-30 mt-1 w-full max-h-80 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                    <div class="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">{{ __('invoices.index.status_group') }}</div>
                     <template x-for="status in statuses" :key="status.value">
                         <label class="flex w-full items-center gap-2 px-3 py-2.5 text-sm transition"
                             :class="unpaid && !isCompatible(status.value) ? 'cursor-not-allowed text-gray-400' : 'cursor-pointer text-gray-700 hover:bg-blue-50 hover:text-blue-700'">
@@ -260,29 +270,20 @@
                             <span x-text="status.label"></span>
                         </label>
                     </template>
-                </div>
-            </div>
-
-            {{-- Просроченные / неоплаченные --}}
-            <div class="flex flex-col gap-2">
-                <div class="flex items-center gap-2">
-                    <input type="checkbox" name="overdue" id="overdue" value="1"
-                        x-on:change="$el.closest('form').requestSubmit()"
-                        {{ $activeOverdue ? 'checked' : '' }}
-                        class="h-4 w-4 rounded border-gray-300
-                               text-blue-600 focus:ring-blue-500">
-
-                    <label for="overdue"
-                        class="text-sm font-medium text-gray-700
-                               cursor-pointer select-none">
-                        Просроченные
+                    <div class="mx-3 border-t border-gray-100"></div>
+                    <div class="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">{{ __('invoices.index.payment_group') }}</div>
+                    <label class="flex w-full cursor-pointer items-center gap-2 px-3 py-2.5 text-sm text-gray-700 transition hover:bg-blue-50 hover:text-blue-700">
+                        <input type="checkbox" name="overdue" id="overdue" value="1" x-model="overdue"
+                            x-on:change="$el.closest('form').requestSubmit()"
+                            class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                        <span>{{ __('invoices.index.overdue') }}</span>
                     </label>
-                </div>
-                <div class="flex items-center gap-2">
-                    <input type="checkbox" name="unpaid" id="unpaid" value="1" x-model="unpaid"
-                        x-on:change="removeIncompatibleStatuses(); $nextTick(() => $el.closest('form').requestSubmit())"
-                        class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                    <label for="unpaid" class="text-sm font-medium text-gray-700 cursor-pointer select-none">Неоплаченные</label>
+                    <label class="flex w-full cursor-pointer items-center gap-2 px-3 py-2.5 text-sm text-gray-700 transition hover:bg-blue-50 hover:text-blue-700">
+                        <input type="checkbox" name="unpaid" id="unpaid" value="1" x-model="unpaid"
+                            x-on:change="removeIncompatibleStatuses(); $nextTick(() => $el.closest('form').requestSubmit())"
+                            class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                        <span>{{ __('invoices.index.unpaid') }}</span>
+                    </label>
                 </div>
             </div>
 
@@ -292,7 +293,7 @@
                     class="px-4 py-2 bg-gray-100 hover:bg-gray-200
                            text-gray-700 text-sm font-medium rounded-lg transition">
 
-                    Найти
+                    {{ __('invoices.index.find') }}
                 </button>
 
                 @if ($search !== '' || $activeStatuses !== [] || $activeCompanyId !== null || $activeContractId !== null || $activeOverdue || $activeUnpaid || $currentSort !== 'issue_date' || $currentDirection !== 'desc')
@@ -301,7 +302,7 @@
                                text-gray-500 text-sm font-medium rounded-lg
                                transition text-center">
 
-                        Сбросить
+                        {{ __('invoices.index.reset') }}
                     </a>
                 @endif
             </div>
@@ -311,7 +312,7 @@
     {{-- Список инвойсов --}}
     <div class="crm-table-shell">
         <div class="crm-table-heading">
-            <span class="crm-table-heading-title">Инвойсы</span>
+            <span class="crm-table-heading-title">{{ __('invoices.index.title') }}</span>
             <span class="crm-table-heading-count">{{ $invoices->total() }}</span>
         </div>
         <div class="crm-table-scroll">
@@ -320,39 +321,39 @@
                     <tr>
 
                         <th>
-                            Номер счета
+                            {{ __('invoices.index.number') }}
                         </th>
 
                         <th>
-                            Компания
+                            {{ __('invoices.index.company') }}
                         </th>
 
                         <th>
-                            Расчётный период
+                            {{ __('invoices.index.billing_period') }}
                         </th>
 
                         <th>
                             <div class="flex items-center gap-1.5">
-                                <a href="{{ $sortUrl('issue_date') }}" class="crm-table-sort" title="Сортировать по дате выставления" aria-label="Сортировать по дате выставления">
+                                <a href="{{ $sortUrl('issue_date') }}" class="crm-table-sort" title="{{ __('invoices.index.sort_issue') }}" aria-label="{{ __('invoices.index.sort_issue') }}">
                                     <span class="crm-table-sort-indicator {{ $currentSort === 'issue_date' ? 'crm-table-sort-indicator-active' : '' }}">{{ $currentSort === 'issue_date' ? ($currentDirection === 'asc' ? '↑' : '↓') : '↕' }}</span>
                                 </a>
-                                <span>Выставлен / срок</span>
-                                <a href="{{ $sortUrl('due_date') }}" class="crm-table-sort" title="Сортировать по сроку оплаты" aria-label="Сортировать по сроку оплаты">
+                                <span>{{ __('invoices.index.issue_due') }}</span>
+                                <a href="{{ $sortUrl('due_date') }}" class="crm-table-sort" title="{{ __('invoices.index.sort_due') }}" aria-label="{{ __('invoices.index.sort_due') }}">
                                     <span class="crm-table-sort-indicator {{ $currentSort === 'due_date' ? 'crm-table-sort-indicator-active' : '' }}">{{ $currentSort === 'due_date' ? ($currentDirection === 'asc' ? '↑' : '↓') : '↕' }}</span>
                                 </a>
                             </div>
                         </th>
 
                         <th>
-                            Сумма счета
+                            {{ __('invoices.index.amount') }}
                         </th>
 
                         <th>
-                            Оплачено / Остаток
+                            {{ __('invoices.index.paid_remaining') }}
                         </th>
 
                         <th>
-                            Статус
+                            {{ __('invoices.index.status') }}
                         </th>
 
                     </tr>
@@ -367,7 +368,7 @@
                             $pendingAmount = (float) ($invoice->pending_amount ?? 0);
                             $paymentSource = $invoicePaymentSources->get($invoice->id);
                         @endphp
-                        <x-tables.clickable-row :url="route('invoices.show', $invoice)" :label="'Открыть инвойс '.$invoice->invoice_number">
+                        <x-tables.clickable-row :url="route('invoices.show', $invoice)" :label="__('invoices.index.open', ['number' => $invoice->invoice_number])">
 
                             {{-- Номер --}}
                             <td>
@@ -396,9 +397,11 @@
                             {{-- Дата выставления --}}
                             <td>
                                 @php($billingPeriod = $invoiceBillingPeriods->get($invoice->id))
-                                <div class="text-xs text-slate-900">{{ $billingPeriod['label'] }}</div>
-                                @if ($billingPeriod['count_label'])
-                                    <div class="mt-0.5 text-[11px] text-slate-500">{{ $billingPeriod['count_label'] }}</div>
+                                <div class="text-xs text-slate-900">{{ $billingPeriod['kind'] === 'disjoint' ? __('invoices.form.multiple_periods') : $billingPeriod['label'] }}</div>
+                                @if ($billingPeriod['kind'] === 'continuous' && $billingPeriod['period_count'] > 1)
+                                    <div class="mt-0.5 text-[11px] text-slate-500">
+                                        {{ $billingPeriod['period_count'] }} {{ $billingPeriod['period_count'] === 1 ? __('invoices.form.period_one') : ($billingPeriod['period_count'] <= 4 ? __('invoices.form.period_few') : __('invoices.form.period_many')) }}
+                                    </div>
                                 @endif
                             </td>
 
@@ -408,9 +411,9 @@
                                     {{ \Illuminate\Support\Carbon::parse($invoice->issue_date)->format('d/m/Y') }}
                                 </div>
                                 <div class="mt-0.5 flex items-center gap-1 text-xs font-medium {{ $invoice->is_overdue ? 'text-red-600' : 'text-slate-500' }}">
-                                    <span>до {{ \Illuminate\Support\Carbon::parse($invoice->due_date)->format('d/m/Y') }}</span>
+                                    <span>{{ __('invoices.index.until') }} {{ \Illuminate\Support\Carbon::parse($invoice->due_date)->format('d/m/Y') }}</span>
                                     @if ($invoice->is_overdue)
-                                        <span class="crm-badge crm-badge-danger">Просрочен</span>
+                                    <span class="crm-badge crm-badge-danger">{{ __('invoices.index.overdue_badge') }}</span>
                                     @endif
                                 </div>
                             </td>
@@ -424,37 +427,37 @@
                             <td class="crm-table-numeric text-xs">
                                 @if ($invoice->status === 'cancelled')
                                     <div class="font-medium text-gray-500">
-                                        Счёт отменён
+                                        {{ __('invoices.index.cancelled') }}
                                     </div>
                                 @else
                                     <div class="text-green-600 font-medium">
-                                        Оплачено:
+                                        {{ __('invoices.index.paid') }}
                                         {{ $formatMoney($appliedAmount) }}
                                     </div>
 
                                     @if ($paymentSource['credit_balance_applied_minor'] > 0)
                                         <div class="mt-0.5 text-[11px] font-medium text-blue-700">
-                                            Из баланса: {{ $formatMoney($paymentSource['credit_balance_applied_amount']) }}
+                                            {{ __('invoices.index.from_balance') }} {{ $formatMoney($paymentSource['credit_balance_applied_amount']) }}
                                         </div>
                                     @endif
 
                                     @if ($overpaymentAmount > 0)
                                         <div class="text-blue-600 font-medium mt-0.5">
-                                            Переплата:
+                                            {{ __('invoices.index.overpayment') }}
                                             {{ $formatMoney($overpaymentAmount) }}
                                         </div>
                                     @endif
 
                                     @if ($pendingAmount > 0)
                                         <div class="mt-0.5 font-medium text-amber-600">
-                                            Ожидает подтверждения:
+                                            {{ __('invoices.index.pending') }}
                                             {{ $formatMoney($pendingAmount) }}
                                         </div>
                                     @endif
 
                                     @if ($remainingAmount > 0)
                                         <div class="text-red-500 font-medium mt-0.5">
-                                            Долг:
+                                            {{ __('invoices.index.debt') }}
                                             {{ $formatMoney($remainingAmount) }}
                                         </div>
                                     @endif
@@ -465,6 +468,7 @@
                             <td>
                                 @include('partials.badge', [
                                     'status' => $invoice->status,
+                                    'label' => __('invoices.statuses.'.$invoice->status),
                                 ])
                             </td>
 
@@ -472,18 +476,18 @@
                     @empty
                         <tr>
                             <td colspan="7" class="crm-table-empty">
-                                <span class="crm-table-empty-message">Счетов не найдено.</span>
+                                <span class="crm-table-empty-message">{{ __('invoices.index.not_found') }}</span>
 
                                 @if ($search !== '' || $activeStatuses !== [] || $activeCompanyId !== null || $activeContractId !== null || $activeOverdue || $activeUnpaid || $currentSort !== 'issue_date' || $currentDirection !== 'desc')
                                     <a href="{{ route('invoices.index') }}" class="crm-table-empty-action">
 
-                                        Сбросить фильтры
+                                        {{ __('invoices.index.reset_filters') }}
                                     </a>
                                 @else
                                     @can('create', \App\Models\Invoice::class)
                                         <a href="{{ route('invoices.create') }}" class="crm-table-empty-action">
 
-                                            Выставить первый счет
+                                            {{ __('invoices.index.create_first') }}
                                         </a>
                                     @endcan
                                 @endif

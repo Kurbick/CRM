@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Компании')
+@section('title', __('companies.index.title'))
 
 @section('content')
     @php
@@ -29,8 +29,8 @@
 
     <div class="mb-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
-            <h1 class="text-2xl font-bold text-gray-900">Компании</h1>
-            <p class="text-sm text-gray-500 mt-1">Управление клиентами и реквизитами</p>
+            <h1 class="text-2xl font-bold text-gray-900">{{ __('companies.index.title') }}</h1>
+            <p class="text-sm text-gray-500 mt-1">{{ __('companies.index.description') }}</p>
         </div>
         @can('create', \App\Models\Company::class)
             <a href="{{ route('companies.create') }}"
@@ -38,7 +38,7 @@
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
                 </svg>
-                Добавить компанию
+                {{ __('companies.actions.create') }}
             </a>
         @endcan
     </div>
@@ -116,7 +116,7 @@
                 <input type="text" name="search" x-model="query" x-on:input="schedule()"
                     x-on:keydown.enter.prevent="submitOrSelect()" x-on:focus="if (results.length) open = true"
                     value="{{ $search }}" autocomplete="off"
-                    placeholder="Поиск по названию, краткому имени или VÖEN…"
+                    placeholder="{{ __('companies.index.search_placeholder') }}"
                     class="crm-control-with-leading-icon w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition">
 
                 <div x-show="open" x-cloak
@@ -134,7 +134,7 @@
                         </button>
                     </template>
                     <div x-show="!loading && results.length === 0" class="px-3 py-3 text-sm text-gray-400">
-                        Компании не найдены
+                        {{ __('companies.index.autocomplete_not_found') }}
                     </div>
                 </div>
             </div>
@@ -143,13 +143,13 @@
                 open: false,
                 selectedStatus: @js($status),
                 statuses: [
-                    { value: '', label: 'Все' },
-                    { value: 'active', label: 'Активные' },
-                    { value: 'suspended', label: 'Приостановленные' },
-                    { value: 'archived', label: 'Архивные' },
+                    { value: '', label: @js(__('companies.index.filters.all')) },
+                    { value: 'active', label: @js(__('companies.index.filters.active')) },
+                    { value: 'suspended', label: @js(__('companies.index.filters.suspended')) },
+                    { value: 'archived', label: @js(__('companies.index.filters.archived')) },
                 ],
                 get selectedLabel() {
-                    return this.statuses.find(status => status.value === this.selectedStatus)?.label ?? 'Все';
+                    return this.statuses.find(status => status.value === this.selectedStatus)?.label ?? @js(__('companies.index.filters.all'));
                 },
                 selectStatus(status) {
                     this.selectedStatus = status.value;
@@ -172,7 +172,7 @@
                     class="absolute z-30 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
                     <button type="button" x-on:click="selectStatus(statuses[0])"
                         class="w-full px-3 py-2.5 text-left text-sm text-gray-600 hover:bg-gray-50 transition">
-                        Все
+                        {{ __('companies.index.filters.all') }}
                     </button>
                     <div class="border-t border-gray-100"></div>
                     <template x-for="statusOption in statuses.slice(1)" :key="statusOption.value">
@@ -187,12 +187,12 @@
             <div class="flex flex-col sm:flex-row gap-2">
                 <button type="submit"
                     class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition">
-                    Найти
+                    {{ __('companies.index.filters.find') }}
                 </button>
                 @if ($search !== '' || $status !== '' || request()->filled('sort') || request()->filled('direction'))
                     <a href="{{ route('companies.index') }}"
                         class="px-4 py-2 border border-gray-200 hover:bg-gray-50 text-gray-500 text-sm font-medium rounded-lg transition text-center">
-                        Сбросить
+                        {{ __('companies.index.filters.reset') }}
                     </a>
                 @endif
             </div>
@@ -201,7 +201,7 @@
 
     <div class="crm-table-shell">
         <div class="crm-table-heading">
-            <span class="crm-table-heading-title">Компании</span>
+            <span class="crm-table-heading-title">{{ __('companies.index.title') }}</span>
             <span class="crm-table-heading-count">{{ $companies->total() }}</span>
         </div>
         <div class="crm-table-scroll">
@@ -210,34 +210,34 @@
                     <tr>
                         <th>
                             <a href="{{ $sortUrl('name') }}" class="crm-table-sort">
-                                Компания / тип
+                                {{ __('companies.index.table.company_type') }}
                                 <span class="crm-table-sort-indicator {{ $sort === 'name' ? 'crm-table-sort-indicator-active' : '' }}">{{ $sort === 'name' ? ($direction === 'asc' ? '↑' : '↓') : '↕' }}</span>
                             </a>
                         </th>
-                        <th>VÖEN</th>
-                        <th>Контакты</th>
+                        <th>{{ __('companies.index.table.voen') }}</th>
+                        <th>{{ __('companies.index.table.contacts') }}</th>
                         @if ($canViewFinancials)
                             <th data-testid="company-debt-column">
                                 <a href="{{ $sortUrl('debt') }}" class="crm-table-sort">
-                                    Долг
+                                    {{ __('companies.index.table.debt') }}
                                     <span class="crm-table-sort-indicator {{ $sort === 'debt' ? 'crm-table-sort-indicator-active' : '' }}">{{ $sort === 'debt' ? ($direction === 'asc' ? '↑' : '↓') : '↕' }}</span>
                                 </a>
                             </th>
                         @endif
-                        <th>Статус</th>
+                        <th>{{ __('companies.index.table.status') }}</th>
                         <th class="crm-table-actions"></th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse ($companies as $company)
-                        <x-tables.clickable-row :url="route('companies.show', ['company' => $company, 'return_url' => $companyIndexReturnUrl])" :label="'Открыть компанию '.$company->name">
+                        <x-tables.clickable-row :url="route('companies.show', ['company' => $company, 'return_url' => $companyIndexReturnUrl])" :label="__('companies.index.table.open', ['name' => $company->name])">
                             <td>
                                 <a href="{{ route('companies.show', $company) }}"
                                     class="crm-table-primary-link">
                                     {{ $company->name }}
                                 </a>
                                 <div class="crm-table-secondary mt-0.5">
-                                    {{ $company->type === 'company' ? 'Юридическое лицо' : 'Индивидуальный предприниматель' }}
+                                    {{ $company->type === 'company' ? __('companies.types.legal_entity') : __('companies.types.individual') }}
                                     @if ($company->short_name)
                                         <span class="text-slate-300 mx-1">|</span>{{ $company->short_name }}
                                     @endif
@@ -259,9 +259,9 @@
                                 @include('partials.badge', [
                                     'status' => $company->status,
                                     'label' => match ($company->status) {
-                                        'active' => 'Активна',
-                                        'suspended' => 'Приостановлена',
-                                        'archived' => 'В архиве',
+                                        'active' => __('companies.statuses.active'),
+                                        'suspended' => __('companies.statuses.suspended'),
+                                        'archived' => __('companies.statuses.archived'),
                                         default => $company->status,
                                     },
                                 ])
@@ -270,7 +270,7 @@
                                 <div class="flex items-center justify-end gap-3">
                                     @can('update', $company)
                                         <a href="{{ route('companies.edit', ['company' => $company, ...$editContext]) }}"
-                                            class="text-gray-400 hover:text-gray-600 transition" title="Редактировать">
+                                            class="text-gray-400 hover:text-gray-600 transition" title="{{ __('companies.actions.edit') }}">
                                             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                                             </svg>
@@ -282,12 +282,12 @@
                     @empty
                         <tr>
                             <td colspan="{{ $canViewFinancials ? 6 : 5 }}" class="crm-table-empty">
-                                <span class="crm-table-empty-message">Компаний не найдено.</span>
+                                <span class="crm-table-empty-message">{{ __('companies.index.empty') }}</span>
                                 @if ($search !== '' || $status !== '')
-                                    <a href="{{ route('companies.index') }}" class="crm-table-empty-action">Сбросить фильтры</a>
+                                    <a href="{{ route('companies.index') }}" class="crm-table-empty-action">{{ __('companies.index.reset_filters') }}</a>
                                 @else
                                     @can('create', \App\Models\Company::class)
-                                        <a href="{{ route('companies.create') }}" class="crm-table-empty-action">Добавить первую компанию</a>
+                                        <a href="{{ route('companies.create') }}" class="crm-table-empty-action">{{ __('companies.index.create_first') }}</a>
                                     @endcan
                                 @endif
                             </td>

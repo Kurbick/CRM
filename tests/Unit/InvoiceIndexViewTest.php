@@ -55,19 +55,31 @@ class InvoiceIndexViewTest extends TestCase
         $this->assertStringNotContainsString('allocations()', $source);
     }
 
-    public function test_status_filter_is_multi_select_with_unpaid_compatibility_controls(): void
+    public function test_invoice_state_filter_combines_status_and_payment_controls(): void
     {
         $source = file_get_contents(resource_path('views/invoices/index.blade.php'));
 
+        $this->assertStringContainsString("return 'Состояние инвойса';", $source);
+        $this->assertStringNotContainsString('Все статусы', $source);
+        $this->assertStringContainsString('<div class="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Статус</div>', $source);
+        $this->assertStringContainsString('<div class="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Оплата</div>', $source);
+        $this->assertStringContainsString("{ value: 'draft', label: 'Черновик' }", $source);
         $this->assertStringContainsString("{ value: 'issued', label: 'Выставлен' }", $source);
+        $this->assertStringContainsString("{ value: 'partially_paid', label: 'Частично оплачен' }", $source);
+        $this->assertStringContainsString("{ value: 'paid', label: 'Оплачен' }", $source);
+        $this->assertStringContainsString("{ value: 'cancelled', label: 'Отменён' }", $source);
         $this->assertStringContainsString('selectedStatuses: @js($activeStatuses)', $source);
+        $this->assertStringContainsString('overdue: @js($activeOverdue)', $source);
+        $this->assertStringContainsString('unpaid: @js($activeUnpaid)', $source);
         $this->assertStringContainsString('name="statuses[]"', $source);
-        $this->assertStringContainsString("'Статусы: ' + this.selectedStatuses.length", $source);
-        $this->assertStringContainsString('name="unpaid"', $source);
+        $this->assertStringContainsString('name="overdue" id="overdue" value="1" x-model="overdue"', $source);
+        $this->assertStringContainsString('name="unpaid" id="unpaid" value="1" x-model="unpaid"', $source);
+        $this->assertStringContainsString('Просроченные</span>', $source);
+        $this->assertStringContainsString('Неоплаченные</span>', $source);
         $this->assertStringContainsString('removeIncompatibleStatuses()', $source);
         $this->assertStringContainsString(':disabled="unpaid && !isCompatible(status.value)"', $source);
-        $this->assertStringContainsString("{ value: 'partially_paid', label: 'Частично оплачен' }", $source);
-        $this->assertStringContainsString("{ value: 'cancelled', label: 'Отменён' }", $source);
+        $this->assertStringNotContainsString('Просроченные</label>', $source);
+        $this->assertStringNotContainsString('Неоплаченные</label>', $source);
     }
 
     public function test_contract_filter_uses_the_company_style_custom_dropdown(): void
@@ -113,11 +125,12 @@ class InvoiceIndexViewTest extends TestCase
         $this->assertStringContainsString('name="unpaid"', $source);
     }
 
-    public function test_only_condition_checkboxes_submit_the_filter_form_immediately(): void
+    public function test_payment_condition_checkboxes_submit_the_filter_form_immediately(): void
     {
         $source = file_get_contents(resource_path('views/invoices/index.blade.php'));
 
         $this->assertStringContainsString('id="overdue" value="1"', $source);
+        $this->assertStringContainsString('x-model="overdue"', $source);
         $this->assertStringContainsString('x-on:change="$el.closest(\'form\').requestSubmit()"', $source);
         $this->assertStringContainsString('id="unpaid" value="1" x-model="unpaid"', $source);
         $this->assertStringContainsString('x-on:change="removeIncompatibleStatuses(); $nextTick(() => $el.closest(\'form\').requestSubmit())"', $source);

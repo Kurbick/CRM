@@ -292,15 +292,15 @@ class InvoiceController extends Controller
 
         if ($prefilledContract !== null) {
             $backUrl = route('contracts.show', $prefilledContract);
-            $backLabel = 'Назад к договору '.$prefilledContract->contract_number;
+            $backLabel = __('contracts.actions.back_to_contract').' '.$prefilledContract->contract_number;
         } elseif ($prefilledCompany !== null) {
             $backUrl = route('companies.show', ['company' => $prefilledCompany, 'tab' => 'invoices']);
-            $backLabel = 'Назад к '.$prefilledCompany->name;
+            $backLabel = __('invoices.actions.back_to_company', ['company' => $prefilledCompany->name]);
         } else {
             $backUrl = Gate::allows('viewAny', Invoice::class)
                 ? route('invoices.index')
                 : $this->landingUrl();
-            $backLabel = 'Назад к инвойсам';
+            $backLabel = __('invoices.actions.back_to_list');
         }
 
         $companyContext = $prefilledCompany !== null && Gate::allows('view', $prefilledCompany)
@@ -398,7 +398,7 @@ class InvoiceController extends Controller
                 'array',
                 function (string $attribute, mixed $line, \Closure $fail): void {
                     if (empty($line['subscription_id']) && empty($line['order_id'])) {
-                        $fail('Выберите предмет договора для позиции инвойса.');
+                        $fail(__('invoices.errors.subject_not_in_contract'));
                     }
                 },
             ],
@@ -415,7 +415,7 @@ class InvoiceController extends Controller
         foreach ($validated['lines'] as $index => $line) {
             if (empty($line['subscription_id']) && array_key_exists('period_count', $line) && $line['period_count'] !== null) {
                 throw ValidationException::withMessages([
-                    "lines.{$index}.period_count" => 'Расчётные периоды доступны только для подписок.',
+                    "lines.{$index}.period_count" => __('invoices.form.periods_subscription_only'),
                 ]);
             }
         }
@@ -429,7 +429,7 @@ class InvoiceController extends Controller
         if (! $contract) {
             return back()
                 ->withErrors([
-                    'contract_id' => 'Выбранный договор не принадлежит выбранной компании.',
+                    'contract_id' => __('invoices.errors.contract_company_mismatch'),
                 ])
                 ->withInput();
         }
@@ -446,7 +446,7 @@ class InvoiceController extends Controller
         $companyContext = $this->invoiceCompanyContext($request, $invoice);
 
         return $this->mutationRedirect($invoice, $companyContext['query'])
-            ->with('success', 'Черновик инвойса успешно сохранён.');
+            ->with('success', __('invoices.flash.draft_saved'));
     }
 
     /**
@@ -573,13 +573,13 @@ class InvoiceController extends Controller
                 'expected_credit_balance_minor' => ['required', 'integer', 'min:0', 'max:999999999999'],
                 'expected_available_minor' => ['required', 'integer', 'min:0', 'max:999999999999'],
             ], [
-                'amount.required' => 'Укажите сумму применения Credit Balance.',
-                'amount.numeric' => 'Сумма применения Credit Balance должна быть числом.',
-                'amount.decimal' => 'Сумма должна содержать не более двух знаков после запятой.',
-                'amount.min' => 'Сумма применения Credit Balance должна быть больше нуля.',
-                'amount.max' => 'Сумма применения Credit Balance превышает допустимый предел.',
-                'expected_credit_balance_minor.*' => 'Финансовые данные изменились. Обновите страницу и попробуйте снова.',
-                'expected_available_minor.*' => 'Финансовые данные изменились. Обновите страницу и попробуйте снова.',
+                'amount.required' => __('invoices.credit.validation.amount_required'),
+                'amount.numeric' => __('invoices.credit.validation.amount_numeric'),
+                'amount.decimal' => __('invoices.credit.validation.amount_decimal'),
+                'amount.min' => __('invoices.credit.validation.amount_min'),
+                'amount.max' => __('invoices.credit.validation.amount_max'),
+                'expected_credit_balance_minor.*' => __('invoices.credit.validation.changed'),
+                'expected_available_minor.*' => __('invoices.credit.validation.changed'),
             ]);
         } catch (ValidationException $exception) {
             $errors = $exception->errors();
@@ -621,15 +621,15 @@ class InvoiceController extends Controller
                 ->with('credit_dialog_open', true);
         } catch (\LogicException) {
             return redirect()->route('invoices.show', $invoice)
-                ->withErrors(['credit_amount' => 'Не удалось определить корректную сумму применения Credit Balance.'])
+                ->withErrors(['credit_amount' => __('invoices.credit.validation.invalid_amount')])
                 ->withInput()
                 ->with('credit_dialog_open', true);
         }
 
         $amount = $this->paymentAvailabilityService->formatMinorUnits($result->appliedAmountMinor);
-        $message = "Из баланса применено {$amount}.";
+        $message = __('invoices.flash.credit_applied', ['amount' => $amount]);
         if ($invoice->fresh()->status === 'paid') {
-            $message .= ' Инвойс полностью оплачен.';
+            $message .= ' '.__('invoices.flash.credit_applied_paid');
         }
 
         return $this->mutationRedirect($invoice->fresh())->with('success', $message);
@@ -760,14 +760,14 @@ class InvoiceController extends Controller
             $errors = $exception->errors();
             if (array_key_exists('invoice', $errors)) {
                 return $this->mutationRedirect($invoice, $companyContext['query'])
-                    ->with('error', (string) ($errors['invoice'][0] ?? 'Инвойс нельзя изменить.'));
+                    ->with('error', (string) ($errors['invoice'][0] ?? __('invoices.errors.edit_forbidden')));
             }
 
             throw $exception;
         }
 
         return $this->mutationRedirect($invoice, $companyContext['query'])
-            ->with('success', 'Инвойс успешно обновлён.');
+            ->with('success', __('invoices.flash.updated'));
     }
 
     public function issue(
@@ -790,7 +790,7 @@ class InvoiceController extends Controller
 
             if ($invoice->status !== 'draft') {
                 throw ValidationException::withMessages([
-                    'issue' => 'Выставить можно только черновик инвойса.',
+                    'issue' => __('invoices.errors.issue_draft_only'),
                 ]);
             }
 
@@ -800,7 +800,7 @@ class InvoiceController extends Controller
                     ->exists()
             ) {
                 throw ValidationException::withMessages([
-                    'issue' => 'Нельзя выставить черновик с подтверждёнными платежами.',
+                    'issue' => __('invoices.errors.issue_confirmed_payments'),
                 ]);
             }
 
@@ -808,7 +808,7 @@ class InvoiceController extends Controller
 
             if (! $contract) {
                 throw ValidationException::withMessages([
-                    'issue' => 'Инвойс не связан с договором.',
+                    'issue' => __('invoices.errors.issue_no_contract'),
                 ]);
             }
 
@@ -818,7 +818,7 @@ class InvoiceController extends Controller
 
             if ($lines->isEmpty()) {
                 throw ValidationException::withMessages([
-                    'issue' => 'В инвойсе должна быть хотя бы одна позиция.',
+                    'issue' => __('invoices.errors.issue_no_lines'),
                 ]);
             }
 
@@ -845,10 +845,10 @@ class InvoiceController extends Controller
             foreach ($lines->whereNotNull('subscription_id')->groupBy('subscription_id') as $subscriptionId => $group) {
                 $subscription = $subscriptions->get($subscriptionId);
                 if (! $subscription || (int) $subscription->contract_id !== (int) $invoice->contract_id) {
-                    throw ValidationException::withMessages(['issue' => 'Одна из подписок не принадлежит договору инвойса.']);
+                    throw ValidationException::withMessages(['issue' => __('invoices.errors.subscription_contract_mismatch')]);
                 }
                 if ($subscription->status !== 'active' || ! $subscription->next_billing_date) {
-                    throw ValidationException::withMessages(['issue' => "Подписка «{$group->first()->description}» больше не доступна для выставления."]);
+                    throw ValidationException::withMessages(['issue' => __('invoices.errors.subscription_unavailable', ['description' => $group->first()->description])]);
                 }
 
                 $ordered = $group->sortBy([['period_start', 'asc'], ['id', 'asc']])->values();
@@ -856,7 +856,7 @@ class InvoiceController extends Controller
                 try {
                     $expected = $this->billingSchedule->occurrenceChain($subscription, $expectedStart, $ordered->count());
                 } catch (\Throwable) {
-                    throw ValidationException::withMessages(['issue' => "У подписки «{$group->first()->description}» не заполнен корректный интервал биллинга."]);
+                    throw ValidationException::withMessages(['issue' => __('invoices.errors.subscription_billing_invalid', ['description' => $group->first()->description])]);
                 }
 
                 foreach ($ordered as $index => $line) {
@@ -864,18 +864,18 @@ class InvoiceController extends Controller
                     if (! $line->period_start || ! $line->period_end
                         || ! CarbonImmutable::parse($line->period_start)->startOfDay()->equalTo($occurrence['period_start'])
                         || ! CarbonImmutable::parse($line->period_end)->startOfDay()->equalTo($occurrence['period_end'])) {
-                        throw ValidationException::withMessages(['issue' => "Расчётные периоды позиции «{$line->description}» больше не соответствуют графику подписки."]);
+                        throw ValidationException::withMessages(['issue' => __('invoices.errors.line_schedule_invalid', ['description' => $line->description])]);
                     }
                     if ($occurrence['period_start']->lt(CarbonImmutable::parse($subscription->start_date)->startOfDay())
                         || $occurrence['period_start']->lt(CarbonImmutable::parse($contract->start_date)->startOfDay())
                         || ($contract->end_date && $occurrence['period_end']->gt(CarbonImmutable::parse($contract->end_date)->startOfDay()))) {
-                        throw ValidationException::withMessages(['issue' => "Период позиции «{$line->description}» выходит за срок подписки или договора."]);
+                        throw ValidationException::withMessages(['issue' => __('invoices.errors.line_outside_term', ['description' => $line->description])]);
                     }
                     if ($line->billing_occurrence_key !== null && $line->billing_occurrence_key !== $occurrence['billing_occurrence_key']) {
-                        throw ValidationException::withMessages(['issue' => "Ключ расчётного периода позиции «{$line->description}» не соответствует её периоду."]);
+                        throw ValidationException::withMessages(['issue' => __('invoices.errors.line_key_invalid', ['description' => $line->description])]);
                     }
                     if (InvoiceLine::query()->where('billing_occurrence_key', $occurrence['billing_occurrence_key'])->where('invoice_id', '!=', $invoice->id)->whereHas('invoice', fn ($query) => $query->where('status', '!=', 'cancelled'))->exists()) {
-                        throw ValidationException::withMessages(['issue' => "По подписке «{$line->description}» уже есть инвойс за этот период."]);
+                        throw ValidationException::withMessages(['issue' => __('invoices.errors.period_exists', ['description' => $line->description])]);
                     }
                     $occurrenceKeys[$line->id] = $occurrence['billing_occurrence_key'];
                 }
@@ -939,8 +939,8 @@ class InvoiceController extends Controller
         $invoice->refresh();
 
         $message = $invoice->status === 'paid'
-            ? 'Инвойс выставлен и полностью оплачен кредитным балансом.'
-            : 'Инвойс успешно выставлен.';
+            ? __('invoices.flash.credit_applied_success')
+            : __('invoices.flash.issued');
 
         return $this->mutationRedirect($invoice)
             ->with('success', $message);
@@ -964,7 +964,7 @@ class InvoiceController extends Controller
 
             if ($invoice->status !== 'issued') {
                 throw ValidationException::withMessages([
-                    'cancel' => 'Отменить можно только выставленный инвойс без оплат.',
+                    'cancel' => __('invoices.errors.cancel_issued_only'),
                 ]);
             }
 
@@ -977,7 +977,7 @@ class InvoiceController extends Controller
                 ->where('status', 'confirmed')
                 ->exists()) {
                 throw ValidationException::withMessages([
-                    'cancel' => 'Нельзя отменить инвойс, по которому есть подтверждённый платёж.',
+                    'cancel' => __('invoices.errors.cancel_confirmed_payment'),
                 ]);
             }
 
@@ -1010,13 +1010,13 @@ class InvoiceController extends Controller
             foreach ($subscriptionLines->groupBy('subscription_id') as $subscriptionId => $group) {
                 $subscription = $subscriptions->get($subscriptionId);
                 if (! $subscription) {
-                    throw ValidationException::withMessages(['cancel' => 'Одна из подписок больше не существует.']);
+                    throw ValidationException::withMessages(['cancel' => __('invoices.errors.subscription_missing')]);
                 }
 
                 $ordered = $group->sortBy([['period_start', 'asc'], ['id', 'asc']])->values();
                 $first = $ordered->first();
                 if (! $first?->period_start || ! $subscription->start_date) {
-                    throw ValidationException::withMessages(['cancel' => 'У позиции подписки отсутствует расчётный период.']);
+                    throw ValidationException::withMessages(['cancel' => __('invoices.errors.subscription_period_missing')]);
                 }
 
                 try {
@@ -1026,7 +1026,7 @@ class InvoiceController extends Controller
                         $ordered->count(),
                     );
                 } catch (\Throwable) {
-                    throw ValidationException::withMessages(['cancel' => "Нельзя восстановить график подписки «{$first->description}»: некорректный интервал биллинга."]);
+                    throw ValidationException::withMessages(['cancel' => __('invoices.errors.subscription_interval_invalid', ['description' => $first->description])]);
                 }
 
                 foreach ($ordered as $index => $line) {
@@ -1037,7 +1037,7 @@ class InvoiceController extends Controller
                         || (! $isLegacySingleOccurrence && ! CarbonImmutable::parse($line->period_end)->startOfDay()->equalTo($occurrence['period_end']))
                         || ($line->billing_occurrence_key !== null
                             && $line->billing_occurrence_key !== $occurrence['billing_occurrence_key'])) {
-                        throw ValidationException::withMessages(['cancel' => "Нельзя восстановить график подписки «{$line->description}»: периоды не образуют корректную последовательность."]);
+                        throw ValidationException::withMessages(['cancel' => __('invoices.errors.subscription_sequence_invalid', ['description' => $line->description])]);
                     }
                 }
 
@@ -1050,7 +1050,7 @@ class InvoiceController extends Controller
                         $this->billingSchedule->intervalFor($subscription),
                     )->toDateString();
                 if ($subscription->next_billing_date?->toDateString() !== $expectedCurrentDate) {
-                    throw ValidationException::withMessages(['cancel' => "Нельзя восстановить график подписки «{$first->description}»: следующая дата выставления уже была изменена."]);
+                    throw ValidationException::withMessages(['cancel' => __('invoices.errors.subscription_date_changed', ['description' => $first->description])]);
                 }
 
                 if (InvoiceLine::query()
@@ -1059,7 +1059,7 @@ class InvoiceController extends Controller
                     ->whereDate('period_start', '>', $last['period_start']->toDateString())
                     ->whereHas('invoice', fn ($query) => $query->where('status', '!=', 'cancelled'))
                     ->exists()) {
-                    throw ValidationException::withMessages(['cancel' => "Нельзя отменить позицию «{$first->description}»: по подписке уже существует более поздний выставленный инвойс."]);
+                    throw ValidationException::withMessages(['cancel' => __('invoices.errors.subscription_later_invoice', ['description' => $first->description])]);
                 }
 
                 $rollbackDates[$subscription->id] = $expected[0]['period_start']->toDateString();
@@ -1108,7 +1108,7 @@ class InvoiceController extends Controller
         return $this->mutationRedirect($invoice)
             ->with(
                 'success',
-                'Инвойс успешно отменён.'
+                __('invoices.flash.cancelled')
             );
     }
 
@@ -1136,7 +1136,7 @@ class InvoiceController extends Controller
         return $redirect
             ->with(
                 'success',
-                'Черновик инвойса успешно удалён.'
+                __('invoices.flash.deleted')
             );
     }
 
@@ -1196,7 +1196,7 @@ class InvoiceController extends Controller
 
                     'description' => $order->title
                         ?: $order->serviceType?->name
-                        ?: 'Разовая услуга',
+                        ?: __('invoices.form.one_time'),
 
                     'amount' => (float) $order->price,
                     'payment_terms' => $order->payment_terms,
@@ -1217,7 +1217,7 @@ class InvoiceController extends Controller
 
                     'description' => $subscription->title
                         ?: $subscription->serviceType?->name
-                        ?: 'Подписка',
+                        ?: __('invoices.form.subscription'),
 
                     'amount' => (float) $subscription->amount,
 
@@ -1265,7 +1265,7 @@ class InvoiceController extends Controller
     private function subscriptionOccurrencePreview(Subscription $subscription, Contract $contract): array
     {
         if (! $subscription->next_billing_date || ! $subscription->start_date) {
-            return ['selectable' => false, 'reason' => 'Не заполнен график биллинга.', 'occurrences' => []];
+            return ['selectable' => false, 'reason' => __('invoices.form.billing_not_set'), 'occurrences' => []];
         }
 
         try {
@@ -1275,7 +1275,7 @@ class InvoiceController extends Controller
                 SubscriptionBillingSchedule::MAX_OCCURRENCES_PER_INVOICE,
             );
         } catch (\Throwable) {
-            return ['selectable' => false, 'reason' => 'Не заполнен корректный интервал биллинга.', 'occurrences' => []];
+            return ['selectable' => false, 'reason' => __('invoices.form.billing_interval_invalid'), 'occurrences' => []];
         }
 
         $contractEnd = $contract->end_date?->startOfDay();
@@ -1289,7 +1289,7 @@ class InvoiceController extends Controller
             ->all();
 
         return $occurrences === []
-            ? ['selectable' => false, 'reason' => 'Следующий расчётный период выходит за срок договора.', 'occurrences' => []]
+            ? ['selectable' => false, 'reason' => __('invoices.form.period_outside_contract'), 'occurrences' => []]
             : ['selectable' => true, 'reason' => null, 'occurrences' => $occurrences];
     }
 
@@ -1326,9 +1326,9 @@ class InvoiceController extends Controller
     private function editabilityMessage(?string $reason): string
     {
         return match ($reason) {
-            'confirmed_payment' => 'Инвойс уже получил оплату и больше не может быть изменён.',
-            'cancelled' => 'Отменённый инвойс нельзя редактировать.',
-            default => 'Инвойс в текущем состоянии нельзя редактировать.',
+            'confirmed_payment' => __('invoices.errors.confirmed_payment'),
+            'cancelled' => __('invoices.errors.cancelled_edit'),
+            default => __('invoices.errors.current_state_edit'),
         };
     }
 }

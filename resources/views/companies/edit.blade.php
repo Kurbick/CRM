@@ -1,11 +1,11 @@
 @extends('layouts.app')
 
-@section('title', 'Редактирование компании')
+@section('title', __('companies.form.edit_title'))
 
 @section('content')
     @php
         $backLabel = $returnContext['origin'] === 'show'
-            ? 'Назад к компании'
+            ? __('companies.actions.back_to_company')
             : $returnContext['label'];
     @endphp
 
@@ -14,7 +14,7 @@
             <span aria-hidden="true">←</span>
             {{ $backLabel }}
         </a>
-        <h1 class="mt-3 text-xl font-semibold text-slate-900">Редактирование компании</h1>
+        <h1 class="mt-3 text-xl font-semibold text-slate-900">{{ __('companies.form.edit_title') }}</h1>
         <p class="mt-1 text-sm text-slate-500">{{ $company->name }}</p>
     </div>
 

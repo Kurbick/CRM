@@ -44,7 +44,7 @@ class SubscriptionController extends Controller
         $createSubscription->handle($contract, $validated, $request->user());
 
         return $this->mutationRedirect($contract)
-            ->with('success', 'Подписка успешно добавлена.');
+            ->with('success', __('subscriptions.flash.created'));
     }
 
     public function edit(Subscription $subscription)
@@ -90,7 +90,7 @@ class SubscriptionController extends Controller
             ->firstOrFail();
 
         return $this->mutationRedirect($contract)
-            ->with('success', 'Подписка обновлена.');
+            ->with('success', __('subscriptions.flash.updated'));
     }
 
     public function destroy(Request $request, Subscription $subscription, DeleteSubscription $deleteSubscription)
@@ -105,11 +105,11 @@ class SubscriptionController extends Controller
             $deleteSubscription->handle($subscription, $request->user());
         } catch (SubscriptionDeletionException $exception) {
             return $this->mutationRedirect($contract)
-                ->with('error', $exception->getMessage());
+                ->with('error', __('subscriptions.errors.delete_invoice'));
         }
 
         return $this->mutationRedirect($contract)
-            ->with('success', 'Подписка удалена.');
+            ->with('success', __('subscriptions.flash.deleted'));
     }
 
     private function backUrl(Contract $contract): string

@@ -37,21 +37,6 @@ class CompanyController extends Controller
         'cancelled',
     ];
 
-    private const RUSSIAN_MONTHS = [
-        1 => 'Январь',
-        2 => 'Февраль',
-        3 => 'Март',
-        4 => 'Апрель',
-        5 => 'Май',
-        6 => 'Июнь',
-        7 => 'Июль',
-        8 => 'Август',
-        9 => 'Сентябрь',
-        10 => 'Октябрь',
-        11 => 'Ноябрь',
-        12 => 'Декабрь',
-    ];
-
     /**
      * Display a listing of the resource.
      */
@@ -166,8 +151,8 @@ class CompanyController extends Controller
                 'id' => $company->id,
                 'name' => $company->name,
                 'type_label' => $company->type === 'company'
-                    ? 'Юридическое лицо'
-                    : 'Индивидуальный предприниматель',
+                    ? __('companies.types.legal_entity')
+                    : __('companies.types.individual'),
                 'voen' => $company->voen,
             ]);
 
@@ -221,7 +206,7 @@ class CompanyController extends Controller
             : redirect()->to($this->landingUrl());
 
         return $redirect
-            ->with('success', 'Компания успешно создана.');
+            ->with('success', __('companies.flash.created'));
     }
 
     /**
@@ -393,7 +378,7 @@ class CompanyController extends Controller
                 fn (array $line): array => [
                     ...$line,
                     'due_date_label' => $line['due_date'] === null
-                        ? 'Не указан'
+                        ? __('companies.financial.date_not_specified')
                         : CarbonImmutable::parse($line['due_date'])->format('d.m.Y'),
                 ],
                 array_filter(
@@ -440,10 +425,10 @@ class CompanyController extends Controller
         return [
             ...$period,
             'period_label' => $isFullMonth
-                ? self::RUSSIAN_MONTHS[$periodStart->month].' '.$periodStart->year
+                ? __('companies.financial.months.'.$periodStart->month).' '.$periodStart->year
                 : $periodStart->format('d.m.Y').'–'.$periodEnd->format('d.m.Y'),
             'due_date_label' => $period['due_date'] === null
-                ? 'Не указан'
+                ? __('companies.financial.date_not_specified')
                 : CarbonImmutable::parse($period['due_date'])->format('d.m.Y'),
         ];
     }
@@ -553,13 +538,13 @@ class CompanyController extends Controller
 
         if (! Gate::allows('view', $company)) {
             return redirect()->to($this->landingUrl())
-                ->with('success', 'Данные компании успешно обновлены.');
+                ->with('success', __('companies.flash.updated'));
         }
 
         $returnContext = $this->companyEditReturnContext($request, $company);
 
         return redirect()->route($returnContext['route'], $returnContext['route_parameters'])
-            ->with('success', 'Данные компании успешно обновлены.');
+            ->with('success', __('companies.flash.updated'));
     }
 
     private function companyEditReturnContext(Request $request, Company $company): array
@@ -568,7 +553,7 @@ class CompanyController extends Controller
             return [
                 'origin' => 'landing',
                 'url' => $this->landingUrl(),
-                'label' => 'Назад',
+                'label' => __('companies.actions.back'),
                 'route' => null,
                 'route_parameters' => [],
                 'hidden' => [],
@@ -579,7 +564,7 @@ class CompanyController extends Controller
             return [
                 'origin' => 'show',
                 'url' => route('companies.show', $company),
-                'label' => 'Назад к просмотру',
+                'label' => __('companies.actions.back_to_view'),
                 'route' => 'companies.show',
                 'route_parameters' => ['company' => $company],
                 'hidden' => ['origin' => 'show'],
@@ -608,7 +593,7 @@ class CompanyController extends Controller
         return [
             'origin' => 'index',
             'url' => route('companies.index', $parameters),
-            'label' => 'Назад к компаниям',
+            'label' => __('companies.actions.back_to_companies'),
             'route' => 'companies.index',
             'route_parameters' => $parameters,
             'hidden' => ['origin' => 'index', ...$parameters],
@@ -629,16 +614,20 @@ class CompanyController extends Controller
                 ? redirect()->route('companies.show', $company)
                 : redirect()->to($this->landingUrl());
 
-            return $redirect->with('error', $exception->getMessage());
+            return $redirect->with('error', match ($exception->getMessage()) {
+                'Невозможно удалить компанию, пока с ней связаны контакты, договоры или финансовые данные.' => __('companies.errors.delete_dependencies'),
+                'Невозможно удалить компанию: во время операции появились связанные данные.' => __('companies.errors.delete_concurrent'),
+                default => $exception->getMessage(),
+            });
         }
 
         if (! Gate::allows('viewAny', Company::class)) {
             return redirect()->to($this->landingUrl())
-                ->with('success', 'Компания успешно удалена.');
+                ->with('success', __('companies.flash.deleted'));
         }
 
         return redirect()->route('companies.index')
-            ->with('success', 'Компания успешно удалена.');
+            ->with('success', __('companies.flash.deleted'));
     }
 
     private function landingUrl(): string
@@ -653,7 +642,7 @@ class CompanyController extends Controller
     {
         $fallback = [
             'url' => route('companies.index'),
-            'label' => 'Назад к компаниям',
+            'label' => __('companies.actions.back_to_companies'),
             'is_contextual' => false,
         ];
         $candidate = $request->input('return_url');
@@ -688,9 +677,9 @@ class CompanyController extends Controller
 
         $path = '/'.ltrim($parts['path'] ?? '/', '/');
         $allowedDestinations = [
-            parse_url(route('invoices.index'), PHP_URL_PATH) => 'Назад к инвойсам',
-            parse_url(route('contracts.index'), PHP_URL_PATH) => 'Назад к договорам',
-            parse_url(route('companies.index'), PHP_URL_PATH) => 'Назад к компаниям',
+            parse_url(route('invoices.index'), PHP_URL_PATH) => __('companies.actions.back_to_invoices'),
+            parse_url(route('contracts.index'), PHP_URL_PATH) => __('companies.actions.back_to_contracts'),
+            parse_url(route('companies.index'), PHP_URL_PATH) => __('companies.actions.back_to_companies'),
         ];
 
         if (! isset($allowedDestinations[$path])) {

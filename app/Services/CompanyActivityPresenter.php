@@ -31,7 +31,7 @@ final class CompanyActivityPresenter
             'time_label' => $this->timeLabel($event->occurred_at),
             'actor_label' => $event->relationLoaded('actor') && $event->actor
                 ? $event->actor->name
-                : 'Система',
+                : __('activity.actor.system'),
         ];
     }
 
@@ -46,75 +46,95 @@ final class CompanyActivityPresenter
         $documentName = $this->text($metadata, 'document_name');
 
         return match ($type) {
-            CompanyActivityEventType::CompanyCreated => ['Компания создана', null, 'company', 'blue'],
-            CompanyActivityEventType::CompanyUpdated => ['Данные компании обновлены', null, 'company', 'slate'],
+            CompanyActivityEventType::CompanyCreated => [__('activity.events.company_created'), null, 'company', 'blue'],
+            CompanyActivityEventType::CompanyUpdated => [__('activity.events.company_updated'), null, 'company', 'slate'],
             CompanyActivityEventType::ContactCreated => [
-                $contactName === null ? 'Добавлен контакт' : 'Добавлен контакт '.$contactName,
+                $contactName === null
+                    ? __('activity.events.contact_created')
+                    : __('activity.events.contact_created_named', ['name' => $contactName]),
                 $this->contactContext($metadata),
                 'contact-created',
                 'blue',
             ],
             CompanyActivityEventType::ContactUpdated => [
-                $contactName === null ? 'Контакт изменён' : 'Контакт '.$contactName.' изменён',
+                $contactName === null
+                    ? __('activity.events.contact_updated')
+                    : __('activity.events.contact_updated_named', ['name' => $contactName]),
                 $this->contactContext($metadata),
                 'contact-updated',
                 'blue',
             ],
             CompanyActivityEventType::ContactDeleted => [
-                $contactName === null ? 'Удалён контакт' : 'Удалён контакт '.$contactName,
+                $contactName === null
+                    ? __('activity.events.contact_deleted')
+                    : __('activity.events.contact_deleted_named', ['name' => $contactName]),
                 $this->contactContext($metadata),
                 'contact-deleted',
                 'red',
             ],
             CompanyActivityEventType::ContractCreated => [
-                $contractNumber === null ? 'Договор создан' : 'Создан договор '.$contractNumber,
+                $contractNumber === null
+                    ? __('activity.events.contract_created')
+                    : __('activity.events.contract_created_named', ['number' => $contractNumber]),
                 $this->contractDates($metadata),
                 'contract',
                 'blue',
             ],
             CompanyActivityEventType::ContractStatusChanged => [
                 $contractNumber === null
-                    ? 'Статус договора изменён'
-                    : 'Статус договора '.$contractNumber.' изменён',
+                    ? __('activity.events.contract_status_changed')
+                    : __('activity.events.contract_status_changed_named', ['number' => $contractNumber]),
                 $this->statusChange($metadata),
                 'contract',
                 'slate',
             ],
             CompanyActivityEventType::ContractDeleted => [
-                $contractNumber === null ? 'Договор удалён' : 'Удалён договор '.$contractNumber,
+                $contractNumber === null
+                    ? __('activity.events.contract_deleted')
+                    : __('activity.events.contract_deleted_named', ['number' => $contractNumber]),
                 $this->contractDates($metadata),
                 'contract-deleted',
                 'red',
             ],
             CompanyActivityEventType::ContractSubjectCreated => $this->subjectCreated($metadata),
-            CompanyActivityEventType::ContractSubjectUpdated => $this->subjectChanged($metadata, 'изменена', 'slate'),
-            CompanyActivityEventType::ContractSubjectDeleted => $this->subjectChanged($metadata, 'удалена', 'red'),
+            CompanyActivityEventType::ContractSubjectUpdated => $this->subjectChanged($metadata, 'updated', 'slate'),
+            CompanyActivityEventType::ContractSubjectDeleted => $this->subjectChanged($metadata, 'deleted', 'red'),
             CompanyActivityEventType::DocumentUploaded => [
-                $documentName === null ? 'Документ загружен' : 'Загружен документ '.$documentName,
-                $contractNumber === null ? null : 'Договор '.$contractNumber,
+                $documentName === null
+                    ? __('activity.events.document_uploaded')
+                    : __('activity.events.document_uploaded_named', ['name' => $documentName]),
+                $contractNumber === null ? null : __('activity.contexts.contract', ['number' => $contractNumber]),
                 'document',
                 'blue',
             ],
             CompanyActivityEventType::DocumentDeleted => [
-                $documentName === null ? 'Документ удалён' : 'Удалён документ '.$documentName,
-                $contractNumber === null ? null : 'Договор '.$contractNumber,
+                $documentName === null
+                    ? __('activity.events.document_deleted')
+                    : __('activity.events.document_deleted_named', ['name' => $documentName]),
+                $contractNumber === null ? null : __('activity.contexts.contract', ['number' => $contractNumber]),
                 'document-deleted',
                 'red',
             ],
             CompanyActivityEventType::InvoiceCreated => [
-                $invoiceNumber === null ? 'Создан черновик инвойса' : 'Создан черновик инвойса '.$invoiceNumber,
+                $invoiceNumber === null
+                    ? __('activity.events.invoice_created')
+                    : __('activity.events.invoice_created_named', ['number' => $invoiceNumber]),
                 $this->joinContext($contractNumber, $amount),
                 'invoice',
                 'blue',
             ],
             CompanyActivityEventType::InvoiceIssued => [
-                $invoiceNumber === null ? 'Инвойс выставлен' : 'Инвойс '.$invoiceNumber.' выставлен',
+                $invoiceNumber === null
+                    ? __('activity.events.invoice_issued')
+                    : __('activity.events.invoice_issued_named', ['number' => $invoiceNumber]),
                 $this->joinContext($contractNumber, $amount),
                 'invoice',
                 'blue',
             ],
             CompanyActivityEventType::InvoiceCancelled => [
-                $invoiceNumber === null ? 'Инвойс отменён' : 'Инвойс '.$invoiceNumber.' отменён',
+                $invoiceNumber === null
+                    ? __('activity.events.invoice_cancelled')
+                    : __('activity.events.invoice_cancelled_named', ['number' => $invoiceNumber]),
                 $this->joinContext($contractNumber, $amount),
                 'invoice-cancelled',
                 'red',
@@ -127,26 +147,37 @@ final class CompanyActivityPresenter
             ],
             CompanyActivityEventType::PaymentPendingCreated => [
                 $amount === null
-                    ? 'Платёж ожидает подтверждения'
-                    : 'Платёж '.$amount.' ожидает подтверждения',
+                    ? __('activity.events.payment_pending')
+                    : __('activity.events.payment_pending_named', ['amount' => $amount]),
                 $invoiceNumber,
                 'payment',
                 'amber',
             ],
-            CompanyActivityEventType::PaymentConfirmed => [$this->paymentTitle($amount, 'подтверждён'), $this->joinContext($invoiceNumber, $this->method($metadata)), 'payment-confirmed', 'green'],
+            CompanyActivityEventType::PaymentConfirmed => [
+                $amount === null
+                    ? __('activity.events.payment_confirmed')
+                    : __('activity.events.payment_confirmed_named', ['amount' => $amount]),
+                $this->joinContext($invoiceNumber, $this->method($metadata)),
+                'payment-confirmed',
+                'green',
+            ],
             CompanyActivityEventType::PaymentCancelled => [
-                $this->paymentTitle($amount, 'отменён'),
+                $amount === null
+                    ? __('activity.events.payment_cancelled')
+                    : __('activity.events.payment_cancelled_named', ['amount' => $amount]),
                 $this->reason($metadata) ?? $invoiceNumber,
                 'payment-cancelled',
                 'red',
             ],
             CompanyActivityEventType::CreditApplied => [
-                $amount === null ? 'Из баланса применено' : 'Из баланса применено '.$amount,
+                $amount === null
+                    ? __('activity.events.credit_applied')
+                    : __('activity.events.credit_applied_named', ['amount' => $amount]),
                 $invoiceNumber,
                 'credit-applied',
                 'blue',
             ],
-            default => ['Событие компании', null, 'company', 'slate'],
+            default => [__('activity.events.fallback'), null, 'company', 'slate'],
         };
     }
 
@@ -164,12 +195,12 @@ final class CompanyActivityPresenter
 
         $title = match ($subjectType) {
             'subscription' => $subjectName === null
-                ? 'Добавлен предмет договора'
-                : 'Добавлена подписка '.$subjectName,
+                ? __('activity.events.subject_created_default')
+                : __('activity.events.subject_created_subscription', ['name' => $subjectName]),
             'one_time' => $subjectName === null
-                ? 'Добавлен предмет договора'
-                : 'Добавлена разовая услуга '.$subjectName,
-            default => 'Добавлен предмет договора',
+                ? __('activity.events.subject_created_default')
+                : __('activity.events.subject_created_one_time', ['name' => $subjectName]),
+            default => __('activity.events.subject_created_default'),
         };
 
         $contract = $this->text($metadata, 'contract_number');
@@ -180,24 +211,25 @@ final class CompanyActivityPresenter
             $amount .= ' / '.$billingPeriod;
         }
 
-        return [$title, $this->joinContext($contract === null ? null : 'Договор '.$contract, $amount), 'subject', 'blue'];
+        return [$title, $this->joinContext($contract === null ? null : __('activity.contexts.contract', ['number' => $contract]), $amount), 'subject', 'blue'];
     }
 
     /** @return array{0: string, 1: ?string, 2: string, 3: string} */
-    private function subjectChanged(array $metadata, string $verb, string $tone): array
+    private function subjectChanged(array $metadata, string $action, string $tone): array
     {
         $subjectName = $this->text($metadata, 'subject_name');
         $subjectType = $this->text($metadata, 'subject_type');
+        $verb = __($action === 'updated' ? 'activity.verbs.updated' : 'activity.verbs.deleted');
         $title = match ($subjectType) {
             'subscription' => $subjectName === null
-                ? 'Подписка '.$verb
-                : 'Подписка '.$subjectName.' '.$verb,
+                ? __('activity.events.subject_changed_subscription', ['verb' => $verb])
+                : __('activity.events.subject_changed_subscription_named', ['name' => $subjectName, 'verb' => $verb]),
             'one_time' => $subjectName === null
-                ? 'Разовая услуга '.$verb
-                : 'Разовая услуга '.$subjectName.' '.$verb,
+                ? __('activity.events.subject_changed_one_time', ['verb' => $verb])
+                : __('activity.events.subject_changed_one_time_named', ['name' => $subjectName, 'verb' => $verb]),
             default => $subjectName === null
-                ? 'Предмет договора '.$verb
-                : 'Предмет договора '.$subjectName.' '.$verb,
+                ? __('activity.events.subject_changed_default', ['verb' => $verb])
+                : __('activity.events.subject_changed_default_named', ['name' => $subjectName, 'verb' => $verb]),
         };
 
         $contract = $this->text($metadata, 'contract_number');
@@ -207,7 +239,7 @@ final class CompanyActivityPresenter
             $amount .= ' / '.$billingPeriod;
         }
 
-        return [$title, $this->joinContext($contract === null ? null : 'Договор '.$contract, $amount), $tone === 'red' ? 'subject-deleted' : 'subject-updated', $tone];
+        return [$title, $this->joinContext($contract === null ? null : __('activity.contexts.contract', ['number' => $contract]), $amount), $tone === 'red' ? 'subject-deleted' : 'subject-updated', $tone];
     }
 
     private function subjectUrl(CompanyActivityEvent $event, User $user, array $availableSubjects): ?string
@@ -261,10 +293,10 @@ final class CompanyActivityPresenter
         $today = CarbonImmutable::now($timezone)->startOfDay();
 
         if ($date->isSameDay($today)) {
-            return 'Сегодня, '.$date->format('H:i');
+            return __('activity.time.today', ['time' => $date->format('H:i')]);
         }
         if ($date->isSameDay($today->subDay())) {
-            return 'Вчера, '.$date->format('H:i');
+            return __('activity.time.yesterday', ['time' => $date->format('H:i')]);
         }
 
         return $date->format('d/m/Y, H:i');
@@ -290,11 +322,6 @@ final class CompanyActivityPresenter
         return number_format($minor / 100, 2, ',', ' ').' '.$currency;
     }
 
-    private function paymentTitle(?string $amount, string $suffix): string
-    {
-        return $amount === null ? 'Платёж '.$suffix : 'Платёж '.$amount.' '.$suffix;
-    }
-
     private function contactContext(array $metadata): ?string
     {
         return $this->joinContext(
@@ -305,21 +332,27 @@ final class CompanyActivityPresenter
 
     private function deletedInvoiceTitle(?string $invoiceNumber, array $metadata): string
     {
-        $invoice = $invoiceNumber === null ? 'Инвойс' : 'Инвойс '.$invoiceNumber;
+        $isDraft = ($this->text($metadata, 'status') ?? '') === 'draft';
 
-        return ($this->text($metadata, 'status') ?? '') === 'draft'
-            ? str_replace('Инвойс', 'Удалён черновик инвойса', $invoice)
-            : $invoice.' удалён';
+        if ($isDraft) {
+            return $invoiceNumber === null
+                ? __('activity.events.invoice_deleted_draft')
+                : __('activity.events.invoice_deleted_draft_named', ['number' => $invoiceNumber]);
+        }
+
+        return $invoiceNumber === null
+            ? __('activity.events.invoice_deleted')
+            : __('activity.events.invoice_deleted_named', ['number' => $invoiceNumber]);
     }
 
     private function billingPeriod(array $metadata): ?string
     {
         return match (SubscriptionBillingPeriod::tryFrom((string) ($metadata['billing_period'] ?? ''))) {
-            SubscriptionBillingPeriod::Monthly => 'ежемесячно',
-            SubscriptionBillingPeriod::Quarterly => 'ежеквартально',
-            SubscriptionBillingPeriod::Semiannual => 'раз в полгода',
-            SubscriptionBillingPeriod::Annual => 'ежегодно',
-            SubscriptionBillingPeriod::Custom => 'индивидуальный период',
+            SubscriptionBillingPeriod::Monthly => __('activity.periods.monthly'),
+            SubscriptionBillingPeriod::Quarterly => __('activity.periods.quarterly'),
+            SubscriptionBillingPeriod::Semiannual => __('activity.periods.semiannual'),
+            SubscriptionBillingPeriod::Annual => __('activity.periods.annual'),
+            SubscriptionBillingPeriod::Custom => __('activity.periods.custom'),
             null => null,
         };
     }
@@ -327,9 +360,9 @@ final class CompanyActivityPresenter
     private function method(array $metadata): ?string
     {
         return match ($this->text($metadata, 'payment_method')) {
-            'transfer' => 'Безналичный',
-            'card' => 'Карта',
-            'cash' => 'Наличные',
+            'transfer' => __('activity.methods.transfer'),
+            'card' => __('activity.methods.card'),
+            'cash' => __('activity.methods.cash'),
             default => $this->text($metadata, 'payment_method'),
         };
     }
@@ -338,7 +371,7 @@ final class CompanyActivityPresenter
     {
         $reason = $this->text($metadata, 'reason');
 
-        return $reason === null ? null : 'Причина: '.$reason;
+        return $reason === null ? null : __('activity.contexts.reason', ['reason' => $reason]);
     }
 
     private function statusChange(array $metadata): ?string
@@ -354,12 +387,12 @@ final class CompanyActivityPresenter
     private function statusLabel(string $status): string
     {
         return match ($status) {
-            'active' => 'Активен',
-            'terminated' => 'Завершён',
-            'expired' => 'Истёк',
-            'suspended' => 'Приостановлен',
-            'completed' => 'Завершён',
-            'cancelled' => 'Отменён',
+            'active' => __('activity.statuses.active'),
+            'terminated' => __('activity.statuses.terminated'),
+            'expired' => __('activity.statuses.expired'),
+            'suspended' => __('activity.statuses.suspended'),
+            'completed' => __('activity.statuses.completed'),
+            'cancelled' => __('activity.statuses.cancelled'),
             default => $status,
         };
     }

@@ -15,7 +15,7 @@ final class AssignRoleToUser
     public function handle(User $user, Role $role): void
     {
         if ($role->guard_name !== 'web') {
-            throw new InvalidArgumentException('Группа должна использовать guard web.');
+            throw new InvalidArgumentException(__('admin.errors.invalid_guard'));
         }
 
         DB::transaction(function () use ($user, $role): void {

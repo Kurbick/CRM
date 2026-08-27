@@ -3,6 +3,7 @@
 use App\Http\Middleware\AuthorizeApiRoute;
 use App\Http\Middleware\EnsurePasswordWasChanged;
 use App\Http\Middleware\EnsureUserIsActive;
+use App\Http\Middleware\SetLocale;
 use App\Support\Navigation\AuthorizedLandingPage;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -32,6 +33,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->api(remove: [SubstituteBindings::class]);
         $middleware->prependToPriorityList(SubstituteBindings::class, AuthorizeApiRoute::class);
         $middleware->appendToGroup('web', [EnsureUserIsActive::class]);
+        $middleware->appendToGroup('web', [SetLocale::class]);
         $middleware->redirectGuestsTo(fn () => route('login'));
         $middleware->redirectUsersTo(fn (Request $request) => app(AuthorizedLandingPage::class)
             ->url($request->user()));

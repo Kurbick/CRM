@@ -20,7 +20,7 @@ final class SetUserActiveStatus
     {
         if (! $active && $actor->is($user)) {
             throw ValidationException::withMessages([
-                'status' => 'Нельзя отключить собственную учётную запись.',
+                'status' => __('admin.errors.self_status'),
             ]);
         }
 

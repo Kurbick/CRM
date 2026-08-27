@@ -66,8 +66,8 @@ class ClickableTableRowTest extends TestCase
 
         $this->assertStringContainsString("route('contracts.show', ['contract' => \$contract, 'origin' => 'company', 'tab' => 'contracts'])", $companyShow);
         $this->assertStringContainsString('class="crm-table-primary-link">{{ $contract->contract_number }}</a>', $companyShow);
-        $this->assertStringContainsString("'Открыть инвойс '.\$period['invoice_number']", $companyShow);
-        $this->assertStringContainsString("'Открыть инвойс '.\$line['invoice_number']", $companyShow);
+        $this->assertStringContainsString("__('invoices.index.open', ['number' => \$period['invoice_number']])", $companyShow);
+        $this->assertStringContainsString("__('invoices.index.open', ['number' => \$line['invoice_number']])", $companyShow);
         $this->assertStringContainsString("['invoice' => \$period['invoice_id'], 'origin' => 'company', 'tab' => 'invoices']", $companyShow);
         $this->assertStringContainsString("['invoice' => \$line['invoice_id'], 'origin' => 'company', 'tab' => 'invoices']", $companyShow);
     }

@@ -23,7 +23,7 @@ class ContractIndexViewTest extends TestCase
         $this->assertStringContainsString('class="border-t border-gray-100"', $source);
         $this->assertStringContainsString('x-for="status in statuses.slice(1)"', $source);
         $this->assertStringContainsString("value: '',", $source);
-        $this->assertStringContainsString("label: 'Все статусы'", $source);
+        $this->assertStringContainsString("label: @js(__('contracts.index.all_statuses'))", $source);
         $this->assertStringContainsString("value: 'active'", $source);
         $this->assertStringContainsString("value: 'terminated'", $source);
         $this->assertStringNotContainsString('x-show="status.value === selectedStatus"', $source);

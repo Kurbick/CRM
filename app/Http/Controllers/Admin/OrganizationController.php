@@ -39,7 +39,7 @@ class OrganizationController extends Controller
             $request->validated(),
         );
 
-        return redirect()->route('admin.organization.show')->with('success', 'Данные нашей организации сохранены.');
+        return redirect()->route('admin.organization.show')->with('success', __('admin.organization.flash.updated'));
     }
 
     private function authorizeAdministrator(Request $request): void

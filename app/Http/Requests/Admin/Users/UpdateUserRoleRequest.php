@@ -21,6 +21,6 @@ class UpdateUserRoleRequest extends FormRequest
 
     public function messages(): array
     {
-        return ['role_id.required' => 'Выберите группу пользователя.', 'role_id.exists' => 'Выбранная группа недоступна.'];
+        return ['role_id.required' => __('admin.users.validation.role_required'), 'role_id.exists' => __('admin.users.validation.role_exists')];
     }
 }

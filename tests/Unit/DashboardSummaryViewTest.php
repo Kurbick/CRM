@@ -11,8 +11,8 @@ class DashboardSummaryViewTest extends TestCase
         $source = file_get_contents(resource_path('views/dashboard.blade.php'));
 
         $this->assertStringContainsString('data-testid="dashboard-neutral-fallback"', $source);
-        $this->assertStringContainsString('>Доступ</h2>', $source);
-        $this->assertStringContainsString('Для просмотра показателей у вас нет необходимых прав', $source);
+        $this->assertStringContainsString("__('dashboard.access')", $source);
+        $this->assertStringContainsString("__('dashboard.no_permission')", $source);
         $this->assertStringNotContainsString(
             'rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm',
             $source,
@@ -27,14 +27,14 @@ class DashboardSummaryViewTest extends TestCase
         $this->assertStringContainsString('data-testid="dashboard-secondary-counters"', $source);
 
         foreach ([
-            'Общий долг',
-            'Выставлено',
-            'Оплачено',
-            'Просрочено',
-            'Активные компании',
-            'Подписки',
-        ] as $label) {
-            $this->assertStringContainsString($label, $source);
+            'total_debt',
+            'invoiced',
+            'paid',
+            'overdue',
+            'active_companies',
+            'subscriptions',
+        ] as $key) {
+            $this->assertStringContainsString("__('dashboard.metrics.{$key}')", $source);
         }
 
         $this->assertStringNotContainsString(

@@ -66,7 +66,7 @@ class UserController extends Controller
         $role = Role::query()->where('guard_name', 'web')->findOrFail($validated['role_id']);
         $user = $action->handle($request->user(), $validated, $role);
 
-        return redirect()->route('admin.users.edit', $user)->with('success', 'Пользователь создан. При первом входе он должен сменить временный пароль.');
+        return redirect()->route('admin.users.edit', $user)->with('success', __('admin.users.flash.created'));
     }
 
     public function edit(User $user): View
@@ -82,7 +82,7 @@ class UserController extends Controller
         Gate::authorize('users.update');
         $action->handle($user, $request->validated());
 
-        return back()->with('success', 'Данные пользователя обновлены.');
+        return back()->with('success', __('admin.users.flash.updated'));
     }
 
     public function updateRole(UpdateUserRoleRequest $request, User $user, UpdateUserRole $action): RedirectResponse
@@ -97,7 +97,7 @@ class UserController extends Controller
             throw $validationException;
         }
 
-        return back()->with('success', 'Группа пользователя обновлена.');
+        return back()->with('success', __('admin.users.flash.role_updated'));
     }
 
     public function activate(Request $request, User $user, SetUserActiveStatus $action): RedirectResponse
@@ -105,7 +105,7 @@ class UserController extends Controller
         Gate::authorize('users.activate');
         $action->handle($request->user(), $user, true);
 
-        return back()->with('success', 'Пользователь активирован.');
+        return back()->with('success', __('admin.users.flash.activated'));
     }
 
     public function deactivate(Request $request, User $user, SetUserActiveStatus $action): RedirectResponse
@@ -117,7 +117,7 @@ class UserController extends Controller
             return back()->with('error', $exception->getMessage());
         }
 
-        return back()->with('success', 'Пользователь отключён.');
+        return back()->with('success', __('admin.users.flash.deactivated'));
     }
 
     public function updatePassword(ResetUserPasswordRequest $request, User $user, ResetUserPassword $action): RedirectResponse
@@ -125,7 +125,7 @@ class UserController extends Controller
         Gate::authorize('users.reset_password');
         $action->handle($request->user(), $user, $request->validated('password'));
 
-        return back()->with('success', 'Временный пароль установлен. Пользователь должен сменить его при следующем входе.');
+        return back()->with('success', __('admin.users.flash.password_updated'));
     }
 
     private function roles()

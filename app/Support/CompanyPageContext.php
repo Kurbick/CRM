@@ -28,7 +28,7 @@ final class CompanyPageContext
             'active' => $active,
             'tab' => $expectedTab,
             'company_url' => route('companies.show', ['company' => $company, 'tab' => $expectedTab]),
-            'label' => "Назад к {$company->name}",
+            'label' => __('companies.actions.back_to_named_company', ['company' => $company->name]),
             'query' => $query,
         ];
     }

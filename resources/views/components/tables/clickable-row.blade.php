@@ -5,7 +5,7 @@
     @if ($url)
         data-row-url="{{ $url }}"
         tabindex="0"
-        aria-label="{{ $label ?? 'Открыть строку' }}"
+        aria-label="{{ $label ?? __('common.table.open_row') }}"
         x-data="{
             navigate(event) {
                 if (event.target.closest('a,button,input,select,textarea,label,summary,[role=button],[role=link],[contenteditable=true],[data-row-click-ignore]')) return;

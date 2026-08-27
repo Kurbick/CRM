@@ -37,7 +37,7 @@
         <button type="button"
             class="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-lg text-gray-400 transition hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
             x-on:click="visible = !visible"
-            x-bind:aria-label="visible ? 'Скрыть пароль' : 'Показать пароль'"
+            x-bind:aria-label="visible ? '{{ __('auth.password.hide') }}' : '{{ __('auth.password.show') }}'"
             x-bind:aria-pressed="visible.toString()">
             <svg x-show="!visible" class="h-5 w-5" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M2.25 12s3.5-6 9.75-6 9.75 6 9.75 6-3.5 6-9.75 6-9.75-6-9.75-6Z" />

@@ -40,7 +40,7 @@ class UnifiedListUiTest extends TestCase
         );
 
         $badge = file_get_contents(resource_path('views/partials/badge.blade.php'));
-        $this->assertStringContainsString("'partially_paid'=> 'Частично оплачен'", $badge);
+        $this->assertStringContainsString("'partially_paid' => __('common.statuses.partially_paid')", $badge);
     }
 
     public function test_representative_lists_use_the_shared_table_contract(): void

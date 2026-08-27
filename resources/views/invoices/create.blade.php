@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Новый инвойс')
+@section('title', __('invoices.form.new_title'))
 
 @section('content')
 @php
@@ -46,7 +46,7 @@
         <span aria-hidden="true">←</span>
         {{ $backLabel }}
     </a>
-    <h1 class="mt-3 text-xl font-semibold text-slate-900">Новый инвойс</h1>
+    <h1 class="mt-3 text-xl font-semibold text-slate-900">{{ __('invoices.form.new_title') }}</h1>
 </div>
 
 <form method="POST" action="{{ route('invoices.store') }}"
@@ -65,6 +65,27 @@
         defaultIssueDate: @js($defaultIssueDate),
         hasOldInput: @js(session()->hasOldInput()),
         hasOldDueDate: @js(old('due_date') !== null),
+        strings: @js([
+            'loadingContracts' => __('invoices.form.loading_contracts'),
+            'chooseContract' => __('invoices.form.choose_contract'),
+            'validity' => __('invoices.form.validity'),
+            'dueDateNotSet' => __('invoices.form.due_date_not_set'),
+            'differentPaymentTerms' => __('invoices.form.different_payment_terms', ['days' => '__DAYS__']),
+            'automaticPaymentTerms' => __('invoices.form.automatic_payment_terms', ['days' => '__DAYS__']),
+            'periodOne' => __('invoices.form.period_one'),
+            'periodFew' => __('invoices.form.period_few'),
+            'periodMany' => __('invoices.form.period_many'),
+            'resetCompanyConfirm' => __('invoices.form.reset_company_confirm'),
+            'oneTime' => __('invoices.form.one_time'),
+            'subscription' => __('invoices.form.subscription'),
+            'unavailable' => __('invoices.form.unavailable'),
+            'monthly' => __('invoices.form.monthly'),
+            'quarterly' => __('invoices.form.quarterly'),
+            'semiannual' => __('invoices.form.semiannual'),
+            'annual' => __('invoices.form.annual'),
+            'customPeriod' => __('invoices.form.custom_period'),
+            'indefiniteFrom' => __('invoices.form.indefinite_from', ['date' => ':date']),
+        ]),
         contractsUrl: @js(route('ajax.contracts', ['company' => '__COMPANY__'])),
         itemsUrl: @js(route('ajax.items', ['contract' => '__CONTRACT__'])),
     })" x-init="init()" x-on:submit="if (!lines.length) { $event.preventDefault(); linesError = true }">
@@ -77,23 +98,23 @@
 
     <div data-testid="invoice-create-form-workspace" class="max-w-5xl overflow-visible border-y border-slate-200 bg-white">
         <section class="px-4 py-5 sm:px-5">
-            <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Основная информация</h2>
+            <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">{{ __('invoices.form.basic_information') }}</h2>
 
             <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div class="relative" x-on:click.outside="companyOpen = false" x-on:keydown.escape.window="companyOpen = false">
-                        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Компания <span class="text-red-500">*</span></label>
+                        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.company') }} <span class="text-red-500">*</span></label>
                         <input type="hidden" name="company_id" x-model="selectedCompanyId">
                         <div class="relative">
-                            <input type="text" x-model="companyQuery" autocomplete="off" placeholder="Начните вводить название"
+                            <input type="text" x-model="companyQuery" autocomplete="off" placeholder="{{ __('invoices.form.company_placeholder') }}"
                                 x-on:focus="companyOpen = true" x-on:click="companyOpen = true"
                                 x-on:input="companyTyped()"
                                 x-on:keydown.enter.prevent="filteredCompanies.length && selectCompany(filteredCompanies[0])"
                                 class="w-full pr-16 @error('company_id') border-red-300 @else border-gray-200 @enderror">
                             <button type="button" x-show="companyQuery" x-cloak x-on:click="clearCompany()"
-                                class="absolute inset-y-0 right-8 flex items-center px-2 text-gray-400 transition hover:text-red-500" aria-label="Очистить компанию">✕</button>
+                                class="absolute inset-y-0 right-8 flex items-center px-2 text-gray-400 transition hover:text-red-500" aria-label="{{ __('invoices.form.clear_company') }}">✕</button>
                             <button type="button" x-on:click="companyOpen = !companyOpen"
                                 class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 transition hover:text-gray-600"
-                                aria-label="Открыть список компаний" aria-haspopup="listbox" x-bind:aria-expanded="companyOpen">
+                                aria-label="{{ __('invoices.form.open_companies') }}" aria-haspopup="listbox" x-bind:aria-expanded="companyOpen">
                                 <svg class="h-4 w-4 transition-transform duration-200" :class="{ 'rotate-180': companyOpen }" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                                 </svg>
@@ -105,20 +126,20 @@
                                     <span x-text="company.name"></span>
                                 </button>
                             </template>
-                            <p x-show="!filteredCompanies.length" class="px-3 py-3 text-sm text-gray-400">Компании не найдены</p>
+                            <p x-show="!filteredCompanies.length" class="px-3 py-3 text-sm text-gray-400">{{ __('invoices.index.companies_not_found') }}</p>
                         </div>
                         @error('company_id') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
                 </div>
 
                 <div x-show="selectedCompanyId" x-cloak data-step="contract" class="relative"
                         x-on:click.outside="contractOpen = false" x-on:keydown.escape.window="contractOpen = false">
-                        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Договор <span class="text-red-500">*</span></label>
+                        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.contract') }} <span class="text-red-500">*</span></label>
                         <input type="hidden" name="contract_id" x-model="selectedContractId">
                         <button type="button" x-on:click="contractOpen = !contractOpen"
                             :disabled="!selectedCompanyId || loadingContracts"
                             class="relative flex min-h-10 w-full items-center rounded-md border bg-white px-3 pr-10 text-left text-sm text-slate-700 outline-none transition hover:border-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 @error('contract_id') border-red-300 @else border-slate-300 @enderror disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-500"
-                            aria-haspopup="listbox" x-bind:aria-expanded="contractOpen" aria-label="Выбрать договор">
-                            <span x-text="selectedContract ? contractLabel(selectedContract) : (loadingContracts ? 'Загрузка договоров…' : 'Выберите договор')"
+                            aria-haspopup="listbox" x-bind:aria-expanded="contractOpen" aria-label="{{ __('invoices.form.select_contract') }}">
+                            <span x-text="selectedContract ? contractLabel(selectedContract) : (loadingContracts ? strings.loadingContracts : strings.chooseContract)"
                                 :class="selectedContract ? 'text-gray-700' : 'text-gray-400'"></span>
                             <span class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
                                 <svg class="h-4 w-4 transition-transform duration-200" :class="{ 'rotate-180': contractOpen }" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -136,10 +157,10 @@
                                     <span x-text="contractLabel(contract)"></span>
                                 </button>
                             </template>
-                            <p x-show="!contracts.length && !loadingContracts" class="px-3 py-3 text-sm text-gray-400">Договоры не найдены</p>
+                            <p x-show="!contracts.length && !loadingContracts" class="px-3 py-3 text-sm text-gray-400">{{ __('invoices.form.contracts_not_found') }}</p>
                         </div>
                         <p x-show="selectedContract" x-cloak class="mt-1.5 text-xs text-gray-500">
-                            Срок действия: <span x-text="contractDates(selectedContract)"></span>
+                            <span x-text="`${strings.validity} ${contractDates(selectedContract)}`"></span>
                         </p>
                         @error('contract_id') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
                 </div>
@@ -148,17 +169,17 @@
             <div x-show="selectedContractId" x-cloak data-step="invoice-details" class="mt-5 border-t border-slate-200 pt-5">
                 <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
                     <div>
-                        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Номер счёта <span class="text-red-500">*</span></label>
+                        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.invoice_number') }} <span class="text-red-500">*</span></label>
                         <input name="invoice_number" x-model="invoiceNumber" required
                             class="w-full font-mono @error('invoice_number') border-red-300 @else border-gray-200 @enderror">
                         @error('invoice_number') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
                     </div>
                     <div>
-                        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Дата выставления <span class="text-red-500">*</span></label>
+                        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.issue_date') }} <span class="text-red-500">*</span></label>
                         <x-form.date-input name="issue_date" x-model="issueDate" x-on:change="issueDateChanged()" required />
                     </div>
                     <div>
-                        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Оплатить до <span class="text-red-500">*</span></label>
+                        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.due_date') }} <span class="text-red-500">*</span></label>
                         <x-form.date-input name="due_date" x-model="dueDate" x-on:input="dueDateIsManual = true"
                             dynamic-readonly="hasAutomaticPaymentTerms" required />
                         <p class="mt-1 text-xs text-gray-500" x-text="dueDateHint"></p>
@@ -169,14 +190,14 @@
 
         <section x-show="selectedContractId" x-cloak data-step="invoice-lines" class="border-t border-slate-200 px-4 py-5 sm:px-5">
             <div>
-                <h2 class="text-sm font-semibold text-slate-900">Позиции счета</h2>
-                <p class="mt-1 text-xs text-gray-500">Выберите услуги по договору.</p>
+                <h2 class="text-sm font-semibold text-slate-900">{{ __('invoices.form.lines_title') }}</h2>
+                <p class="mt-1 text-xs text-gray-500">{{ __('invoices.form.choose_services') }}</p>
             </div>
 
             <div class="mt-4">
-                <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Услуги по договору</h3>
-                <p x-show="loadingItems" class="text-sm text-gray-500">Загрузка услуг…</p>
-                <p x-show="!loadingItems && !availableItems.length" class="text-sm text-gray-500">В договоре нет услуг для добавления</p>
+                <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.services') }}</h3>
+                <p x-show="loadingItems" class="text-sm text-gray-500">{{ __('invoices.form.loading_services') }}</p>
+                <p x-show="!loadingItems && !availableItems.length" class="text-sm text-gray-500">{{ __('invoices.form.no_services') }}</p>
                 <div class="divide-y divide-slate-100 border-y border-slate-200">
                     <template x-for="item in availableItems" :key="itemKey(item)">
                         <label class="flex cursor-pointer items-start gap-3 px-3 py-3 transition hover:bg-slate-50">
@@ -192,7 +213,7 @@
             </div>
 
             <div x-show="lines.length" x-cloak class="mt-5">
-                <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Добавлено в счёт</h3>
+                <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.added_to_invoice') }}</h3>
                 <div class="border-y border-slate-200">
                     <template x-for="(line, index) in lines" :key="line.key">
                         <div class="border-b border-slate-200 px-3 py-4 last:border-b-0">
@@ -207,21 +228,21 @@
                                         <span x-text="`${formatDate(subscriptionRange(line)[0])} — ${formatDate(subscriptionRange(line)[1])}`"></span>
                                     </p>
                                 </div>
-                                <button type="button" x-on:click="removeLine(index)" class="text-xs font-semibold text-red-600 transition hover:text-red-700" aria-label="Удалить позицию">Удалить</button>
+                                <button type="button" x-on:click="removeLine(index)" class="text-xs font-semibold text-red-600 transition hover:text-red-700" aria-label="{{ __('invoices.actions.delete_line') }}">{{ __('invoices.actions.delete_line') }}</button>
                             </div>
                             <div class="grid grid-cols-1 gap-3 sm:grid-cols-12">
                                 <div class="sm:col-span-8">
-                                    <label class="mb-1 block text-xs font-medium text-slate-500">Описание</label>
+                                    <label class="mb-1 block text-xs font-medium text-slate-500">{{ __('invoices.form.description') }}</label>
                                     <input :name="`lines[${index}][description]`" x-model="line.description" required maxlength="255"
                                         class="w-full border-gray-200">
                                 </div>
                                 <div class="sm:col-span-4">
-                                    <label class="mb-1 block text-xs font-medium text-slate-500">Сумма (₼)</label>
+                                    <label class="mb-1 block text-xs font-medium text-slate-500">{{ __('invoices.form.amount') }}</label>
                                     <p class="py-2 font-mono text-sm font-semibold text-slate-900" x-text="money(lineTotal(line))"></p>
                                 </div>
                             </div>
                             <div x-show="line.subscription_id" class="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-600">
-                                <label class="font-medium">Расчётные периоды
+                                <label class="font-medium">{{ __('invoices.form.billing_periods') }}
                                     <input type="number" min="1" :max="maximumPeriodCount(line)" x-model.number="line.period_count" x-on:change="normalisePeriodCount(line)" class="ml-2 w-16 border-gray-200 py-1 text-sm">
                                 </label>
                                 <span x-text="periodSummary(line)"></span>
@@ -231,7 +252,7 @@
                     </template>
                 </div>
             </div>
-            <p x-show="linesError" class="mt-3 text-sm text-red-600">Добавьте хотя бы одну позицию счёта.</p>
+            <p x-show="linesError" class="mt-3 text-sm text-red-600">{{ __('invoices.form.empty_line_error') }}</p>
             @if ($formErrors->isNotEmpty())
                 <div class="mt-3 space-y-1 text-sm text-red-600" role="alert">
                     @foreach ($formErrors as $message)
@@ -242,20 +263,20 @@
         </section>
 
         <section x-show="selectedContractId" x-cloak data-step="invoice-comment" class="border-t border-slate-200 px-4 py-5 sm:px-5">
-            <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Дополнительно</h2>
-            <label for="comment" class="sr-only">Комментарий</label>
+            <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">{{ __('invoices.form.additional') }}</h2>
+            <label for="comment" class="sr-only">{{ __('invoices.form.comment') }}</label>
             <textarea name="comment" id="comment" rows="3" x-model="comment" class="mt-4 w-full border-gray-200"></textarea>
             @error('comment') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
         </section>
 
         <div x-show="selectedContractId" x-cloak class="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 px-4 py-4 sm:px-5">
             <div class="text-sm text-slate-600">
-                <span class="mr-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Итого</span>
+                <span class="mr-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.total') }}</span>
                 <span class="font-semibold text-slate-900" x-text="money(total)">0.00 ₼</span>
             </div>
             <div class="flex flex-wrap items-center gap-3">
-                <button type="submit" :disabled="!selectedCompanyId || !selectedContractId || !lines.length" class="bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50">Сохранить черновик</button>
-                <a href="{{ $backUrl }}" class="border border-gray-200">Отмена</a>
+                <button type="submit" :disabled="!selectedCompanyId || !selectedContractId || !lines.length" class="bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50">{{ __('invoices.actions.save_draft') }}</button>
+                <a href="{{ $backUrl }}" class="border border-gray-200">{{ __('invoices.actions.cancel') }}</a>
             </div>
         </div>
     </div>
@@ -274,7 +295,7 @@ document.addEventListener('alpine:init', () => {
         get hasAutomaticPaymentTerms() { return this.paymentTerms.length > 0 },
         get minimumPaymentTerms() { return this.hasAutomaticPaymentTerms ? Math.min(...this.paymentTerms) : null },
         get hasDifferentPaymentTerms() { return new Set(this.paymentTerms).size > 1 },
-        get dueDateHint() { if (!this.hasAutomaticPaymentTerms) return 'Для выбранных позиций срок оплаты не задан'; if (this.hasDifferentPaymentTerms) return `У позиций разные условия оплаты. Использован минимальный срок: ${this.minimumPaymentTerms} дней`; return `Автоматически рассчитано: ${this.minimumPaymentTerms} календарных дней` },
+        get dueDateHint() { if (!this.hasAutomaticPaymentTerms) return this.strings.dueDateNotSet; if (this.hasDifferentPaymentTerms) return this.strings.differentPaymentTerms.replace('__DAYS__', this.minimumPaymentTerms); return this.strings.automaticPaymentTerms.replace('__DAYS__', this.minimumPaymentTerms) },
         async init() {
             this.lines = this.oldLines.map((line, i) => this.normaliseOldLine(line, i));
             if (this.selectedCompanyId) await this.loadContracts(true);
@@ -301,7 +322,7 @@ document.addEventListener('alpine:init', () => {
             this.selectedContractId = String(contract.id); this.contractOpen = false; await this.contractChanged()
         },
         confirmCompanyReset() {
-            return !this.hasInvoiceState() || window.confirm('При смене компании все введённые данные счёта будут очищены. Продолжить?');
+            return !this.hasInvoiceState() || window.confirm(this.strings.resetCompanyConfirm);
         },
         hasInvoiceState() {
             return Boolean(this.selectedContractId || this.invoiceNumber || this.issueDate || this.dueDate || this.comment || this.lines.length);
@@ -402,15 +423,15 @@ document.addEventListener('alpine:init', () => {
         normalisePeriodCount(line) { if (!line.subscription_id) return; const maximum = this.maximumPeriodCount(line); line.period_count = Math.max(1, Math.min(maximum, Number.parseInt(line.period_count, 10) || 1)); this.afterLinesChanged() },
         subscriptionRange(line) { const occurrences = line.stale_occurrences?.length ? line.stale_occurrences : (line.available_occurrences || []); const count = Math.max(1, Math.min(Number(line.period_count) || 1, occurrences.length)); return occurrences.length ? [occurrences[0].period_start, occurrences[count - 1].period_end] : [null, null] },
         lineTotal(line) { return (Number.parseFloat(line.amount) || 0) * (line.subscription_id ? (Number(line.period_count) || 1) : 1) },
-        periodSummary(line) { const count = Number(line.period_count) || 1; const noun = count === 1 ? 'расчётный период' : (count >= 2 && count <= 4 ? 'расчётных периода' : 'расчётных периодов'); return count === 1 ? `1 ${noun} · ${this.money(line.amount)}` : `${count} ${noun} × ${this.money(line.amount)} = ${this.money(this.lineTotal(line))}` },
+        periodSummary(line) { const count = Number(line.period_count) || 1; const noun = count === 1 ? this.strings.periodOne : (count >= 2 && count <= 4 ? this.strings.periodFew : this.strings.periodMany); return count === 1 ? `1 ${noun} · ${this.money(line.amount)}` : `${count} ${noun} × ${this.money(line.amount)} = ${this.money(this.lineTotal(line))}` },
         removeLine(index) { this.lines.splice(index, 1); this.afterLinesChanged() },
         afterLinesChanged() { this.linesError = false; this.recalculateDueDate() },
         issueDateChanged() { if (this.hasAutomaticPaymentTerms) this.recalculateDueDate() },
         recalculateDueDate() { if (!this.hasAutomaticPaymentTerms) { if (this.dueDateWasAutomatic) this.dueDate = ''; this.dueDateWasAutomatic = false; this.dueDateIsManual = true; return } this.dueDateIsManual = false; this.dueDateWasAutomatic = true; if (!this.issueDate) { this.dueDate = ''; return } const date = this.parseDate(this.issueDate); date.setDate(date.getDate() + this.minimumPaymentTerms); this.dueDate = this.inputDate(date) },
         contractLabel(c) { return `№ ${c.contract_number}` },
-        contractDates(c) { return c.end_date ? `${this.formatDate(c.start_date)} — ${this.formatDate(c.end_date)}` : `с ${this.formatDate(c.start_date)}, бессрочный` },
-        itemSubtitle(item) { if (item.type === 'order') return 'Разовая услуга'; if (!item.selectable) return item.unavailable_reason || 'Недоступна для выставления'; return `Подписка · ${{ monthly: 'ежемесячно', quarterly: 'ежеквартально', semiannual: 'раз в полгода', annual: 'ежегодно', custom: 'индивидуальный период' }[item.billing_period] || 'индивидуальный период'}` },
-        lineType(line) { return line.subscription_id ? 'Подписка' : 'Разовая услуга' },
+        contractDates(c) { return c.end_date ? `${this.formatDate(c.start_date)} — ${this.formatDate(c.end_date)}` : this.strings.indefiniteFrom.replace(':date', this.formatDate(c.start_date)) },
+        itemSubtitle(item) { if (item.type === 'order') return this.strings.oneTime; if (!item.selectable) return item.unavailable_reason || this.strings.unavailable; return `${this.strings.subscription} · ${{ monthly: this.strings.monthly, quarterly: this.strings.quarterly, semiannual: this.strings.semiannual, annual: this.strings.annual, custom: this.strings.customPeriod }[item.billing_period] || this.strings.customPeriod}` },
+        lineType(line) { return line.subscription_id ? this.strings.subscription : this.strings.oneTime },
         money(value) { return `${(Number.parseFloat(value) || 0).toFixed(2)} ₼` },
         parseDate(value) { const [y, m, d] = value.split('-').map(Number); return new Date(y, m - 1, d) },
         inputDate(date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` },

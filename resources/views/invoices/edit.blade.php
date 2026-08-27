@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Редактирование инвойса')
+@section('title', __('invoices.form.edit_title'))
 
 @section('content')
 @php
@@ -55,15 +55,15 @@
 <div class="mb-5">
     <a href="{{ route('invoices.show', ['invoice' => $invoice, ...$companyContext['query']]) }}" class="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-900">
         <span aria-hidden="true">←</span>
-        Назад к инвойсу
+        {{ __('invoices.actions.back_to_invoice') }}
     </a>
-    <h1 class="mt-3 text-xl font-semibold text-slate-900">Редактирование инвойса</h1>
+    <h1 class="mt-3 text-xl font-semibold text-slate-900">{{ __('invoices.form.edit_title') }}</h1>
     <p class="mt-1 text-sm text-slate-500"><span class="font-mono">{{ $invoice->invoice_number }}</span><span class="mx-1.5 text-slate-300">·</span>{{ $invoice->company?->name ?? $invoice->payer_name }}</p>
 </div>
 
 @if ($editability['has_pending_payments'])
     <div class="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-        По инвойсу есть платёж, ожидающий подтверждения. После изменения инвойса сумма зарегистрированного платежа не изменится.
+        {{ __('invoices.form.pending_warning') }}
     </div>
 @endif
 
@@ -71,12 +71,23 @@
     lines: @js($editLines),
     issueDate: @js(old('issue_date', \Illuminate\Support\Carbon::parse($invoice->issue_date)->toDateString())),
     dueDate: @js(old('due_date', \Illuminate\Support\Carbon::parse($invoice->due_date)->toDateString())),
+    strings: @js([
+        'dueDateNotSet' => __('invoices.form.due_date_not_set'),
+        'differentPaymentTerms' => __('invoices.form.different_payment_terms', ['days' => '__DAYS__']),
+        'automaticPaymentTerms' => __('invoices.form.automatic_payment_terms', ['days' => '__DAYS__']),
+        'periodOne' => __('invoices.form.period_one'),
+        'periodFew' => __('invoices.form.period_few'),
+        'periodMany' => __('invoices.form.period_many'),
+        'subscription' => __('invoices.form.subscription'),
+        'oneTime' => __('invoices.form.one_time'),
+        'manualLine' => __('invoices.form.manual_line'),
+    ]),
     dueDateWasAutomatic: false,
     get paymentTerms() { return this.lines.filter(line => line.order_id || line.subscription_id).map(line => line.payment_terms).filter(terms => terms !== null && terms !== '').map(Number).filter(terms => Number.isInteger(terms) && terms >= 0 && terms <= 3650) },
     get hasAutomaticPaymentTerms() { return this.paymentTerms.length > 0 },
     get minimumPaymentTerms() { return this.hasAutomaticPaymentTerms ? Math.min(...this.paymentTerms) : null },
     get hasDifferentPaymentTerms() { return new Set(this.paymentTerms).size > 1 },
-    get dueDateHint() { if (!this.hasAutomaticPaymentTerms) return 'Для выбранных позиций срок оплаты не задан'; if (this.hasDifferentPaymentTerms) return `У позиций разные условия оплаты. Использован минимальный срок: ${this.minimumPaymentTerms} дней`; return `Автоматически рассчитано: ${this.minimumPaymentTerms} календарных дней` },
+    get dueDateHint() { if (!this.hasAutomaticPaymentTerms) return this.strings.dueDateNotSet; if (this.hasDifferentPaymentTerms) return this.strings.differentPaymentTerms.replace('__DAYS__', this.minimumPaymentTerms); return this.strings.automaticPaymentTerms.replace('__DAYS__', this.minimumPaymentTerms) },
     init() { this.recalculateDueDate() },
     removeLine(index) { this.lines.splice(index, 1); this.recalculateDueDate() },
     issueDateChanged() { if (this.hasAutomaticPaymentTerms) this.recalculateDueDate() },
@@ -88,10 +99,10 @@
     syncSubscriptionDescription(line) { this.subscriptionGroup(line).forEach(candidate => candidate.description = line.description) },
     subscriptionRange(line) { const group = this.subscriptionGroup(line); const count = this.periodCount(line); return [group[0]?.period_start, group[Math.min(count, group.length) - 1]?.period_end || group[group.length - 1]?.period_end] },
     lineTotal(line) { return (Number.parseFloat(line.amount) || 0) * (line.subscription_id ? this.periodCount(line) : 1) },
-    periodSummary(line) { const count = this.periodCount(line); const noun = count === 1 ? 'расчётный период' : (count >= 2 && count <= 4 ? 'расчётных периода' : 'расчётных периодов'); return count === 1 ? `1 ${noun} · ${this.money(line.amount)}` : `${count} ${noun} × ${this.money(line.amount)} = ${this.money(this.lineTotal(line))}` },
+    periodSummary(line) { const count = this.periodCount(line); const noun = count === 1 ? this.strings.periodOne : (count >= 2 && count <= 4 ? this.strings.periodFew : this.strings.periodMany); return count === 1 ? `1 ${noun} · ${this.money(line.amount)}` : `${count} ${noun} × ${this.money(line.amount)} = ${this.money(this.lineTotal(line))}` },
     total() { return this.lines.filter(line => this.isSubscriptionLeader(line)).reduce((sum, line) => sum + this.lineTotal(line), 0) },
     money(value) { return `${(Number.parseFloat(value) || 0).toFixed(2)} ₼` },
-    type(line) { return line.subscription_id ? 'Подписка' : (line.order_id ? 'Разовая услуга' : 'Ручная позиция') },
+    type(line) { return line.subscription_id ? this.strings.subscription : (line.order_id ? this.strings.oneTime : this.strings.manualLine) },
     parseDate(value) { const [y, m, d] = value.split('-').map(Number); return new Date(y, m - 1, d) },
     inputDate(date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` },
     formatDate(value) { if (!value) return '—'; const [y,m,d] = value.slice(0,10).split('-'); return `${d}/${m}/${y}` }
@@ -113,37 +124,37 @@
 
     <div data-testid="invoice-edit-form-workspace" class="max-w-5xl overflow-hidden border-y border-slate-200 bg-white">
         <section class="px-4 py-5 sm:px-5">
-            <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Основная информация</h2>
+            <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">{{ __('invoices.form.basic_information') }}</h2>
             <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div class="text-sm text-slate-700">
-                    <span class="text-slate-500">Компания:</span>
+                    <span class="text-slate-500">{{ __('invoices.form.company') }}:</span>
                     {{ $invoice->company?->name ?? $invoice->payer_name }}
                 </div>
                 <div class="text-sm text-slate-700">
-                    <span class="text-slate-500">Договор:</span>
+                    <span class="text-slate-500">{{ __('invoices.form.contract') }}:</span>
                     № {{ $invoice->contract?->contract_number ?? $invoice->contract_reference }}
                     @if ($invoice->contract)
                         <p class="mt-1 text-xs text-slate-500">
-                            Срок действия:
+                            {{ __('invoices.form.validity') }}
                             @if ($invoice->contract->end_date)
                                 {{ $invoice->contract->start_date?->format('d/m/Y') }} — {{ $invoice->contract->end_date->format('d/m/Y') }}
                             @else
-                                с {{ $invoice->contract->start_date?->format('d/m/Y') }}, бессрочный
+                                {{ __('invoices.form.indefinite_from', ['date' => $invoice->contract->start_date?->format('d/m/Y')]) }}
                             @endif
                         </p>
                     @endif
                 </div>
                 <div class="md:col-span-2">
-                    <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Номер счёта <span class="text-red-500">*</span></label>
+                    <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.invoice_number') }} <span class="text-red-500">*</span></label>
                     <input name="invoice_number" value="{{ old('invoice_number', $invoice->invoice_number) }}" required class="w-full font-mono @error('invoice_number') border-red-300 @else border-gray-200 @enderror">
                     @error('invoice_number') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
                 </div>
                 <div>
-                    <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Дата выставления <span class="text-red-500">*</span></label>
+                    <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.issue_date') }} <span class="text-red-500">*</span></label>
                     <x-form.date-input name="issue_date" x-model="issueDate" x-on:change="issueDateChanged()" required />
                 </div>
                 <div>
-                    <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Оплатить до <span class="text-red-500">*</span></label>
+                    <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.due_date') }} <span class="text-red-500">*</span></label>
                     <x-form.date-input name="due_date" x-model="dueDate" dynamic-readonly="hasAutomaticPaymentTerms" required />
                     <p class="mt-1 text-xs text-gray-500" x-text="dueDateHint"></p>
                 </div>
@@ -152,8 +163,8 @@
 
         <section class="border-t border-slate-200 px-4 py-5 sm:px-5">
             <div>
-                <h2 class="text-sm font-semibold text-slate-900">Позиции счета</h2>
-                    <p class="mt-1 text-xs text-gray-500">Измените описание или сумму ручных позиций.</p>
+                <h2 class="text-sm font-semibold text-slate-900">{{ __('invoices.form.lines_title') }}</h2>
+                    <p class="mt-1 text-xs text-gray-500">{{ __('invoices.form.edit_manual_lines') }}</p>
             </div>
             <div x-show="lines.length" class="mt-4 border-y border-slate-200">
                     <template x-for="(line, index) in lines" :key="line.id ?? `new-${index}`">
@@ -166,18 +177,18 @@
                         <div class="mb-2 flex items-center justify-between gap-3">
                             <div>
                                 <p class="text-xs font-medium text-gray-500" x-text="type(line)"></p>
-                                <p x-show="line.subscription_id" class="mt-0.5 text-xs text-gray-500">Расчётные периоды: <span x-text="`${formatDate(subscriptionRange(line)[0])} — ${formatDate(subscriptionRange(line)[1])}`"></span></p>
+                                <p x-show="line.subscription_id" class="mt-0.5 text-xs text-gray-500">{{ __('invoices.form.billing_periods') }}: <span x-text="`${formatDate(subscriptionRange(line)[0])} — ${formatDate(subscriptionRange(line)[1])}`"></span></p>
                             </div>
                             <button type="button" x-show="@js($invoice->status !== 'issued') || (!line.subscription_id && !line.order_id)"
-                                x-on:click="line.subscription_id ? lines = lines.filter(candidate => candidate.subscription_id !== line.subscription_id) : removeLine(index)" class="text-xs font-semibold text-red-600 transition hover:text-red-700">Удалить</button>
+                                x-on:click="line.subscription_id ? lines = lines.filter(candidate => candidate.subscription_id !== line.subscription_id) : removeLine(index)" class="text-xs font-semibold text-red-600 transition hover:text-red-700">{{ __('invoices.actions.delete_line') }}</button>
                         </div>
                         <div class="grid grid-cols-1 gap-3 sm:grid-cols-12">
                             <div class="sm:col-span-8">
-                                <label class="mb-1 block text-xs font-medium text-slate-500">Описание</label>
+                                <label class="mb-1 block text-xs font-medium text-slate-500">{{ __('invoices.form.description') }}</label>
                                 <input :name="`lines[${index}][description]`" x-model="line.description" x-on:input="syncSubscriptionDescription(line)" required maxlength="255" class="w-full border-gray-200">
                             </div>
                             <div class="sm:col-span-4">
-                                <label class="mb-1 block text-xs font-medium text-slate-500">Сумма (₼)</label>
+                                <label class="mb-1 block text-xs font-medium text-slate-500">{{ __('invoices.form.amount') }}</label>
                                 <template x-if="line.order_id || line.subscription_id">
                                     <p class="py-2 font-mono text-sm font-semibold text-slate-900" x-text="money(lineTotal(line))"></p>
                                 </template>
@@ -187,7 +198,7 @@
                             </div>
                         </div>
                         <div x-show="line.subscription_id" class="mt-3 flex items-center gap-3 text-xs text-slate-600">
-                            <label class="font-medium">Расчётные периоды <input type="number" min="1" max="24" x-model.number="line.period_count" x-bind:value="periodCount(line)" x-on:change="normalisePeriodCount(line)" @disabled($invoice->status !== 'draft') class="ml-2 w-16 border-gray-200 py-1 text-sm"></label>
+                            <label class="font-medium">{{ __('invoices.form.billing_periods') }} <input type="number" min="1" max="24" x-model.number="line.period_count" x-bind:value="periodCount(line)" x-on:change="normalisePeriodCount(line)" @disabled($invoice->status !== 'draft') class="ml-2 w-16 border-gray-200 py-1 text-sm"></label>
                             <span x-text="periodSummary(line)"></span>
                         </div>
                     </div>
@@ -198,20 +209,20 @@
         </section>
 
         <section class="border-t border-slate-200 px-4 py-5 sm:px-5">
-            <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Дополнительно</h2>
-            <label for="comment" class="sr-only">Комментарий</label>
+            <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">{{ __('invoices.form.additional') }}</h2>
+            <label for="comment" class="sr-only">{{ __('invoices.form.comment') }}</label>
             <textarea name="comment" id="comment" rows="3" class="mt-4 w-full border-gray-200">{{ old('comment', $invoice->comment) }}</textarea>
             @error('comment') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
         </section>
 
         <div class="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 px-4 py-4 sm:px-5">
             <div class="text-sm text-slate-600">
-                <span class="mr-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Итого</span>
+                <span class="mr-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.total') }}</span>
                 <span class="font-semibold text-slate-900"><span x-text="total().toFixed(2)"></span> ₼</span>
             </div>
             <div class="flex flex-wrap items-center gap-3">
-                <button type="submit" :disabled="!lines.length" class="bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50">Сохранить</button>
-                <a href="{{ route('invoices.show', ['invoice' => $invoice, ...$companyContext['query']]) }}" class="border border-gray-200">Отмена</a>
+                <button type="submit" :disabled="!lines.length" class="bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50">{{ __('invoices.actions.save') }}</button>
+                <a href="{{ route('invoices.show', ['invoice' => $invoice, ...$companyContext['query']]) }}" class="border border-gray-200">{{ __('invoices.actions.cancel') }}</a>
             </div>
         </div>
     </div>

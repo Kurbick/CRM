@@ -166,7 +166,7 @@ class OneTimeServiceDebtCalculator
         foreach ([$order?->title, $line->description] as $title) {
             if (is_string($title) && trim($title) !== '') return trim($title);
         }
-        return 'Разовая услуга';
+        return __('orders.title');
     }
 
     private function requiredRelation(InvoiceLine $line, string $name, string $class, int $lineId): object

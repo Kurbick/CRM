@@ -1,38 +1,38 @@
 @extends('layouts.app')
 
-@section('title', 'Договор ' . $contract->contract_number)
+@section('title', __('contracts.show.title', ['number' => $contract->contract_number]))
 
 @section('content')
 
     @php
         $displayDateTime = app(\App\Support\DisplayDateTime::class);
         $periods = [
-            'monthly' => 'Ежемесячно',
-            'quarterly' => 'Ежеквартально',
-            'semiannual' => 'Раз в полгода',
-            'annual' => 'Ежегодно',
-            'custom' => 'Другой период',
+            'monthly' => __('subscriptions.monthly'),
+            'quarterly' => __('subscriptions.quarterly'),
+            'semiannual' => __('subscriptions.semiannual'),
+            'annual' => __('subscriptions.annual'),
+            'custom' => __('contracts.show.other_period'),
         ];
 
         $documentTypes = [
-            'original' => 'Исходник',
-            'signed' => 'Подписанный договор',
-            'other' => 'Другой документ',
+            'original' => __('contracts.documents.original'),
+            'signed' => __('contracts.documents.signed'),
+            'other' => __('contracts.documents.other'),
         ];
 
         $contractStatus = match ($contract->effective_status) {
             'active' => [
-                'label' => 'Активен',
+                'label' => __('contracts.statuses.active'),
                 'dot' => 'bg-green-500',
                 'text' => 'text-green-700',
             ],
             'terminated' => [
-                'label' => 'Расторгнут',
+                'label' => __('contracts.statuses.terminated'),
                 'dot' => 'bg-red-500',
                 'text' => 'text-red-700',
             ],
             'expired' => [
-                'label' => 'Срок истёк',
+                'label' => __('contracts.statuses.expired'),
                 'dot' => 'bg-red-500',
                 'text' => 'text-red-700',
             ],
@@ -49,8 +49,8 @@
             $services->push([
                 'id' => $order->id,
                 'type' => 'order',
-                'type_name' => 'Разовая услуга',
-                'service_name' => $order->title ?? ($order->serviceType?->name ?? 'Услуга не указана'),
+                'type_name' => __('contracts.subjects.order_type'),
+                'service_name' => $order->title ?? ($order->serviceType?->name ?? __('contracts.show.service_not_specified')),
                 'date' => $order->order_date,
                 'period' => null,
                 'amount' => $order->price,
@@ -65,18 +65,18 @@
             $services->push([
                 'id' => $subscription->id,
                 'type' => 'subscription',
-                'type_name' => 'Подписка',
-                'service_name' => $subscription->title ?? ($subscription->serviceType?->name ?? 'Услуга не указана'),
+                'type_name' => __('contracts.subjects.subscription_type'),
+                'service_name' => $subscription->title ?? ($subscription->serviceType?->name ?? __('contracts.show.service_not_specified')),
                 'date' => $subscription->start_date,
                 'period' =>
                     $subscription->billing_period === 'custom'
                         ? ($subscription->custom_interval_value && $subscription->custom_interval_unit
                             ? $subscription->custom_interval_value.' '.match ($subscription->custom_interval_unit) {
-                                'day' => 'дн.',
-                                'month' => 'мес.',
-                                'year' => 'г.',
+                                'day' => __('contracts.show.day_short'),
+                                'month' => __('contracts.show.month_short'),
+                                'year' => __('contracts.show.year_short'),
                             }
-                            : 'Интервал не задан')
+                            : __('contracts.show.interval_not_set'))
                         : $periods[$subscription->billing_period] ?? $subscription->billing_period,
                 'amount' => $subscription->amount,
                 'status' => $subscription->status,
@@ -99,7 +99,7 @@
             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
-            {{ $canReturnToCompany ? $companyContext['label'] : 'Назад к договорам' }}
+            {{ $canReturnToCompany ? $companyContext['label'] : __('contracts.actions.back_to_contracts') }}
         </a>
 
         <div class="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-end sm:justify-between">
@@ -133,7 +133,7 @@
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
                             </svg>
-                            Выставить счёт
+                            {{ __('contracts.actions.create_invoice') }}
                         </a>
                     @endcan
                 @endif
@@ -143,19 +143,19 @@
                     @endif
                     <a href="{{ route('contracts.edit', ['contract' => $contract, 'edit_origin' => 'show', ...$companyContext['query']]) }}"
                         class="crm-light-action">
-                        Редактировать
+                        {{ __('contracts.actions.edit') }}
                     </a>
                 @endcan
 
                 @can('delete', $contract)
                     @if ($contractCanBeDeleted)
                         <form action="{{ route('contracts.destroy', $contract) }}" method="POST"
-                            onsubmit="return confirm('Удалить договор?')">
+                            onsubmit="return confirm('{{ __('contracts.actions.delete_confirm') }}')">
                             @csrf
                             @method('DELETE')
                             <button type="submit"
                                 class="inline-flex items-center rounded px-1.5 py-1 text-xs font-semibold text-red-600 transition hover:bg-red-50 hover:text-red-700">
-                                Удалить
+                                {{ __('contracts.actions.delete') }}
                             </button>
                         </form>
                     @endif
@@ -171,14 +171,14 @@
                 <p class="text-sm font-semibold tabular-nums text-slate-900">
                     {{ \Carbon\Carbon::parse($contract->start_date)->format('d/m/Y') }}
                 </p>
-                <p class="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Дата начала</p>
+                <p class="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{{ __('contracts.show.start_date') }}</p>
             </div>
 
             <div aria-hidden="true" class="hidden h-px bg-slate-200 sm:block"></div>
 
             <div data-testid="contract-lifecycle-status"
                 class="flex items-center gap-1.5 text-xs font-semibold {{ $contractStatus['text'] }} sm:justify-center">
-                <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-500 sm:hidden">Статус</span>
+                <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-500 sm:hidden">{{ __('contracts.show.status') }}</span>
                 <span aria-hidden="true" class="h-1.5 w-1.5 rounded-full {{ $contractStatus['dot'] }}"></span>
                 <span>{{ $contractStatus['label'] }}</span>
             </div>
@@ -187,10 +187,10 @@
 
             <div class="sm:text-right">
                 <p class="text-sm font-semibold tabular-nums text-slate-900">
-                    {{ $contract->end_date ? \Carbon\Carbon::parse($contract->end_date)->format('d/m/Y') : 'Бессрочный' }}
+                    {{ $contract->end_date ? \Carbon\Carbon::parse($contract->end_date)->format('d/m/Y') : __('contracts.show.indefinite') }}
                 </p>
                 @if ($contract->end_date)
-                    <p class="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Дата окончания</p>
+                    <p class="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{{ __('contracts.show.end_date') }}</p>
                 @endif
             </div>
         </div>
@@ -206,17 +206,17 @@
                 }" class="order-3 overflow-hidden border-y border-slate-200 bg-white">
                     <div class="flex flex-col gap-2 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                         <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                            <h2 class="text-sm font-semibold text-slate-900">Документы</h2>
+                            <h2 class="text-sm font-semibold text-slate-900">{{ __('contracts.documents.title') }}</h2>
 
                             @if ($canReadDocumentMetadata)
-                                <p class="text-xs tabular-nums text-slate-500">{{ $contract->documents->count() }} файлов</p>
+                                <p class="text-xs tabular-nums text-slate-500">{{ __('contracts.show.documents_count', ['count' => $contract->documents->count()]) }}</p>
                             @endif
                         </div>
 
                         @can('create', [\App\Models\ContractDocument::class, $contract])
                             <button type="button" @click="uploadOpen = !uploadOpen" class="crm-light-action">
-                                <span x-text="uploadOpen ? 'Скрыть форму' : '+ Загрузить документ'">
-                                    + Загрузить документ
+                                <span x-text="uploadOpen ? @js(__('contracts.documents.hide_form')) : @js(__('contracts.documents.upload'))">
+                                    {{ __('contracts.documents.upload') }}
                                 </span>
                             </button>
                         @endcan
@@ -233,7 +233,7 @@
                     {{-- Тип документа --}}
                     <div class="md:col-span-4">
                         <label for="document_type" class="block text-xs font-semibold text-gray-500 uppercase mb-1">
-                            Тип документа <span class="text-red-500">*</span>
+                            {{ __('contracts.documents.type') }} <span class="text-red-500">*</span>
                         </label>
 
                         <select id="document_type" name="document_type"
@@ -242,15 +242,15 @@
                                    focus:ring-1 focus:ring-blue-500 outline-none transition"
                             required>
                             <option value="original" @selected(old('document_type') === 'original')>
-                                Исходник договора
+                                {{ __('contracts.documents.original') }}
                             </option>
 
                             <option value="signed" @selected(old('document_type', 'signed') === 'signed')>
-                                Подписанный договор
+                                {{ __('contracts.documents.signed') }}
                             </option>
 
                             <option value="other" @selected(old('document_type') === 'other')>
-                                Другой документ
+                                {{ __('contracts.documents.other') }}
                             </option>
                         </select>
 
@@ -264,7 +264,7 @@
                     {{-- Файл --}}
                     <div class="md:col-span-8">
                         <label for="document" class="block text-xs font-semibold text-gray-500 uppercase mb-1">
-                            Файл <span class="text-red-500">*</span>
+                            {{ __('contracts.documents.file') }} <span class="text-red-500">*</span>
                         </label>
 
                         <input id="document" type="file" name="document" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
@@ -278,7 +278,7 @@
                             required>
 
                         <p class="text-xs text-gray-400 mt-1">
-                            PDF, DOC, DOCX, JPG или PNG. Максимальный размер — 10 МБ.
+                            {{ __('contracts.documents.help') }}
                         </p>
 
                         @error('document')
@@ -291,11 +291,11 @@
                     {{-- Комментарий --}}
                     <div class="md:col-span-12">
                         <label for="document_comment" class="block text-xs font-semibold text-gray-500 uppercase mb-1">
-                            Комментарий
+                            {{ __('contracts.fields.comment') }}
                         </label>
 
                         <input id="document_comment" type="text" name="comment" value="{{ old('comment') }}"
-                            maxlength="1000" placeholder="Например: подписанная версия от 16.07.2026"
+                            maxlength="1000" placeholder="{{ __('contracts.documents.comment_placeholder') }}"
                             class="w-full px-3 py-2.5 border border-gray-200 rounded-lg
                                    text-sm bg-white focus:border-blue-500
                                    focus:ring-1 focus:ring-blue-500 outline-none transition">
@@ -312,13 +312,13 @@
                     <button type="submit"
                         class="bg-blue-600 hover:bg-blue-700 text-white text-sm
                                font-medium px-5 py-2.5 rounded-lg transition">
-                        Загрузить
+                        {{ __('contracts.documents.upload_action') }}
                     </button>
 
                     <button type="button" @click="uploadOpen = false"
                         class="px-5 py-2.5 border border-gray-200 text-gray-600
                                text-sm font-medium rounded-lg hover:bg-gray-50 transition">
-                        Отмена
+                        {{ __('contracts.actions.cancel') }}
                     </button>
                 </div>
                             </form>
@@ -339,10 +339,10 @@
                                     </colgroup>
                                     <thead>
                                         <tr>
-                                            <th>Файл</th>
-                                            <th>Тип</th>
-                                            <th>Загружен</th>
-                                            <th>Размер</th>
+                                            <th>{{ __('contracts.documents.file') }}</th>
+                                            <th>{{ __('contracts.documents.type') }}</th>
+                                            <th>{{ __('contracts.documents.uploaded') }}</th>
+                                            <th>{{ __('contracts.documents.size') }}</th>
                                             <th></th>
                                         </tr>
                                     </thead>
@@ -352,8 +352,8 @@
                                                 if ($document->file_size) {
                                                     $documentSize =
                                                         $document->file_size >= 1048576
-                                                            ? number_format($document->file_size / 1048576, 2).' МБ'
-                                                            : number_format($document->file_size / 1024, 0).' КБ';
+                                                            ? number_format($document->file_size / 1048576, 2).' '.__('contracts.documents.megabytes')
+                                                            : number_format($document->file_size / 1024, 0).' '.__('contracts.documents.kilobytes');
                                                 } else {
                                                     $documentSize = null;
                                                 }
@@ -367,7 +367,7 @@
                                                 </td>
                                                 <td class="whitespace-nowrap">
                                                     <span class="crm-badge crm-badge-neutral">
-                                                        {{ $documentTypes[$document->document_type] ?? 'Другой документ' }}
+                                                        {{ $documentTypes[$document->document_type] ?? __('contracts.documents.other') }}
                                                     </span>
                                                 </td>
                                                 <td class="crm-table-date">{{ $displayDateTime->format($document->created_at, 'd/m/Y H:i') }}</td>
@@ -377,7 +377,7 @@
                                                         @can('download', $document)
                                                             <a href="{{ route('contract-documents.download', $document) }}"
                                                                 class="crm-table-icon-action crm-table-icon-action-primary"
-                                                                aria-label="Скачать документ" title="Скачать">
+                                                                aria-label="{{ __('contracts.documents.download') }}" title="{{ __('contracts.documents.download_title') }}">
                                                                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 4v10m0 0-4-4m4 4 4-4M5 20h14" />
                                                                 </svg>
@@ -386,11 +386,11 @@
 
                                                         @can('delete', $document)
                                                             <form class="inline-flex m-0 p-0" action="{{ route('contract-documents.destroy', $document) }}" method="POST"
-                                                                onsubmit="return confirm('Удалить этот документ?')">
+                                                                onsubmit="return confirm('{{ __('contracts.documents.delete_confirm') }}')">
                                                                 @csrf
                                                                 @method('DELETE')
                                                                 <button type="submit" class="crm-table-icon-action crm-table-icon-action-danger"
-                                                                    aria-label="Удалить документ" title="Удалить">
+                                                                    aria-label="{{ __('contracts.documents.delete') }}" title="{{ __('contracts.documents.delete_title') }}">
                                                                     <svg fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">
                                                                         <path d="M4 7h16" />
                                                                         <path d="M9 7V4h6v3" />
@@ -409,7 +409,7 @@
                                 </table>
                             </div>
                         @else
-                            <p class="px-4 py-5 text-sm text-slate-500">Документы пока не добавлены.</p>
+                            <p class="px-4 py-5 text-sm text-slate-500">{{ __('contracts.documents.empty') }}</p>
                         @endif
                     @endif
                 </section>
@@ -426,7 +426,7 @@
                         </svg>
                     </span>
                     <div class="min-w-0">
-                        <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Комментарий</p>
+                        <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{{ __('contracts.fields.comment') }}</p>
                         <p class="mt-0.5 whitespace-pre-line text-sm leading-5 text-slate-700">{{ $contract->comment }}</p>
                     </div>
                 </div>
@@ -437,17 +437,17 @@
                 class="order-1 overflow-hidden border-y border-slate-200 bg-white">
                 <div class="flex flex-col gap-2 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                     <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                        <h2 class="text-sm font-semibold text-slate-900">Предмет договора</h2>
+                        <h2 class="text-sm font-semibold text-slate-900">{{ __('contracts.subjects.title') }}</h2>
                         <p class="text-xs tabular-nums text-slate-500">
-                            Разовых: {{ $contract->orders->count() }}
+                            {{ __('contracts.subjects.orders_count', ['count' => $contract->orders->count()]) }}
                             <span class="mx-1 text-slate-300">·</span>
-                            Подписок: {{ $contract->subscriptions->count() }}
+                            {{ __('contracts.subjects.subscriptions_count', ['count' => $contract->subscriptions->count()]) }}
                         </p>
                     </div>
 
                     @if (\Illuminate\Support\Facades\Gate::allows('create', [\App\Models\Order::class, $contract]) || \Illuminate\Support\Facades\Gate::allows('create', [\App\Models\Subscription::class, $contract]))
                         <a href="{{ route('contracts.subjects.create', $contract) }}" class="crm-light-action">
-                            + Добавить
+                            {{ __('contracts.subjects.add') }}
                         </a>
                     @endif
                 </div>
@@ -466,12 +466,12 @@
                             </colgroup>
                             <thead>
                                 <tr>
-                                    <th>Тип</th>
-                                    <th>Название</th>
-                                    <th>Дата</th>
-                                    <th>Период</th>
-                                    <th>Сумма</th>
-                                    <th>Статус</th>
+                                    <th>{{ __('contracts.subjects.table_type') }}</th>
+                                    <th>{{ __('contracts.subjects.table_name') }}</th>
+                                    <th>{{ __('contracts.subjects.table_date') }}</th>
+                                    <th>{{ __('contracts.subjects.table_period') }}</th>
+                                    <th>{{ __('contracts.subjects.table_amount') }}</th>
+                                    <th>{{ __('contracts.subjects.table_status') }}</th>
                                     <th></th>
                                 </tr>
                             </thead>
@@ -492,12 +492,17 @@
                                         <td class="crm-table-numeric font-medium text-slate-900">
                                             {{ number_format((float) $service['amount'], 2) }} ₼
                                         </td>
-                                        <td class="whitespace-nowrap">@include('partials.badge', ['status' => $service['status']])</td>
+                                        <td class="whitespace-nowrap">@include('partials.badge', [
+                                            'status' => $service['status'],
+                                            'label' => $service['type'] === 'order'
+                                                ? __('orders.statuses.'.$service['status'])
+                                                : __('subscriptions.statuses.'.$service['status']),
+                                        ])</td>
                                         <td class="crm-table-actions">
                                             <div class="inline-flex items-center gap-2">
                                                 @can('update', $service['subject'])
                                                     <a href="{{ $service['edit_route'] }}" class="crm-table-icon-action crm-table-icon-action-primary"
-                                                        aria-label="Редактировать предмет договора" title="Редактировать">
+                                                        aria-label="{{ __('contracts.subjects.edit') }}" title="{{ __('contracts.actions.edit') }}">
                                                         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m15.232 5.232 3.536 3.536M4 20l4.5-1L18.768 8.732a2.5 2.5 0 0 0-3.536-3.536L4.5 15.5 4 20Z" />
                                                         </svg>
@@ -507,11 +512,11 @@
                                                 @can('delete', $service['subject'])
                                                     @if ($service['can_delete'])
                                                         <form class="inline-flex m-0 p-0" action="{{ $service['type'] === 'order' ? route('orders.destroy', $service['subject']) : route('subscriptions.destroy', $service['subject']) }}"
-                                                            method="POST" onsubmit="return confirm('Удалить предмет договора?')">
+                                                            method="POST" onsubmit="return confirm('{{ __('contracts.subjects.delete_confirm') }}')">
                                                             @csrf
                                                             @method('DELETE')
                                                             <button type="submit" class="crm-table-icon-action crm-table-icon-action-danger"
-                                                                aria-label="Удалить предмет договора" title="Удалить">
+                                                                aria-label="{{ __('contracts.subjects.delete') }}" title="{{ __('contracts.documents.delete_title') }}">
                                                                 <svg fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">
                                                                     <path d="M4 7h16" />
                                                                     <path d="M9 7V4h6v3" />
@@ -531,7 +536,7 @@
                         </table>
                     </div>
                 @else
-                    <p class="px-4 py-5 text-sm text-slate-500">Предметы договора пока не добавлены.</p>
+                    <p class="px-4 py-5 text-sm text-slate-500">{{ __('contracts.subjects.services') }}</p>
                 @endif
             </section>
     </div>

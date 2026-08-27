@@ -242,7 +242,7 @@ class ContractController extends Controller
         $contract = $createContract->handle($company, $validated, $request->user());
 
         return $this->mutationRedirect($request, $contract)
-            ->with('success', 'Договор успешно добавлен.');
+            ->with('success', __('contracts.flash.created'));
     }
 
     public function show(
@@ -330,7 +330,7 @@ class ContractController extends Controller
         $contract = $updateContract->handle($contract, $validated, $request->user());
 
         return $this->mutationRedirect($request, $contract)
-            ->with('success', 'Договор обновлён.');
+            ->with('success', __('contracts.flash.updated'));
     }
 
     private function editReturnContext(Request $request, Contract $contract): array
@@ -422,11 +422,11 @@ class ContractController extends Controller
             $deleteContract->handle($contract, $request->user());
         } catch (ContractDeletionException $exception) {
             return $this->failedDeletionRedirect($contract, $company)
-                ->with('error', $exception->getMessage());
+                ->with('error', __('contracts.errors.delete_dependencies'));
         }
 
         return $this->deletedRedirect($company)
-            ->with('success', 'Договор удалён.');
+            ->with('success', __('contracts.flash.deleted'));
     }
 
     private function safeCompanyContext(Request $request, Company $company): array

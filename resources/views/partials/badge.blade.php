@@ -18,20 +18,20 @@
     ];
 
     $labels = [
-        'active'        => 'Активен',
-        'suspended'     => 'Приостановлен',
-        'archived'      => 'Архив',
-        'draft'         => 'Черновик',
-        'issued'        => 'Выставлен',
-        'partially_paid'=> 'Частично оплачен',
-        'paid'          => 'Оплачен',
-        'cancelled'     => 'Отменён',
-        'pending'       => 'Ожидает подтверждения',
-        'confirmed'     => 'Подтверждён',
-        'in_progress'   => 'В работе',
-        'completed'     => 'Завершён',
-        'one_time'      => 'Разовая',
-        'subscription'  => 'Подписка',
+        'active' => __('common.statuses.active'),
+        'suspended' => __('common.statuses.suspended'),
+        'archived' => __('common.statuses.archived'),
+        'draft' => __('common.statuses.draft'),
+        'issued' => __('common.statuses.issued'),
+        'partially_paid' => __('common.statuses.partially_paid'),
+        'paid' => __('common.statuses.paid'),
+        'cancelled' => __('common.statuses.cancelled'),
+        'pending' => __('common.statuses.pending'),
+        'confirmed' => __('common.statuses.confirmed'),
+        'in_progress' => __('common.statuses.in_progress'),
+        'completed' => __('common.statuses.completed'),
+        'one_time' => __('common.statuses.one_time'),
+        'subscription' => __('common.statuses.subscription'),
     ];
 
     $tone = $tones[$status] ?? 'neutral';

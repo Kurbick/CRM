@@ -23,11 +23,16 @@
                 <div class="flex flex-wrap items-center gap-2">
                     <h1 class="truncate text-xl font-semibold leading-tight text-slate-900">{{ $company->name }}</h1>
                     <span data-testid="company-status" class="crm-badge crm-badge-{{ $company->status === 'active' ? 'success' : ($company->status === 'suspended' ? 'warning' : 'neutral') }}">
-                        {{ $company->status === 'active' ? 'Активна' : ($company->status === 'suspended' ? 'Приостановлена' : 'В архиве') }}
+                        {{ match ($company->status) {
+                            'active' => __('companies.statuses.active'),
+                            'suspended' => __('companies.statuses.suspended'),
+                            'archived' => __('companies.statuses.archived'),
+                            default => $company->status,
+                        } }}
                     </span>
                 </div>
                 <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
-                    <span>{{ $company->type === 'company' ? 'Юридическое лицо' : 'Индивидуальный предприниматель' }}</span>
+                    <span>{{ $company->type === 'company' ? __('companies.types.legal_entity') : __('companies.types.individual') }}</span>
                     @if ($company->short_name)
                         <span class="text-slate-300">·</span>
                         <span>{{ $company->short_name }}</span>
@@ -43,14 +48,14 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                         </svg>
-                        Редактировать
+                        {{ __('companies.actions.edit') }}
                     </a>
                 @endcan
 
                 @can('delete', $company)
                     @if ($companyCanBeDeleted)
                         <form action="{{ route('companies.destroy', $company) }}" method="POST"
-                            onsubmit="return confirm('Вы уверены, что хотите удалить эту компанию? Действие необратимо.')">
+                            onsubmit="return confirm('{{ __('companies.actions.delete_confirm') }}')">
                             @csrf
                             @method('DELETE')
                             <button type="submit"
@@ -59,7 +64,7 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                 </svg>
-                                Удалить
+                                {{ __('companies.actions.delete') }}
                             </button>
                         </form>
                     @endif
@@ -72,32 +77,32 @@
     @can('viewFinancials', $company)
     <section data-testid="company-financial-summary" class="mb-5 overflow-hidden border-y border-slate-200 bg-white">
         <div class="border-b border-slate-200 px-4 py-3">
-            <h2 class="text-sm font-semibold text-slate-900">Финансы</h2>
+            <h2 class="text-sm font-semibold text-slate-900">{{ __('companies.financial.title') }}</h2>
         </div>
         <div>
             <dl class="grid divide-x divide-slate-200 {{ $stats['credit_balance'] > 0 ? 'grid-cols-2 sm:grid-cols-4 xl:grid-cols-5' : 'grid-cols-2 sm:grid-cols-4' }}">
                 <div class="px-4 py-3">
-                    <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Выставлено</dt>
+                    <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{{ __('companies.financial.invoiced') }}</dt>
                     <dd class="mt-1 font-semibold tabular-nums text-slate-900">{{ number_format($stats['total_invoiced'], 2) }} ₼</dd>
                 </div>
                 <div class="px-4 py-3">
-                    <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Оплачено</dt>
+                    <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{{ __('companies.financial.paid') }}</dt>
                     <dd class="mt-1 font-semibold tabular-nums text-green-700">{{ number_format($stats['total_paid'], 2) }} ₼</dd>
                 </div>
                 <div class="px-4 py-3">
-                    <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Общий долг</dt>
+                    <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{{ __('companies.financial.total_debt') }}</dt>
                     <dd class="mt-1 font-semibold tabular-nums {{ $stats['total_debt'] > 0 ? 'text-red-600' : 'text-slate-900' }}">{{ number_format($stats['total_debt'], 2) }} ₼</dd>
                 </div>
                 <div data-testid="overdue-summary"
                     class="border-l-2 px-4 py-3 {{ $overdueRemaining !== '0.00' ? 'border-red-300 bg-red-50' : 'border-slate-200 bg-gray-50' }}">
-                    <dt class="text-[11px] font-semibold uppercase tracking-wide {{ $overdueRemaining !== '0.00' ? 'text-red-600' : 'text-slate-500' }}">Просрочено</dt>
+                    <dt class="text-[11px] font-semibold uppercase tracking-wide {{ $overdueRemaining !== '0.00' ? 'text-red-600' : 'text-slate-500' }}">{{ __('companies.financial.overdue') }}</dt>
                     <dd class="mt-1 font-semibold tabular-nums {{ $overdueRemaining !== '0.00' ? 'text-red-700' : 'text-slate-900' }}">
                         {{ $overdueRemaining }} ₼
                     </dd>
                 </div>
                 @if ($stats['credit_balance'] > 0)
                     <div class="px-4 py-3">
-                        <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Баланс компании</dt>
+                        <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{{ __('companies.financial.balance') }}</dt>
                         <dd class="mt-1 font-semibold tabular-nums text-blue-700">{{ number_format($stats['credit_balance'], 2) }} ₼</dd>
                     </div>
                 @endif
@@ -108,17 +113,17 @@
         @can('viewAny', \App\Models\Invoice::class)
         <div class="border-t border-slate-200">
             <div class="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
-                <h2 class="text-sm font-semibold text-slate-900">Задолженности</h2>
+                <h2 class="text-sm font-semibold text-slate-900">{{ __('companies.financial.debts') }}</h2>
             </div>
 
         @if ($stats['total_debt'] <= 0)
-            <p class="px-4 py-5 text-sm text-slate-500">У компании нет задолженности.</p>
+            <p class="px-4 py-5 text-sm text-slate-500">{{ __('companies.financial.no_debt') }}</p>
         @else
             <div class="divide-y divide-slate-200">
                 <section class="px-4 py-4">
-                    <h3 class="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">По подпискам</h3>
+                    <h3 class="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('companies.financial.subscriptions') }}</h3>
                 @if ($subscriptionPeriodDebtGroups === [])
-                    <p class="text-sm text-slate-500">Задолженностей нет.</p>
+                    <p class="text-sm text-slate-500">{{ __('companies.financial.no_debts') }}</p>
                 @else
                 @foreach ($subscriptionPeriodDebtGroups as $subscriptionDebt)
                     <div class="{{ !$loop->first ? 'mt-5 border-t border-slate-200 pt-4' : '' }}">
@@ -126,12 +131,12 @@
                             <div>
                                 <h3 class="text-sm font-semibold text-slate-900">{{ $subscriptionDebt['subscription_title'] }}</h3>
                                 <p class="mt-0.5 text-xs text-slate-500">
-                                    Неоплаченных периодов: {{ $subscriptionDebt['totals']['unpaid_period_count'] }}
+                                    {{ __('companies.financial.unpaid_periods', ['count' => $subscriptionDebt['totals']['unpaid_period_count']]) }}
                                 </p>
                             </div>
                             @if ($subscriptionDebt['totals']['overdue_remaining'] !== '0.00')
                                 <div class="text-xs sm:text-right">
-                                    <p class="font-semibold text-red-600 mt-0.5">Просрочено: {{ $subscriptionDebt['totals']['overdue_remaining'] }} ₼</p>
+                                    <p class="font-semibold text-red-600 mt-0.5">{{ __('companies.financial.overdue_amount', ['amount' => $subscriptionDebt['totals']['overdue_remaining']]) }}</p>
                                 </div>
                             @endif
                         </div>
@@ -145,18 +150,18 @@
                                 </colgroup>
                                 <thead>
                                     <tr>
-                                        <th>Период</th>
-                                        <th>Инвойс</th>
-                                        <th>Сумма</th>
-                                        <th>Оплачено</th>
-                                        <th>Остаток</th>
-                                        <th>Срок оплаты</th>
-                                        <th>Статус</th>
+                                        <th>{{ __('companies.financial.period') }}</th>
+                                        <th>{{ __('companies.financial.invoice') }}</th>
+                                        <th>{{ __('companies.financial.amount') }}</th>
+                                        <th>{{ __('companies.financial.paid') }}</th>
+                                        <th>{{ __('companies.financial.remaining') }}</th>
+                                        <th>{{ __('companies.financial.payment_deadline') }}</th>
+                                        <th>{{ __('companies.financial.status') }}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @foreach ($subscriptionDebt['periods'] as $period)
-                                        <x-tables.clickable-row :url="route('invoices.show', ['invoice' => $period['invoice_id'], 'origin' => 'company', 'tab' => 'invoices'])" :label="'Открыть инвойс '.$period['invoice_number']">
+                                        <x-tables.clickable-row :url="route('invoices.show', ['invoice' => $period['invoice_id'], 'origin' => 'company', 'tab' => 'invoices'])" :label="__('invoices.index.open', ['number' => $period['invoice_number']])">
                                             <td class="crm-table-primary whitespace-nowrap">{{ $period['period_label'] }}</td>
                                             <td class="whitespace-nowrap font-mono text-xs">
                                                 <a href="{{ route('invoices.show', ['invoice' => $period['invoice_id'], 'origin' => 'company', 'tab' => 'invoices']) }}"
@@ -173,13 +178,13 @@
                                             <td class="whitespace-nowrap">
                                                 @if ($period['is_overdue'])
                                                     <span class="inline-flex rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700">
-                                                        Просрочено на {{ $period['days_overdue'] }} дн.
+                                                        {{ __('companies.financial.overdue_days', ['days' => $period['days_overdue']]) }}
                                                     </span>
                                                 @elseif ($period['payment_status'] === 'partially_paid')
                                                     @include('partials.badge', ['status' => 'partially_paid'])
                                                 @else
                                                     <span class="inline-flex rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700">
-                                                        К оплате
+                                                        {{ __('companies.financial.payable') }}
                                                     </span>
                                                 @endif
                                             </td>
@@ -194,9 +199,9 @@
                 </section>
 
                 <section class="px-4 py-4">
-                    <h3 class="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">По разовым услугам</h3>
+                    <h3 class="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('companies.financial.one_time_services') }}</h3>
                     @if ($oneTimeServiceDebtLines === [])
-                        <p class="text-sm text-slate-500">Задолженностей нет.</p>
+                        <p class="text-sm text-slate-500">{{ __('companies.financial.no_debts') }}</p>
                     @else
                         <div class="crm-table-scroll">
                             <table data-testid="company-debt-table" class="crm-table min-w-[940px] table-fixed">
@@ -206,14 +211,14 @@
                                     @endforeach
                                 </colgroup>
                                 <thead><tr>
-                                    <th>Услуга</th><th>Инвойс</th>
-                                    <th>Сумма</th><th>Оплачено</th>
-                                    <th>Остаток</th><th>Срок оплаты</th>
-                                    <th>Статус</th>
+                                    <th>{{ __('companies.financial.service') }}</th><th>{{ __('companies.financial.invoice') }}</th>
+                                    <th>{{ __('companies.financial.amount') }}</th><th>{{ __('companies.financial.paid') }}</th>
+                                    <th>{{ __('companies.financial.remaining') }}</th><th>{{ __('companies.financial.payment_deadline') }}</th>
+                                    <th>{{ __('companies.financial.status') }}</th>
                                 </tr></thead>
                                 <tbody>
                                 @foreach ($oneTimeServiceDebtLines as $line)
-                                    <x-tables.clickable-row :url="route('invoices.show', ['invoice' => $line['invoice_id'], 'origin' => 'company', 'tab' => 'invoices'])" :label="'Открыть инвойс '.$line['invoice_number']">
+                                    <x-tables.clickable-row :url="route('invoices.show', ['invoice' => $line['invoice_id'], 'origin' => 'company', 'tab' => 'invoices'])" :label="__('invoices.index.open', ['number' => $line['invoice_number']])">
                                         <td class="crm-table-primary">{{ $line['service_title'] }}</td>
                                         <td class="whitespace-nowrap font-mono text-xs"><a class="text-blue-600 hover:underline" href="{{ route('invoices.show', ['invoice' => $line['invoice_id'], 'origin' => 'company', 'tab' => 'invoices']) }}">{{ $line['invoice_number'] }}</a></td>
                                         <td class="crm-table-number">{{ $line['total'] }} ₼</td>
@@ -221,10 +226,10 @@
                                         <td class="crm-table-number font-semibold text-red-600">{{ $line['remaining'] }} ₼</td>
                                         <td class="whitespace-nowrap">{{ $line['due_date_label'] }}</td>
                                         <td class="whitespace-nowrap">
-                                            @if ($line['is_overdue']) <span class="inline-flex rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700">Просрочено на {{ $line['days_overdue'] }} дн.</span>
+                                            @if ($line['is_overdue']) <span class="inline-flex rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700">{{ __('companies.financial.overdue_days', ['days' => $line['days_overdue']]) }}</span>
                                             @elseif ($line['payment_status'] === 'partially_paid')
                                                 @include('partials.badge', ['status' => 'partially_paid'])
-                                            @else <span class="inline-flex rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700">К оплате</span> @endif
+                                            @else <span class="inline-flex rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700">{{ __('companies.financial.payable') }}</span> @endif
                                         </td>
                                     </x-tables.clickable-row>
                                 @endforeach
@@ -238,7 +243,7 @@
 
         @if ($subscriptionPeriodDebts['anomalies'] !== [])
             <div class="mx-4 mb-4 border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm text-yellow-800">
-                Есть строки подписок без корректно указанного расчётного периода: {{ $subscriptionPeriodDebtAnomalyCount }}.
+                {{ __('companies.financial.anomaly', ['count' => $subscriptionPeriodDebtAnomalyCount]) }}
             </div>
         @endif
         </div>
@@ -249,31 +254,31 @@
     {{-- Основная информация --}}
     <section data-testid="company-information" class="mb-5 overflow-hidden border-y border-slate-200 bg-white">
         <div class="border-b border-slate-200 px-4 py-3">
-            <h2 class="text-sm font-semibold text-slate-900">Основная информация</h2>
+            <h2 class="text-sm font-semibold text-slate-900">{{ __('companies.information.title') }}</h2>
         </div>
 
         <dl class="grid grid-cols-1 gap-x-8 px-4 sm:grid-cols-2">
                     @if ($company->voen)
                         <div data-testid="company-voen" class="border-b border-slate-100 py-3">
-                            <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">VÖEN (ИНН)</dt>
+                            <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{{ __('companies.information.voen') }}</dt>
                             <dd class="mt-1 font-mono text-sm font-semibold text-slate-900">{{ $company->voen }}</dd>
                         </div>
                     @endif
                     @if ($company->email)
                         <div data-testid="company-email" class="border-b border-slate-100 py-3">
-                            <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Электронная почта</dt>
+                            <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{{ __('companies.information.email') }}</dt>
                             <dd class="mt-1 text-sm"><a href="mailto:{{ $company->email }}" class="text-blue-600 hover:underline">{{ $company->email }}</a></dd>
                         </div>
                     @endif
                     @if ($company->phone)
                         <div data-testid="company-phone" class="border-b border-slate-100 py-3">
-                            <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Телефон</dt>
+                            <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{{ __('companies.information.phone') }}</dt>
                             <dd class="mt-1 text-sm"><a href="tel:{{ $company->phone }}" class="text-slate-900 hover:text-blue-600">{{ $company->phone }}</a></dd>
                         </div>
                     @endif
                     @if ($company->website)
                         <div data-testid="company-website" class="border-b border-slate-100 py-3">
-                            <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Сайт</dt>
+                            <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{{ __('companies.information.website') }}</dt>
                             <dd class="mt-1 text-sm">
                                 <a href="{{ $company->website }}" target="_blank" rel="noopener noreferrer"
                                     class="text-blue-600 hover:underline inline-flex items-center gap-1">
@@ -287,13 +292,13 @@
                     @endif
                     @if ($company->legal_address)
                         <div data-testid="company-legal-address" class="border-b border-slate-100 py-3">
-                            <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Юридический адрес</dt>
+                            <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{{ __('companies.information.legal_address') }}</dt>
                             <dd class="mt-1 text-sm text-slate-900">{{ $company->legal_address }}</dd>
                         </div>
                     @endif
                     @if ($company->actual_address)
                         <div data-testid="company-actual-address" class="border-b border-slate-100 py-3">
-                            <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Фактический адрес</dt>
+                            <dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{{ __('companies.information.actual_address') }}</dt>
                             <dd class="mt-1 text-sm text-slate-900">{{ $company->actual_address }}</dd>
                         </div>
                     @endif
@@ -301,22 +306,22 @@
 
                 @if ($company->bank_name || $company->iban || $company->bank_code || $company->bank_voen || $company->swift)
                     <div data-testid="company-bank-details" class="border-t border-slate-200 px-4 py-3">
-                        <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Банковские реквизиты</h3>
+                        <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('companies.information.banking') }}</h3>
                         <dl class="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
                             @if ($company->bank_name)
-                                <div class="py-2"><dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Банк</dt><dd class="mt-1 text-sm font-medium text-slate-900">{{ $company->bank_name }}</dd></div>
+                                <div class="py-2"><dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{{ __('companies.information.bank') }}</dt><dd class="mt-1 text-sm font-medium text-slate-900">{{ $company->bank_name }}</dd></div>
                             @endif
                             @if ($company->iban)
                                 <div class="py-2"><dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">IBAN</dt><dd class="mt-1 break-all font-mono text-xs text-slate-900">{{ $company->iban }}</dd></div>
                             @endif
                             @if ($company->bank_code)
-                                <div class="py-2"><dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Код банка</dt><dd class="mt-1 font-mono text-sm text-slate-900">{{ $company->bank_code }}</dd></div>
+                                <div class="py-2"><dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{{ __('companies.information.bank_code') }}</dt><dd class="mt-1 font-mono text-sm text-slate-900">{{ $company->bank_code }}</dd></div>
                             @endif
                             @if ($company->swift)
                                 <div class="py-2"><dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">SWIFT</dt><dd class="mt-1 font-mono text-sm text-slate-900">{{ $company->swift }}</dd></div>
                             @endif
                             @if ($company->bank_voen)
-                                <div class="py-2"><dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">VÖEN банка</dt><dd class="mt-1 font-mono text-sm text-slate-900">{{ $company->bank_voen }}</dd></div>
+                                <div class="py-2"><dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{{ __('companies.information.bank_voen') }}</dt><dd class="mt-1 font-mono text-sm text-slate-900">{{ $company->bank_voen }}</dd></div>
                             @endif
                         </dl>
                     </div>
@@ -324,7 +329,7 @@
 
                 @if ($company->comment)
                     <div class="border-t border-slate-200 px-4 py-3">
-                        <h3 class="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Примечание</h3>
+                        <h3 class="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('companies.information.note') }}</h3>
                         <p class="whitespace-pre-line text-sm text-slate-700">{{ $company->comment }}</p>
                     </div>
                 @endif
@@ -332,7 +337,7 @@
     </section>
 
     {{-- Связанные разделы --}}
-    <div data-testid="company-tabs" class="overflow-hidden border-y border-slate-200 bg-white"
+    <div data-testid="company-tabs" class="overflow-visible border-y border-slate-200 bg-white"
             x-data="{
                 tab: @js($activeTab),
                 selectTab(value) {
@@ -344,20 +349,20 @@
             }">
 
             {{-- Компактная навигация по связанным данным --}}
-            <div class="flex flex-col gap-2 border-b border-slate-200 px-4 sm:flex-row sm:items-center sm:justify-between">
-                <nav class="-mb-px flex min-w-0 gap-5 overflow-x-auto" aria-label="Tabs">
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4">
+                <nav class="-mb-px flex min-w-0 flex-1 gap-5 overflow-x-auto" aria-label="Tabs">
                     <button @click="selectTab('contacts')"
                         :class="tab === 'contacts' ? 'border-blue-600 text-blue-600' :
                             'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'"
                         class="whitespace-nowrap border-b-2 px-1 py-3 text-xs font-semibold transition">
-                        Контакты ({{ $company->contacts->count() }})
+                        {{ __('companies.tabs.contacts') }} ({{ $company->contacts->count() }})
                     </button>
                     @can('viewAny', \App\Models\Contract::class)
                         <button @click="selectTab('contracts')"
                             :class="tab === 'contracts' ? 'border-blue-600 text-blue-600' :
                                 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'"
                             class="whitespace-nowrap border-b-2 px-1 py-3 text-xs font-semibold transition">
-                            Договоры ({{ $company->contracts->count() }})
+                            {{ __('companies.tabs.contracts') }} ({{ $company->contracts->count() }})
                         </button>
                     @endcan
                     @can('viewFinancials', $company)
@@ -366,7 +371,7 @@
                                 :class="tab === 'invoices' ? 'border-blue-600 text-blue-600' :
                                     'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'"
                                 class="whitespace-nowrap border-b-2 px-1 py-3 text-xs font-semibold transition">
-                                Инвойсы ({{ $company->invoices->count() }})
+                                {{ __('companies.tabs.invoices') }} ({{ $company->invoices->count() }})
                             </button>
                         @endcan
                         @can('viewAny', \App\Models\Payment::class)
@@ -374,7 +379,7 @@
                                 :class="tab === 'payments' ? 'border-blue-600 text-blue-600' :
                                     'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'"
                                 class="whitespace-nowrap border-b-2 px-1 py-3 text-xs font-semibold transition">
-                                Платежи ({{ $company->payments->count() }})
+                                {{ __('companies.tabs.payments') }} ({{ $company->payments->count() }})
                             </button>
                         @endcan
                     @endcan
@@ -382,24 +387,24 @@
                         :class="tab === 'activity' ? 'border-blue-600 text-blue-600' :
                             'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'"
                         class="whitespace-nowrap border-b-2 px-1 py-3 text-xs font-semibold transition">
-                        Активность
+                        {{ __('companies.tabs.activity') }}
                     </a>
                 </nav>
-                <div class="flex shrink-0 items-center gap-2 pb-2 sm:pb-0 sm:pl-4">
-                    <form x-show="tab === 'activity'" x-cloak method="GET" class="relative w-full sm:w-44"
+                <div class="flex shrink-0 items-center gap-2 sm:pl-4">
+                    <form x-show="tab === 'activity'" x-cloak method="GET" class="relative w-44 max-w-full"
                         x-data="{
                             open: false,
                             selectedCategory: @js($activityCategory?->value ?? ''),
                             categories: [
-                                { value: '', label: 'Все события' },
-                                { value: 'contacts', label: 'Контакты' },
-                                { value: 'contracts', label: 'Договоры' },
-                                { value: 'invoices', label: 'Инвойсы' },
-                                { value: 'payments', label: 'Платежи' },
-                                { value: 'documents', label: 'Документы' },
+                                { value: '', label: @js(__('activity.filters.all')) },
+                                { value: 'contacts', label: @js(__('activity.categories.contacts')) },
+                                { value: 'contracts', label: @js(__('activity.categories.contracts')) },
+                                { value: 'invoices', label: @js(__('activity.categories.invoices')) },
+                                { value: 'payments', label: @js(__('activity.categories.payments')) },
+                                { value: 'documents', label: @js(__('activity.categories.documents')) },
                             ],
                             get selectedLabel() {
-                                return this.categories.find(category => category.value === this.selectedCategory)?.label ?? 'Все события';
+                                return this.categories.find(category => category.value === this.selectedCategory)?.label ?? @js(__('activity.filters.all'));
                             },
                             selectCategory(category) {
                                 this.selectedCategory = category.value;
@@ -412,28 +417,39 @@
                         <input type="hidden" name="activity_category" x-model="selectedCategory">
 
                         <button type="button" x-on:click="open = !open"
-                            class="relative w-full px-3 py-2 pr-16 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition text-left"
-                            aria-haspopup="true" x-bind:aria-expanded="open" aria-label="Фильтр активности">
-                            <span x-text="selectedLabel"
-                                :class="selectedCategory ? 'crm-filter-selected' : 'crm-filter-neutral'"></span>
-                            <span class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
-                                <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            class="flex h-9 w-full items-center gap-2 px-2 text-left text-sm text-gray-600 outline-none transition hover:text-blue-600 focus:outline-none"
+                            :class="open ? 'text-blue-600' : ''"
+                            aria-haspopup="true" x-bind:aria-expanded="open" aria-label="{{ __('activity.filters.label') }}">
+                            <svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M4 5h16l-6.5 7.25V18l-3 1.5v-7.25L4 5Z" />
+                            </svg>
+                            <span class="min-w-0 flex-1 truncate" x-text="selectedLabel"></span>
+                            <span class="shrink-0">
+                                <svg class="h-4 w-4 transition-transform" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                                 </svg>
                             </span>
                         </button>
 
                         <div x-show="open" x-cloak x-transition
-                            class="absolute z-30 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                            class="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
                             <button type="button" x-on:click="selectCategory(categories[0])"
-                                class="w-full px-3 py-2.5 text-left text-sm text-gray-600 hover:bg-gray-50 transition">
-                                Все события
+                                class="flex w-full items-center justify-between px-3 py-2 text-left text-sm transition hover:bg-gray-50"
+                                :class="selectedCategory === '' ? 'bg-blue-50/70 text-blue-700' : 'text-gray-700'">
+                                <span>{{ __('activity.filters.all') }}</span>
+                                <svg x-show="selectedCategory === ''" x-cloak class="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m5 12 4 4L19 7" />
+                                </svg>
                             </button>
-                            <div class="border-t border-gray-100"></div>
+                            <div class="mx-2 border-t border-gray-100"></div>
                             <template x-for="category in categories.slice(1)" :key="category.value">
                                 <button type="button" x-on:click="selectCategory(category)"
-                                    class="w-full px-3 py-2.5 text-left text-sm hover:bg-blue-50 hover:text-blue-700 transition">
+                                    class="flex w-full items-center justify-between px-3 py-2 text-left text-sm text-gray-700 transition hover:bg-gray-50"
+                                    :class="selectedCategory === category.value ? 'bg-blue-50/70 text-blue-700' : ''">
                                     <span x-text="category.label"></span>
+                                    <svg x-show="selectedCategory === category.value" x-cloak class="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m5 12 4 4L19 7" />
+                                    </svg>
                                 </button>
                             </template>
                         </div>
@@ -441,19 +457,19 @@
                     @can('create', [\App\Models\CompanyContact::class, $company])
                         <a x-show="tab === 'contacts'" href="{{ route('companies.contacts.create', ['company' => $company, 'origin' => 'company', 'tab' => 'contacts']) }}"
                             class="crm-light-action">
-                            <span aria-hidden="true">+</span> Контакт
+                            <span aria-hidden="true">+</span> {{ __('companies.actions.add_contact') }}
                         </a>
                     @endcan
                     @can('create', \App\Models\Contract::class)
                         @can('viewAny', \App\Models\Contract::class)
                             <a x-show="tab === 'contracts'" x-cloak href="{{ route('companies.contracts.create', ['company' => $company, 'origin' => 'company', 'tab' => 'contracts']) }}"
                                 class="crm-light-action">
-                                <span aria-hidden="true">+</span> Договор
+                                <span aria-hidden="true">+</span> {{ __('companies.actions.create_contract') }}
                             </a>
                         @else
                             <a href="{{ route('companies.contracts.create', ['company' => $company]) }}"
                                 class="crm-light-action">
-                                <span aria-hidden="true">+</span> Договор
+                                <span aria-hidden="true">+</span> {{ __('companies.actions.create_contract') }}
                             </a>
                         @endcan
                     @endcan
@@ -464,7 +480,7 @@
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
                                 </svg>
-                                Выставить счёт
+                                {{ __('companies.actions.create_invoice') }}
                             </a>
                         @endcan
                     @endif
@@ -475,8 +491,8 @@
             <div x-show="tab === 'activity'" x-cloak class="p-4 sm:p-5">
                 @if ($activityEvents->isEmpty())
                     <div class="px-1 py-8 text-center">
-                        <p class="text-sm font-medium text-slate-700">Событий пока нет.</p>
-                        <p class="mt-1 text-xs text-slate-500">Новые действия по компании будут появляться здесь.</p>
+                        <p class="text-sm font-medium text-slate-700">{{ __('activity.empty.title') }}</p>
+                        <p class="mt-1 text-xs text-slate-500">{{ __('activity.empty.description') }}</p>
                     </div>
                 @else
                     <div class="relative max-h-80 overflow-y-auto overflow-x-hidden" data-testid="company-activity-timeline" style="scrollbar-gutter: stable;">
@@ -509,7 +525,7 @@
                     </div>
                     @if ($activityPage->hasMorePages())
                         <div class="pt-4 text-center">
-                            <a href="{{ $activityPage->nextPageUrl() }}" class="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline">Показать ещё</a>
+                            <a href="{{ $activityPage->nextPageUrl() }}" class="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline">{{ __('activity.actions.load_more') }}</a>
                         </div>
                     @endif
                 @endif
@@ -521,10 +537,10 @@
                     <table class="crm-table">
                         <thead>
                             <tr>
-                                <th>Контакт</th>
-                                <th>Роль</th>
-                                <th>Телефон и e-mail</th>
-                                <th>Комментарий</th>
+                                <th>{{ __('contacts.table.contact') }}</th>
+                                <th>{{ __('contacts.fields.role') }}</th>
+                                <th>{{ __('contacts.table.phone_email') }}</th>
+                                <th>{{ __('contacts.sections.comment') }}</th>
                                 <th class="crm-table-actions"></th>
                             </tr>
                         </thead>
@@ -540,7 +556,14 @@
                                     </td>
                                     <td>
                                         <span class="crm-badge crm-badge-neutral">
-                                            {{ $contact->role ?? 'Контакт' }}
+                                            {{ match ($contact->role) {
+                                                'director' => __('contacts.roles.director'),
+                                                'accountant' => __('contacts.roles.accountant'),
+                                                'manager' => __('contacts.roles.manager'),
+                                                'technical' => __('contacts.roles.technical'),
+                                                'other' => __('contacts.roles.other'),
+                                                default => $contact->role ?? __('contacts.table.contact'),
+                                            } }}
                                         </span>
                                     </td>
                                     <td>
@@ -557,7 +580,7 @@
                                             @can('update', $contact)
                                                 <a href="{{ route('contacts.edit', ['contact' => $contact, 'origin' => 'company', 'tab' => 'contacts']) }}"
                                                     class="crm-table-icon-action crm-table-icon-action-primary"
-                                                    aria-label="Редактировать контакт" title="Редактировать">
+                                                    aria-label="{{ __('contacts.actions.edit') }}" title="{{ __('companies.actions.edit') }}">
                                                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m15.232 5.232 3.536 3.536M4 20l4.5-1L18.768 8.732a2.5 2.5 0 0 0-3.536-3.536L4.5 15.5 4 20Z" />
                                                     </svg>
@@ -565,13 +588,13 @@
                                             @endcan
                                             @can('delete', $contact)
                                                 <form class="inline-flex m-0 p-0" action="{{ route('contacts.destroy', $contact) }}" method="POST"
-                                                    onsubmit="return confirm('Удалить контактное лицо?')">
+                                                    onsubmit="return confirm('{{ __('contacts.actions.delete_confirm') }}')">
                                                     @csrf
                                                     @method('DELETE')
                                                     <input type="hidden" name="origin" value="company">
                                                     <input type="hidden" name="tab" value="contacts">
                                                     <button type="submit" class="crm-table-icon-action crm-table-icon-action-danger"
-                                                        aria-label="Удалить контакт" title="Удалить">
+                                                        aria-label="{{ __('contacts.actions.delete') }}" title="{{ __('companies.actions.delete') }}">
                                                         <svg fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">
                                                             <path d="M4 7h16" />
                                                             <path d="M9 7V4h6v3" />
@@ -588,8 +611,8 @@
                             @empty
                                 <tr>
                                     <td colspan="5" class="crm-table-empty">
-                                        <p>Контакты отсутствуют.</p>
-                                        <p class="text-xs mt-1">Добавьте контактное лицо компании.</p>
+                                        <p>{{ __('contacts.empty.title') }}</p>
+                                        <p class="text-xs mt-1">{{ __('contacts.empty.description') }}</p>
                                     </td>
                                 </tr>
                             @endforelse
@@ -605,21 +628,21 @@
                     <table class="crm-table">
                         <thead>
                             <tr>
-                                <th>Номер договора</th>
-                                <th>Дата начала</th>
-                                <th>Дата окончания</th>
-                                <th>Статус</th>
-                                <th>Предметы договора</th>
+                                <th>{{ __('contracts.index.number') }}</th>
+                                <th>{{ __('contracts.index.start_date') }}</th>
+                                <th>{{ __('contracts.index.end_date') }}</th>
+                                <th>{{ __('contracts.index.status') }}</th>
+                                <th>{{ __('contracts.subjects.table_title') }}</th>
                             </tr>
                         </thead>
                         <tbody>
                             @forelse($company->contracts as $contract)
-                                <x-tables.clickable-row :url="route('contracts.show', ['contract' => $contract, 'origin' => 'company', 'tab' => 'contracts'])" :label="'Открыть договор '.$contract->contract_number">
+                                <x-tables.clickable-row :url="route('contracts.show', ['contract' => $contract, 'origin' => 'company', 'tab' => 'contracts'])" :label="__('contracts.index.open', ['number' => $contract->contract_number])">
                                     <td class="crm-table-number"><a href="{{ route('contracts.show', ['contract' => $contract, 'origin' => 'company', 'tab' => 'contracts']) }}" class="crm-table-primary-link">{{ $contract->contract_number }}</a>
                                     </td>
                                     <td class="crm-table-date">{{ $contract->start_date?->format('d/m/Y') ?? '—' }}</td>
                                     <td class="crm-table-date">
-                                        {{ $contract->end_date?->format('d/m/Y') ?? 'Бессрочный' }}</td>
+                                        {{ $contract->end_date?->format('d/m/Y') ?? __('contracts.show.indefinite') }}</td>
                                     <td>
                                         @include('partials.badge', [
                                             'status' => $contract->effective_status,
@@ -630,7 +653,7 @@
                             @empty
                                 <tr>
                                     <td colspan="5" class="crm-table-empty">
-                                        У компании пока нет договоров.
+                                        {{ __('companies.related.contracts.empty') }}
                                     </td>
                                 </tr>
                             @endforelse
@@ -648,18 +671,18 @@
                     <table class="crm-table">
                         <thead>
                             <tr>
-                                <th>Номер счета</th>
-                                <th>Расчётный период</th>
-                                <th>Выставлен / срок</th>
-                                <th>Сумма</th>
-                                <th>Оплачено / Остаток</th>
-                                <th>Статус</th>
+                                <th>{{ __('invoices.index.number') }}</th>
+                                <th>{{ __('invoices.index.billing_period') }}</th>
+                                <th>{{ __('companies.related.invoices.issue_due') }}</th>
+                                <th>{{ __('companies.related.invoices.amount') }}</th>
+                                <th>{{ __('invoices.index.paid_remaining') }}</th>
+                                <th>{{ __('invoices.index.status') }}</th>
                             </tr>
                         </thead>
                         <tbody>
                             @forelse($company->invoices as $invoice)
                                 @php($paymentSource = $invoicePaymentSources->get($invoice->id))
-                                <x-tables.clickable-row :url="route('invoices.show', ['invoice' => $invoice, 'origin' => 'company', 'tab' => 'invoices'])" :label="'Открыть инвойс '.$invoice->invoice_number">
+                                <x-tables.clickable-row :url="route('invoices.show', ['invoice' => $invoice, 'origin' => 'company', 'tab' => 'invoices'])" :label="__('invoices.index.open', ['number' => $invoice->invoice_number])">
                                     <td class="crm-table-number">
                                         <a href="{{ route('invoices.show', ['invoice' => $invoice, 'origin' => 'company', 'tab' => 'invoices']) }}" class="crm-table-primary-link">{{ $invoice->invoice_number }}</a>
                                     </td>
@@ -673,10 +696,10 @@
                                     <td>
                                         <div class="text-xs text-slate-900">{{ $invoice->issue_date ? \Illuminate\Support\Carbon::parse($invoice->issue_date)->format('d/m/Y') : '—' }}</div>
                                         <div class="mt-0.5 flex items-center gap-1 text-xs font-medium text-slate-500">
-                                            <span>до {{ $invoice->due_date ? \Illuminate\Support\Carbon::parse($invoice->due_date)->format('d/m/Y') : '—' }}</span>
+                                            <span>{{ __('companies.related.invoices.until') }} {{ $invoice->due_date ? \Illuminate\Support\Carbon::parse($invoice->due_date)->format('d/m/Y') : '—' }}</span>
                                             @if ($invoice->is_overdue)
                                                 <span
-                                                    class="crm-badge crm-badge-danger">Просрочен</span>
+                                                    class="crm-badge crm-badge-danger">{{ __('invoices.index.overdue') }}</span>
                                             @endif
                                         </div>
                                     </td>
@@ -684,20 +707,20 @@
                                         {{ number_format($invoice->total_amount, 2) }} ₼
                                     </td>
                                     <td class="text-xs">
-                                        <div class="text-green-600 font-medium">Оплачено:
+                                        <div class="text-green-600 font-medium">{{ __('invoices.index.paid') }}
                                             {{ number_format($invoice->applied_amount, 2) }} ₼</div>
                                         @if ($paymentSource['credit_balance_applied_minor'] > 0)
-                                            <div class="text-blue-600 font-medium mt-0.5">Из баланса: {{ number_format((float) $paymentSource['credit_balance_applied_amount'], 2) }} ₼</div>
+                                            <div class="text-blue-600 font-medium mt-0.5">{{ __('invoices.index.from_balance') }} {{ number_format((float) $paymentSource['credit_balance_applied_amount'], 2) }} ₼</div>
                                         @endif
                                         @if ($invoice->overpayment_amount > 0)
-                                            <div class="text-blue-600 font-medium mt-0.5">Переплата:
+                                            <div class="text-blue-600 font-medium mt-0.5">{{ __('invoices.index.overpayment') }}
                                                 {{ number_format($invoice->overpayment_amount, 2) }} ₼</div>
                                         @endif
                                         @if ((float) ($invoice->pending_amount ?? 0) > 0)
-                                            <div class="text-amber-600 font-medium mt-0.5">Ожидает подтверждения: {{ number_format((float) $invoice->pending_amount, 2) }} ₼</div>
+                                            <div class="text-amber-600 font-medium mt-0.5">{{ __('invoices.index.pending') }} {{ number_format((float) $invoice->pending_amount, 2) }} ₼</div>
                                         @endif
                                         @if ($invoice->remaining_amount > 0)
-                                            <div class="text-red-500 font-medium mt-0.5">Долг:
+                                            <div class="text-red-500 font-medium mt-0.5">{{ __('invoices.index.debt') }}
                                                 {{ number_format($invoice->remaining_amount, 2) }} ₼</div>
                                         @endif
                                     </td>
@@ -707,7 +730,7 @@
                                 </x-tables.clickable-row>
                             @empty
                                 <tr>
-                                    <td colspan="6" class="crm-table-empty">У компании пока нет инвойсов.</td>
+                                    <td colspan="6" class="crm-table-empty">{{ __('companies.related.invoices.empty') }}</td>
                                 </tr>
                             @endforelse
                         </tbody>
@@ -725,12 +748,12 @@
                     <table class="crm-table">
                         <thead>
                             <tr>
-                                <th>Дата платежа</th>
-                                <th>Счет (Инвойс)</th>
-                                <th>Сумма платежа</th>
-                                <th>Способ</th>
-                                <th>Статус</th>
-                                <th>Транзакция / Описание</th>
+                                <th>{{ __('payments.labels.date') }}</th>
+                                <th>{{ __('companies.related.payments.invoice') }}</th>
+                                <th>{{ __('payments.labels.amount') }}</th>
+                                <th>{{ __('companies.related.payments.method') }}</th>
+                                <th>{{ __('companies.related.payments.status') }}</th>
+                                <th>{{ __('companies.related.payments.transaction') }}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -758,9 +781,9 @@
                                     </td>
                                     <td class="text-sm text-slate-700">
                                         {{ match ($payment->payment_method) {
-                                            'transfer' => 'Безналичный',
-                                            'card' => 'Карта',
-                                            'cash' => 'Наличные',
+                                            'transfer' => __('common.payment_methods.transfer'),
+                                            'card' => __('common.payment_methods.card'),
+                                            'cash' => __('common.payment_methods.cash'),
                                             default => $payment->payment_method,
                                         } }}
                                     </td>
@@ -776,7 +799,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="6" class="crm-table-empty">Платежи отсутствуют.</td>
+                                    <td colspan="6" class="crm-table-empty">{{ __('companies.related.payments.empty') }}</td>
                                 </tr>
                             @endforelse
                         </tbody>

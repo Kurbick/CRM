@@ -17,7 +17,7 @@ final class ResetUserPassword
     {
         if ($actor->is($user)) {
             $exception = ValidationException::withMessages([
-                'password' => 'Для собственной учётной записи используйте обычную смену пароля.',
+                'password' => __('admin.errors.self_password'),
             ]);
             $exception->errorBag = 'resetPassword';
             throw $exception;

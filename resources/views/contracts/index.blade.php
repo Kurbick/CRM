@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Договоры')
+@section('title', __('contracts.index.title'))
 
 @section('content')
 
@@ -35,11 +35,11 @@
     <div class="mb-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
             <h1 class="text-2xl font-bold text-gray-900">
-                Договоры
+                {{ __('contracts.index.title') }}
             </h1>
 
             <p class="text-sm text-gray-500 mt-1">
-                Управление договорами компаний, сроками действия и статусами
+                {{ __('contracts.index.description') }}
             </p>
         </div>
 
@@ -53,7 +53,7 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
                 </svg>
 
-                Создать договор
+                {{ __('contracts.actions.create') }}
                 </a>
             </div>
         @endcan
@@ -86,7 +86,7 @@
                 </span>
 
                 <input type="text" name="search" value="{{ $search }}"
-                    placeholder="Поиск по номеру договора или компании..."
+                    placeholder="{{ __('contracts.index.search_placeholder') }}"
                     class="crm-control-with-leading-icon w-full pl-10 pr-4 py-2 border border-gray-200
                               rounded-lg text-sm focus:border-blue-500
                               focus:ring-1 focus:ring-blue-500
@@ -169,7 +169,7 @@
                     selectCompany(filteredCompanies[0]);
                 }
             "
-                        placeholder="Все компании" autocomplete="off"
+                        placeholder="{{ __('contracts.index.all_companies') }}" autocomplete="off"
                         class="w-full px-3 py-2 pr-16 border border-gray-200
                    rounded-lg text-sm focus:border-blue-500
                    focus:ring-1 focus:ring-blue-500
@@ -180,7 +180,7 @@
                     <button type="button" x-show="query.length > 0" x-cloak x-on:click="clearCompany()"
                         class="absolute inset-y-0 right-8 flex items-center
                    px-2 text-gray-400 hover:text-red-500 transition"
-                        title="Сбросить компанию">
+                        title="{{ __('contracts.index.clear_company') }}">
 
                         ✕
                     </button>
@@ -209,7 +209,7 @@
                         class="w-full px-3 py-2.5 text-left text-sm
                    text-gray-600 hover:bg-gray-50 transition">
 
-                        Все компании
+                        {{ __('contracts.index.all_companies') }}
                     </button>
 
                     <div class="border-t border-gray-100"></div>
@@ -230,7 +230,7 @@
                     {{-- Ничего не найдено --}}
                     <div x-show="filteredCompanies.length === 0" class="px-3 py-4 text-center text-sm text-gray-400">
 
-                        Компании не найдены
+                        {{ __('contracts.index.companies_not_found') }}
                     </div>
                 </div>
             </div>
@@ -243,15 +243,15 @@
             
                 statuses: [{
                         value: '',
-                        label: 'Все статусы',
+                        label: @js(__('contracts.index.all_statuses')),
                     },
                     {
                         value: 'active',
-                        label: 'Активный',
+                        label: @js(__('contracts.statuses.active_form')),
                     },
                     {
                         value: 'terminated',
-                        label: 'Расторгнут',
+                        label: @js(__('contracts.statuses.terminated')),
                     },
                 ],
             
@@ -262,7 +262,7 @@
             
                     return status ?
                         status.label :
-                        'Все статусы';
+                        @js(__('contracts.index.all_statuses'));
                 },
             
                 selectStatus(status) {
@@ -300,7 +300,7 @@
 
                     <button type="button" x-on:click="selectStatus(statuses[0])"
                         class="w-full px-3 py-2.5 text-left text-sm text-gray-600 hover:bg-gray-50 transition">
-                        Все статусы
+                        {{ __('contracts.index.all_statuses') }}
                     </button>
                     <div class="border-t border-gray-100"></div>
                     <template x-for="status in statuses.slice(1)" :key="status.value">
@@ -320,7 +320,7 @@
                     class="px-4 py-2 bg-gray-100 hover:bg-gray-200
                                text-gray-700 text-sm font-medium rounded-lg
                                transition">
-                    Найти
+                    {{ __('contracts.index.find') }}
                 </button>
 
                 @if ($search !== '' || $status || $companyId || $sortBy !== 'start_date' || $sortDirection !== 'desc')
@@ -328,7 +328,7 @@
                         class="px-4 py-2 border border-gray-200 hover:bg-gray-50
                               text-gray-500 text-sm font-medium rounded-lg
                               transition text-center">
-                        Сбросить
+                        {{ __('contracts.index.reset') }}
                     </a>
                 @endif
             </div>
@@ -338,7 +338,7 @@
     {{-- Список договоров --}}
     <div class="crm-table-shell">
         <div class="crm-table-heading">
-            <span class="crm-table-heading-title">Договоры</span>
+            <span class="crm-table-heading-title">{{ __('contracts.index.title') }}</span>
             <span class="crm-table-heading-count">{{ $contracts->total() }}</span>
         </div>
         <div class="crm-table-scroll">
@@ -348,21 +348,21 @@
                     <tr>
 
                         <th>
-                            Номер договора
+                            {{ __('contracts.index.number') }}
                         </th>
 
                         <th>
-                            Компания
+                            {{ __('contracts.index.company') }}
                         </th>
 
                         <th>
                             <a href="{{ $startSortUrl }}"
                                 class="crm-table-sort"
                                 title="{{ $currentSortBy === 'start_date' && $currentSortDirection === 'desc'
-                                    ? 'Показать сначала старые даты'
-                                    : 'Показать сначала новые даты' }}">
+                                    ? __('contracts.index.sort_start_old')
+                                    : __('contracts.index.sort_start_new') }}">
 
-                                <span>Дата начала</span>
+                                <span>{{ __('contracts.index.start_date') }}</span>
 
                                 <span class="crm-table-sort-indicator {{ $currentSortBy === 'start_date' ? 'crm-table-sort-indicator-active' : '' }}">
 
@@ -379,10 +379,10 @@
                             <a href="{{ $endSortUrl }}"
                                 class="crm-table-sort"
                                 title="{{ $currentSortBy === 'end_date' && $currentSortDirection === 'desc'
-                                    ? 'Показать сначала ранние даты окончания'
-                                    : 'Показать сначала поздние даты окончания' }}">
+                                    ? __('contracts.index.sort_end_early')
+                                    : __('contracts.index.sort_end_late') }}">
 
-                                <span>Дата окончания</span>
+                                <span>{{ __('contracts.index.end_date') }}</span>
 
                                 <span class="crm-table-sort-indicator {{ $currentSortBy === 'end_date' ? 'crm-table-sort-indicator-active' : '' }}">
 
@@ -396,7 +396,7 @@
                         </th>
 
                         <th>
-                            Статус
+                            {{ __('contracts.index.status') }}
                         </th>
 
                         <th class="crm-table-actions">
@@ -408,7 +408,7 @@
 
                     @forelse($contracts as $contract)
 
-                        <x-tables.clickable-row :url="route('contracts.show', $contract)" :label="'Открыть договор '.$contract->contract_number">
+                        <x-tables.clickable-row :url="route('contracts.show', $contract)" :label="__('contracts.index.open', ['number' => $contract->contract_number])">
 
                             {{-- Номер договора --}}
                             <td>
@@ -452,12 +452,12 @@
                                         <div
                                             class="text-[10px] text-red-500 font-medium
                        uppercase tracking-wider mt-0.5">
-                                            Срок истёк
+                                            {{ __('contracts.index.expired') }}
                                         </div>
                                     @endif
                                 @else
                                     <span class="text-slate-400">
-                                        Бессрочный
+                                        {{ __('contracts.index.indefinite') }}
                                     </span>
                                 @endif
 
@@ -468,6 +468,12 @@
 
                                 @include('partials.badge', [
                                     'status' => $contract->effective_status,
+                                    'label' => match ($contract->effective_status) {
+                                        'active' => __('contracts.statuses.active'),
+                                        'terminated' => __('contracts.statuses.terminated'),
+                                        'expired' => __('contracts.statuses.expired'),
+                                        default => $contract->effective_status,
+                                    },
                                 ])
                             </td>
 
@@ -478,7 +484,7 @@
 
                                     @can('update', $contract)
                                         <a href="{{ route('contracts.edit', ['contract' => $contract, ...$contractEditContext]) }}"
-                                            class="text-gray-400 hover:text-gray-600 transition" title="Редактировать">
+                                            class="text-gray-400 hover:text-gray-600 transition" title="{{ __('contracts.actions.edit') }}">
 
                                         <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 
@@ -498,16 +504,16 @@
 
                         <tr>
                             <td colspan="6" class="crm-table-empty">
-                                <span class="crm-table-empty-message">Договоров не найдено.</span>
+                                <span class="crm-table-empty-message">{{ __('contracts.index.not_found') }}</span>
 
                                 @if ($search !== '' || $status || $companyId || $sortBy !== 'start_date' || $sortDirection !== 'desc')
                                     <a href="{{ route('contracts.index') }}" class="crm-table-empty-action">
-                                        Сбросить фильтры
+                                        {{ __('contracts.index.reset_filters') }}
                                     </a>
                                 @else
                                     @can('create', \App\Models\Contract::class)
                                         <a href="{{ route('contracts.create') }}" class="crm-table-empty-action">
-                                            Создать первый договор
+                                            {{ __('contracts.index.create_first') }}
                                         </a>
                                     @endcan
                                 @endif

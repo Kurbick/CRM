@@ -14,7 +14,7 @@ final class UpdateUserRole
     {
         if ($actor->is($user)) {
             $exception = ValidationException::withMessages([
-                'role_id' => 'Нельзя изменить группу собственной учётной записи.',
+                'role_id' => __('admin.errors.self_role'),
             ]);
             $exception->errorBag = 'updateRole';
             throw $exception;

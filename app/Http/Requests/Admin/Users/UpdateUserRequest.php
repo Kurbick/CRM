@@ -30,10 +30,10 @@ class UpdateUserRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'name.required' => 'Введите имя пользователя.',
-            'email.required' => 'Введите email пользователя.',
-            'email.email' => 'Укажите корректный email.',
-            'email.unique' => 'Пользователь с таким email уже существует.',
+            'name.required' => __('admin.users.validation.name_required'),
+            'email.required' => __('admin.users.validation.email_required'),
+            'email.email' => __('admin.users.validation.email_email'),
+            'email.unique' => __('admin.users.validation.email_unique'),
         ];
     }
 }

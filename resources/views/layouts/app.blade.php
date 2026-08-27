@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="{{ app()->getLocale() }}">
 
 <head>
     <meta charset="UTF-8">
@@ -93,7 +93,7 @@
                     <div class="relative flex items-start justify-between gap-4 border border-green-200 bg-green-50 px-4 py-3 pr-10 text-sm text-green-800"
                         role="status" aria-live="polite">
                         {{ session('success') }}
-                        <button type="button" x-on:click="visible = false" aria-label="Закрыть сообщение"
+                        <button type="button" x-on:click="visible = false" aria-label="{{ __('navigation.shell.close_message') }}"
                             class="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-lg leading-none text-green-700 transition hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-500">
                             <span aria-hidden="true">&times;</span>
                         </button>

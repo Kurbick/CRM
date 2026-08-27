@@ -40,7 +40,7 @@ class InvoiceBillingPeriodPresenter
             if ($coveredEnd !== null && $period['start']->gt($coveredEnd->addDay())) {
                 return [
                     'kind' => 'disjoint',
-                    'label' => 'Несколько расчётных периодов',
+                    'label' => __('invoices.billing.multiple'),
                     'period_count' => $periods->count(),
                     'count_label' => null,
                 ];
@@ -114,13 +114,13 @@ class InvoiceBillingPeriodPresenter
     {
         $lastTwo = $count % 100;
         if ($lastTwo >= 11 && $lastTwo <= 14) {
-            return 'расчётных периодов';
+            return __('invoices.billing.period_many');
         }
 
         return match ($count % 10) {
-            1 => 'расчётный период',
-            2, 3, 4 => 'расчётных периода',
-            default => 'расчётных периодов',
+            1 => __('invoices.billing.period_one'),
+            2, 3, 4 => __('invoices.billing.period_few'),
+            default => __('invoices.billing.period_many'),
         };
     }
 }

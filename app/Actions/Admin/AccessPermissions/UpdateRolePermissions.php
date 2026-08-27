@@ -23,7 +23,7 @@ final class UpdateRolePermissions
                 $lockedRole = Role::query()->lockForUpdate()->findOrFail($role->getKey());
 
                 if ($lockedRole->guard_name !== 'web') {
-                    throw new InvalidArgumentException('Группа должна использовать guard web.');
+                    throw new InvalidArgumentException(__('admin.errors.invalid_guard'));
                 }
 
                 if ($lockedRole->isAdministrator()) {
@@ -32,7 +32,7 @@ final class UpdateRolePermissions
 
                 $managedNames = PermissionRegistry::names();
                 if (array_diff($permissions, $managedNames) !== []) {
-                    throw new InvalidArgumentException('Выбрано неизвестное право доступа.');
+                    throw new InvalidArgumentException(__('admin.access.validation.permission_unknown'));
                 }
 
                 $unknownNames = $lockedRole->permissions()

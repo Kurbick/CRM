@@ -40,14 +40,14 @@ class UpdateOrganizationRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'name.required' => 'Введите название нашей организации.',
-            'name.max' => 'Название организации не должно превышать 255 символов.',
-            'voen.max' => 'VÖEN не должен превышать 20 символов.',
-            'bank_name.max' => 'Название банка не должно превышать 255 символов.',
-            'iban.max' => 'IBAN не должен превышать 50 символов.',
-            'bank_code.max' => 'Код банка не должен превышать 20 символов.',
-            'bank_voen.max' => 'VÖEN банка не должен превышать 20 символов.',
-            'swift.max' => 'SWIFT не должен превышать 20 символов.',
+            'name.required' => __('admin.organization.validation.name_required'),
+            'name.max' => __('admin.organization.validation.name_max'),
+            'voen.max' => __('admin.organization.validation.voen_max'),
+            'bank_name.max' => __('admin.organization.validation.bank_name_max'),
+            'iban.max' => __('admin.organization.validation.iban_max'),
+            'bank_code.max' => __('admin.organization.validation.bank_code_max'),
+            'bank_voen.max' => __('admin.organization.validation.bank_voen_max'),
+            'swift.max' => __('admin.organization.validation.swift_max'),
         ];
     }
 }
