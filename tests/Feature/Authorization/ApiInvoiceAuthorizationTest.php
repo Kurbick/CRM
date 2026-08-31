@@ -597,6 +597,8 @@ class ApiInvoiceAuthorizationTest extends AuthorizationTestCase
     /** @return array<string, mixed> */
     private function invoiceCreationPayload(Contract $contract, string $number): array
     {
+        $order = $this->subjectOrder($contract, ['price' => '100.00']);
+
         return [
             'contract_id' => $contract->id,
             'invoice_number' => $number,
@@ -604,8 +606,9 @@ class ApiInvoiceAuthorizationTest extends AuthorizationTestCase
             'due_date' => '2026-08-31',
             'total_amount' => '999.99',
             'lines' => [[
-                'description' => 'Authorization manual line',
-                'amount' => '100.00',
+                'description' => $order->title,
+                'amount' => $order->price,
+                'order_id' => $order->id,
             ]],
         ];
     }

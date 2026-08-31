@@ -3,12 +3,15 @@
 namespace App\Support;
 
 use App\Models\Invoice;
+use App\Services\ActiveOrganizationContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Collection;
 
 final class DashboardFinancials
 {
+    public function __construct(private readonly ActiveOrganizationContext $organizationContext) {}
+
     /** @var list<string> */
     public const ELIGIBLE_STATUSES = ['issued', 'partially_paid', 'paid'];
 
@@ -33,6 +36,7 @@ final class DashboardFinancials
     public function overview(string $today): array
     {
         $row = Invoice::query()
+            ->tap(fn ($query) => $this->scopeInvoices($query))
             ->whereIn('status', self::ELIGIBLE_STATUSES)
             ->selectRaw('COALESCE(SUM(invoices.total_amount), 0) AS total_invoiced')
             ->selectRaw('COALESCE(SUM('.self::EFFECTIVE_PAID.'), 0) AS total_paid')
@@ -68,6 +72,7 @@ final class DashboardFinancials
 
         return Invoice::query()
             ->whereIn('company_id', $companyIds)
+            ->tap(fn ($query) => $this->scopeInvoices($query))
             ->whereIn('status', self::ELIGIBLE_STATUSES)
             ->groupBy('company_id')
             ->select('company_id')
@@ -83,6 +88,7 @@ final class DashboardFinancials
     public function addEffectiveAmounts(Builder $query, string $today): Builder
     {
         return $query
+            ->tap(fn ($query) => $this->scopeInvoices($query))
             ->whereIn('invoices.status', self::ELIGIBLE_STATUSES)
             ->selectRaw(self::EFFECTIVE_PAID.' AS effective_paid_amount')
             ->selectRaw(self::REMAINING.' AS remaining_amount')
@@ -95,6 +101,7 @@ final class DashboardFinancials
     public function constrainOutstanding(Builder|Relation $query): Builder|Relation
     {
         return $query
+            ->tap(fn ($query) => $this->scopeInvoices($query))
             ->whereIn('invoices.status', self::ELIGIBLE_STATUSES)
             ->whereRaw(self::REMAINING.' > 0');
     }
@@ -102,6 +109,15 @@ final class DashboardFinancials
     public function addRemainingAmount(Builder|Relation $query): Builder|Relation
     {
         return $query->selectRaw(self::REMAINING.' AS dashboard_remaining_amount');
+    }
+
+    public function scopeInvoices(Builder|Relation $query): Builder|Relation
+    {
+        return $this->organizationContext->scopeFor(
+            $query,
+            $this->organizationContext->resolve(),
+            'invoices.issuer_organization_id',
+        );
     }
 
     /** @param  iterable<mixed>  $amounts */

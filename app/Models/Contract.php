@@ -5,11 +5,13 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Services\ActiveOrganizationContext;
 
 class Contract extends Model
 {
     protected $fillable = [
         'company_id',
+        'issuer_organization_id',
         'contract_number',
         'start_date',
         'end_date',
@@ -21,6 +23,18 @@ class Contract extends Model
         'start_date' => 'date',
         'end_date'   => 'date',
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (Contract $contract): void {
+            if ($contract->issuer_organization_id === null) {
+                $organization = app(ActiveOrganizationContext::class)->resolve();
+                if ($organization !== null) {
+                    $contract->issuer_organization_id = $organization->getKey();
+                }
+            }
+        });
+    }
 
     /**
      * Фактический статус договора.
@@ -45,6 +59,11 @@ class Contract extends Model
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
+    }
+
+    public function issuerOrganization(): BelongsTo
+    {
+        return $this->belongsTo(Organization::class, 'issuer_organization_id');
     }
 
     public function orders(): HasMany

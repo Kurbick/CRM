@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Company;
+use App\Models\Organization;
 use App\Support\Access\PermissionName;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -500,6 +501,7 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
     {
         return DB::table('contracts')->insertGetId([
             'company_id' => $company->id,
+            'issuer_organization_id' => Organization::query()->firstOrFail()->id,
             'contract_number' => $number,
             'start_date' => '2026-01-01',
             'status' => 'active',
@@ -518,8 +520,10 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
         ?int $subscriptionId = null,
     ): array {
         $suffix = uniqid('', true);
+        $organizationId = Organization::query()->firstOrFail()->id;
         $contractId = DB::table('contracts')->insertGetId([
             'company_id' => $company->id,
+            'issuer_organization_id' => $organizationId,
             'contract_number' => 'CONTRACT-'.$suffix,
             'start_date' => '2026-01-01',
             'status' => 'active',
@@ -537,6 +541,7 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
         $invoiceId = DB::table('invoices')->insertGetId([
             'company_id' => $company->id,
             'contract_id' => $contractId,
+            'issuer_organization_id' => $organizationId,
             'invoice_number' => $invoiceNumber.'-'.$suffix,
             'issue_date' => '2026-05-01',
             'due_date' => $dueDate,
@@ -564,6 +569,7 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
     {
         $invoiceId = DB::table('invoices')->insertGetId([
             'company_id' => $company->id,
+            'issuer_organization_id' => Organization::query()->firstOrFail()->id,
             'invoice_number' => 'INV-MANUAL-'.uniqid(),
             'issue_date' => '2026-05-01',
             'due_date' => $dueDate,

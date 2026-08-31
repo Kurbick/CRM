@@ -6,6 +6,7 @@ use App\Models\Company;
 use App\Models\Invoice;
 use App\Models\ServiceType;
 use App\Models\Subscription;
+use App\Services\ActiveOrganizationContext;
 use App\Support\DashboardFinancials;
 use DateTimeInterface;
 use Illuminate\Http\JsonResponse;
@@ -16,14 +17,16 @@ class DashboardController extends Controller
      * Общая статистика по всей системе.
      * Один запрос к каждой таблице — быстро и эффективно.
      */
-    public function overview(DashboardFinancials $financials): JsonResponse
+    public function overview(DashboardFinancials $financials, ActiveOrganizationContext $organizationContext): JsonResponse
     {
         $overview = $financials->overview(now()->toDateString());
 
         return response()->json([
             ...$overview,
             'active_companies' => Company::where('status', 'active')->count(),
-            'active_subscriptions' => Subscription::where('status', 'active')->count(),
+            'active_subscriptions' => Subscription::where('status', 'active')
+                ->whereHas('contract', fn ($query) => $this->scopeOrganization($query, $organizationContext))
+                ->count(),
         ]);
     }
 
@@ -31,25 +34,28 @@ class DashboardController extends Controller
      * Список всех компаний с долгами и статистикой.
      * withCount и withSum делают всё в одном SQL запросе.
      */
-    public function companies(DashboardFinancials $financials): JsonResponse
+    public function companies(DashboardFinancials $financials, ActiveOrganizationContext $organizationContext): JsonResponse
     {
         $companies = Company::where('status', '!=', 'archived')
             ->withCount([
                 // Считаем количество активных контрактов
-                'contracts as active_contracts_count' => function ($q) {
+                'contracts as active_contracts_count' => function ($q) use ($organizationContext) {
                     $q->where('status', 'active');
+                    $this->scopeOrganization($q, $organizationContext);
                 },
                 // Считаем количество активных подписок через контракты
-                'contracts as active_subscriptions_count' => function ($q) {
+                'contracts as active_subscriptions_count' => function ($q) use ($organizationContext) {
                     $q->whereHas('subscriptions', function ($sq) {
                         $sq->where('status', 'active');
                     });
+                    $this->scopeOrganization($q, $organizationContext);
                 },
             ])
             ->with([
                 // Последний платёж по каждой компании
-                'payments' => function ($q) {
+                'payments' => function ($q) use ($organizationContext) {
                     $q->where('status', 'confirmed')
+                        ->whereHas('invoice', fn ($invoiceQuery) => $this->scopeOrganization($invoiceQuery, $organizationContext))
                         ->orderBy('payment_date', 'desc')
                         ->limit(1);
                 },
@@ -87,10 +93,11 @@ class DashboardController extends Controller
     /**
      * Детальная статистика по одной компании.
      */
-    public function company(Company $company, DashboardFinancials $financials): JsonResponse
+    public function company(Company $company, DashboardFinancials $financials, ActiveOrganizationContext $organizationContext): JsonResponse
     {
         $invoices = Invoice::query()
             ->where('company_id', $company->id)
+            ->tap(fn ($query) => $this->scopeOrganization($query, $organizationContext))
             ->select([
                 'id',
                 'company_id',
@@ -120,6 +127,9 @@ class DashboardController extends Controller
         $subscriptions = Subscription::query()
             ->whereHas('contract', function ($query) use ($company): void {
                 $query->where('company_id', $company->id);
+            })
+            ->whereHas('contract', function ($query) use ($organizationContext): void {
+                $this->scopeOrganization($query, $organizationContext);
             })
             ->where('status', 'active')
             ->select([
@@ -192,5 +202,15 @@ class DashboardController extends Controller
         return $value instanceof DateTimeInterface
             ? $value->format('Y-m-d')
             : substr((string) $value, 0, 10);
+    }
+
+    private function scopeOrganization($query, ActiveOrganizationContext $organizationContext): void
+    {
+        $organization = $organizationContext->resolve();
+        if ($organization === null) {
+            $query->whereRaw('1 = 0');
+        } else {
+            $query->where('issuer_organization_id', $organization->getKey());
+        }
     }
 }

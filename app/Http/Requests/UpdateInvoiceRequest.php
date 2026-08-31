@@ -31,6 +31,7 @@ class UpdateInvoiceRequest extends FormRequest
             ],
             'invoice_number_sequence' => ['sometimes', 'nullable', 'integer', 'min:1'],
             'invoice_number_manual' => ['sometimes', 'nullable', 'boolean'],
+            'issuer_organization_id' => ['sometimes', 'nullable', 'integer', 'exists:organizations,id'],
             'issue_date' => ['sometimes', 'date_format:Y-m-d'],
             'due_date' => ['sometimes', 'date_format:Y-m-d'],
             'comment' => ['sometimes', 'nullable', 'string'],
@@ -39,6 +40,10 @@ class UpdateInvoiceRequest extends FormRequest
             'contract_id' => 'prohibited',
             'status' => 'prohibited',
             'total_amount' => 'prohibited',
+            'subtotal_amount' => 'prohibited',
+            'vat_enabled' => 'prohibited',
+            'vat_rate' => 'prohibited',
+            'vat_amount' => 'prohibited',
             'period_start' => 'prohibited',
             'period_end' => 'prohibited',
 

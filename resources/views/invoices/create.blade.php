@@ -13,8 +13,7 @@
     $oldCompanyName = $companies->firstWhere('id', (int) $oldCompanyId)?->name ?? '';
     $oldContractId = (string) old('contract_id', $prefilledContract?->id ?? '');
     $oldLines = collect(old('lines', []))
-        ->filter(fn ($line): bool => is_array($line)
-            && (filled($line['subscription_id'] ?? null) || filled($line['order_id'] ?? null)))
+        ->filter(fn ($line): bool => is_array($line))
         ->map(function (array $line) use ($oldSubscriptionAmounts, $oldSubscriptionOccurrences): array {
             $subscriptionId = $line['subscription_id'] ?? null;
 
@@ -27,11 +26,11 @@
             return $line;
         })
         ->values()
-        ->all();
+        ->toArray();
     $lineErrors = collect($errors->getMessages())
         ->filter(fn ($messages, $key): bool => preg_match('/^lines\.\d+\.(?:period_count|subscription_id)$/', $key) === 1)
         ->map(fn (array $messages): string => $messages[0])
-        ->all();
+        ->toArray();
     $formErrors = collect($errors->getMessages())
         ->reject(fn ($messages, $key): bool => preg_match('/^lines\.\d+\.(?:period_count|subscription_id)$/', $key) === 1
             || $key === 'invoice_number_sequence')
@@ -40,6 +39,11 @@
         ->values();
     $defaultIssueDate = now()->toDateString();
     $numberPreview = $numberPreview ?? null;
+    $numberingError = $numberingError ?? null;
+    $invoiceVatPolicy = $invoiceVatPolicy ?? ['enabled' => false, 'rate' => null];
+    $invoiceVatRateLabel = filled($invoiceVatPolicy['rate'])
+        ? rtrim(rtrim((string) $invoiceVatPolicy['rate'], '0'), '.')
+        : '—';
 @endphp
 
 <div class="mb-5">
@@ -48,6 +52,11 @@
         {{ $backLabel }}
     </a>
     <h1 class="mt-3 text-xl font-semibold text-slate-900">{{ __('invoices.form.new_title') }}</h1>
+    @if ($prefilledContract?->issuerOrganization)
+        <p class="mt-1 text-sm text-slate-500"><span class="font-medium">{{ __('organizations.form.issuer') }}:</span> {{ $prefilledContract->issuerOrganization->name }}</p>
+    @elseif ($activeOrganization)
+        <p class="mt-1 text-sm text-slate-500"><span class="font-medium">{{ __('organizations.form.issuer') }}:</span> {{ $activeOrganization->name }}</p>
+    @endif
 </div>
 
 <form method="POST" action="{{ route('invoices.store') }}"
@@ -61,9 +70,12 @@
         invoiceNumber: @js(old('invoice_number', '')),
         invoiceSequence: @js(old('invoice_number_sequence', $numberPreview['sequence'] ?? '')),
         invoiceNumberManual: @js((bool) old('invoice_number_manual', false)),
+        contractBound: @js($prefilledContract !== null),
         invoiceCode: @js($numberPreview['code'] ?? ''),
         invoiceYear: @js($numberPreview['year'] ?? ''),
         numberPreview: @js($numberPreview),
+        vatEnabled: @js((bool) $invoiceVatPolicy['enabled']),
+        vatRate: @js($invoiceVatPolicy['rate']),
         issueDate: @js(old('issue_date', '')),
         dueDate: @js(old('due_date', '')),
         comment: @js(old('comment', '')),
@@ -106,6 +118,24 @@
         <section class="px-4 py-5 sm:px-5">
             <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">{{ __('invoices.form.basic_information') }}</h2>
 
+            @if ($prefilledContract)
+                <input type="hidden" name="company_id" value="{{ $prefilledCompany->id }}">
+                <input type="hidden" name="contract_id" value="{{ $prefilledContract->id }}">
+
+                <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div>
+                        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.company') }}</label>
+                        <div class="min-h-10 rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">{{ $prefilledCompany->name }}</div>
+                    </div>
+                    <div data-step="contract">
+                        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.contract') }}</label>
+                        <div class="min-h-10 rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
+                            <span class="block">№ {{ $prefilledContract->contract_number }}</span>
+                        </div>
+                        @error('contract_id') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                    </div>
+                </div>
+            @else
             <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div class="relative" x-on:click.outside="companyOpen = false" x-on:keydown.escape.window="companyOpen = false">
                         <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.company') }} <span class="text-red-500">*</span></label>
@@ -139,7 +169,7 @@
 
                 <div x-show="selectedCompanyId" x-cloak data-step="contract" class="relative"
                         x-on:click.outside="contractOpen = false" x-on:keydown.escape.window="contractOpen = false">
-                        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.contract') }} <span class="text-red-500">*</span></label>
+                        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.contract') }}</label>
                         <input type="hidden" name="contract_id" x-model="selectedContractId">
                         <button type="button" x-on:click="contractOpen = !contractOpen"
                             :disabled="!selectedCompanyId || loadingContracts"
@@ -171,6 +201,7 @@
                         @error('contract_id') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
                 </div>
             </div>
+            @endif
 
             <div x-show="selectedContractId" x-cloak data-step="invoice-details" class="mt-5 border-t border-slate-200 pt-5">
                 <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -206,14 +237,14 @@
         <section x-show="selectedContractId" x-cloak data-step="invoice-lines" class="border-t border-slate-200 px-4 py-5 sm:px-5">
             <div>
                 <h2 class="text-sm font-semibold text-slate-900">{{ __('invoices.form.lines_title') }}</h2>
-                <p class="mt-1 text-xs text-gray-500">{{ __('invoices.form.choose_services') }}</p>
+                <p x-show="selectedContractId" class="mt-1 text-xs text-gray-500">{{ __('invoices.form.choose_services') }}</p>
             </div>
 
             <div class="mt-4">
-                <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.services') }}</h3>
+                <h3 x-show="selectedContractId" class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.services') }}</h3>
                 <p x-show="loadingItems" class="text-sm text-gray-500">{{ __('invoices.form.loading_services') }}</p>
                 <p x-show="!loadingItems && !availableItems.length" class="text-sm text-gray-500">{{ __('invoices.form.no_services') }}</p>
-                <div class="divide-y divide-slate-100 border-y border-slate-200">
+                <div x-show="selectedContractId" class="divide-y divide-slate-100 border-y border-slate-200">
                     <template x-for="item in availableItems" :key="itemKey(item)">
                         <label class="flex cursor-pointer items-start gap-3 px-3 py-3 transition hover:bg-slate-50">
                             <input type="checkbox" class="mt-1 rounded border-gray-300 text-blue-600" :checked="isSelected(item)" :disabled="item.type === 'subscription' && !item.selectable" x-on:change="toggleItem(item, $event.target.checked)">
@@ -221,7 +252,7 @@
                                 <span class="block text-sm font-medium text-gray-800" x-text="item.description"></span>
                                 <span class="block text-xs text-gray-500" x-text="itemSubtitle(item)"></span>
                             </span>
-                            <span class="crm-table-numeric whitespace-nowrap text-sm font-semibold text-gray-800" x-text="money(item.amount)"></span>
+                            <span class="crm-table-numeric whitespace-nowrap text-sm font-semibold text-gray-800" x-text="moneyMinor(amountToMinor(item.amount))"></span>
                         </label>
                     </template>
                 </div>
@@ -253,7 +284,7 @@
                                 </div>
                                 <div class="sm:col-span-4">
                                     <label class="mb-1 block text-xs font-medium text-slate-500">{{ __('invoices.form.amount') }}</label>
-                                    <p class="py-2 font-mono text-sm font-semibold text-slate-900" x-text="money(lineTotal(line))"></p>
+                                    <p class="py-2 font-mono text-sm font-semibold text-slate-900" x-text="moneyMinor(lineTotalMinor(line))"></p>
                                 </div>
                             </div>
                             <div x-show="line.subscription_id" class="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-600">
@@ -286,11 +317,19 @@
 
         <div x-show="selectedContractId" x-cloak class="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 px-4 py-4 sm:px-5">
             <div class="text-sm text-slate-600">
-                <span class="mr-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.total') }}</span>
-                <span class="font-semibold text-slate-900" x-text="money(total)">0.00 ₼</span>
+                @if ($invoiceVatPolicy['enabled'])
+                    <div class="flex min-w-64 flex-col gap-1 text-right">
+                        <div class="flex justify-between gap-6"><span>{{ __('invoices.form.subtotal') }}</span><span class="font-semibold text-slate-900" x-text="moneyMinor(subtotalMinor)">0.00 ₼</span></div>
+                        <div class="flex justify-between gap-6"><span>{{ __('invoices.form.vat', ['rate' => $invoiceVatRateLabel]) }}</span><span class="font-semibold text-slate-900" x-text="moneyMinor(vatMinor)">0.00 ₼</span></div>
+                        <div class="flex justify-between gap-6 border-t border-slate-200 pt-1"><span class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.total') }}</span><span class="font-semibold text-slate-900" x-text="moneyMinor(grossTotalMinor)">0.00 ₼</span></div>
+                    </div>
+                @else
+                    <span class="mr-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.total') }}</span>
+                    <span class="font-semibold text-slate-900" x-text="moneyMinor(subtotalMinor)">0.00 ₼</span>
+                @endif
             </div>
             <div class="flex flex-wrap items-center gap-3">
-                <button type="submit" :disabled="!selectedCompanyId || !selectedContractId || !lines.length" class="bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50">{{ __('invoices.actions.save_draft') }}</button>
+            <button type="submit" :disabled="!selectedCompanyId || !selectedContractId || !lines.length" class="bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50">{{ __('invoices.actions.save_draft') }}</button>
                 <a href="{{ $backUrl }}" class="border border-gray-200">{{ __('invoices.actions.cancel') }}</a>
             </div>
         </div>
@@ -305,7 +344,10 @@ document.addEventListener('alpine:init', () => {
         dueDateIsManual: config.hasOldInput && config.hasOldDueDate, dueDateWasAutomatic: false, restoring: true, previousContractId: config.selectedContractId,
         get filteredCompanies() { const q = this.companyQuery.trim().toLocaleLowerCase(); return q ? this.companies.filter(c => c.name.toLocaleLowerCase().startsWith(q)) : this.companies },
         get selectedContract() { return this.contracts.find(c => String(c.id) === String(this.selectedContractId)) || null },
-        get total() { return this.lines.reduce((sum, line) => sum + this.lineTotal(line), 0) },
+        get subtotalMinor() { return this.lines.reduce((sum, line) => sum + this.lineTotalMinor(line), 0) },
+        get vatRateBasisPoints() { return this.amountToMinor(this.vatRate || '0') },
+        get vatMinor() { return this.vatEnabled ? Math.floor((this.subtotalMinor * this.vatRateBasisPoints + 5000) / 10000) : 0 },
+        get grossTotalMinor() { return this.subtotalMinor + this.vatMinor },
         get paymentTerms() { return this.lines.filter(line => line.order_id || line.subscription_id).map(line => line.payment_terms).filter(terms => terms !== null && terms !== '').map(Number).filter(terms => Number.isInteger(terms) && terms >= 0 && terms <= 3650) },
         get hasAutomaticPaymentTerms() { return this.paymentTerms.length > 0 },
         get minimumPaymentTerms() { return this.hasAutomaticPaymentTerms ? Math.min(...this.paymentTerms) : null },
@@ -313,7 +355,14 @@ document.addEventListener('alpine:init', () => {
         get dueDateHint() { if (!this.hasAutomaticPaymentTerms) return this.strings.dueDateNotSet; if (this.hasDifferentPaymentTerms) return this.strings.differentPaymentTerms.replace('__DAYS__', this.minimumPaymentTerms); return this.strings.automaticPaymentTerms.replace('__DAYS__', this.minimumPaymentTerms) },
         async init() {
             this.lines = this.oldLines.map((line, i) => this.normaliseOldLine(line, i));
-            if (this.selectedCompanyId) await this.loadContracts(true);
+            if (this.contractBound) {
+                if (this.selectedContractId) {
+                    if (!this.hasOldInput) this.initialiseNewInvoice();
+                    await this.loadItems();
+                }
+            } else if (this.selectedCompanyId) {
+                await this.loadContracts(true);
+            }
             this.restoring = false;
         },
         companyTyped() {
@@ -416,6 +465,7 @@ document.addEventListener('alpine:init', () => {
             this.selectedContractId = nextContractId;
             this.previousContractId = nextContractId;
             this.initialiseNewInvoice();
+            await this.refreshNumberPreview();
             await this.loadItems();
         },
         async loadItems() {
@@ -435,7 +485,7 @@ document.addEventListener('alpine:init', () => {
             }
         },
         mergeOldMetadata() { this.lines.forEach(line => { const item = this.availableItems.find(i => this.itemKey(i) === line.key); if (item) { line.amount = item.amount; line.billing_period = item.billing_period || null; line.payment_terms = item.payment_terms ?? null; line.available_occurrences = item.available_occurrences || []; line.expected_period_start = line.expected_period_start || line.available_occurrences[0]?.period_start || null; this.normalisePeriodCount(line) } }) },
-        normaliseOldLine(line) { const type = line.subscription_id ? 'subscription' : 'order'; const id = line.subscription_id || line.order_id; return { key: `${type}-${id}`, description: line.description || '', amount: line.amount || '', subscription_id: line.subscription_id || null, order_id: line.order_id || null, period_count: Number(line.period_count || 1), expected_period_start: line.expected_period_start || null, available_occurrences: [], stale_occurrences: line.stale_occurrences || [], billing_period: line.billing_period || null, payment_terms: null } },
+        normaliseOldLine(line, index) { const type = line.subscription_id ? 'subscription' : (line.order_id ? 'order' : 'manual'); const id = line.subscription_id || line.order_id || index; return { key: type + '-' + id, description: line.description || '', amount: line.amount || '', subscription_id: line.subscription_id || null, order_id: line.order_id || null, period_count: Number(line.period_count || 1), expected_period_start: line.expected_period_start || null, available_occurrences: [], stale_occurrences: line.stale_occurrences || [], billing_period: line.billing_period || null, payment_terms: null } },
         itemKey(item) { return `${item.type}-${item.id}` }, isSelected(item) { return this.lines.some(line => line.key === this.itemKey(item)) },
         lineError(index, field) { return this.lineErrors[`lines.${index}.${field}`] || null },
         toggleItem(item, checked) { const key = this.itemKey(item); if (checked && !this.lines.some(line => line.key === key)) this.lines.push(this.lineFromItem(item)); else if (!checked) this.lines = this.lines.filter(line => line.key !== key); this.afterLinesChanged() },
@@ -443,8 +493,10 @@ document.addEventListener('alpine:init', () => {
         maximumPeriodCount(line) { return Math.max(line.available_occurrences?.length || 0, line.stale_occurrences?.length || 0, 1) },
         normalisePeriodCount(line) { if (!line.subscription_id) return; const maximum = this.maximumPeriodCount(line); line.period_count = Math.max(1, Math.min(maximum, Number.parseInt(line.period_count, 10) || 1)); this.afterLinesChanged() },
         subscriptionRange(line) { const occurrences = line.stale_occurrences?.length ? line.stale_occurrences : (line.available_occurrences || []); const count = Math.max(1, Math.min(Number(line.period_count) || 1, occurrences.length)); return occurrences.length ? [occurrences[0].period_start, occurrences[count - 1].period_end] : [null, null] },
-        lineTotal(line) { return (Number.parseFloat(line.amount) || 0) * (line.subscription_id ? (Number(line.period_count) || 1) : 1) },
-        periodSummary(line) { const count = Number(line.period_count) || 1; const noun = count === 1 ? this.strings.periodOne : (count >= 2 && count <= 4 ? this.strings.periodFew : this.strings.periodMany); return count === 1 ? `1 ${noun} · ${this.money(line.amount)}` : `${count} ${noun} × ${this.money(line.amount)} = ${this.money(this.lineTotal(line))}` },
+        amountToMinor(value) { const match = String(value ?? '').trim().match(/^(\d+)(?:\.(\d{1,2}))?$/); return match ? (Number(match[1]) * 100 + Number((match[2] || '').padEnd(2, '0'))) : 0 },
+        lineTotalMinor(line) { return this.amountToMinor(line.amount) * (line.subscription_id ? (Number(line.period_count) || 1) : 1) },
+        lineTotal(line) { return this.lineTotalMinor(line) },
+        periodSummary(line) { const count = Number(line.period_count) || 1; const noun = count === 1 ? this.strings.periodOne : (count >= 2 && count <= 4 ? this.strings.periodFew : this.strings.periodMany); return count === 1 ? `1 ${noun} · ${this.moneyMinor(this.amountToMinor(line.amount))}` : `${count} ${noun} × ${this.moneyMinor(this.amountToMinor(line.amount))} = ${this.moneyMinor(this.lineTotalMinor(line))}` },
         removeLine(index) { this.lines.splice(index, 1); this.afterLinesChanged() },
         afterLinesChanged() { this.linesError = false; this.recalculateDueDate() },
         async issueDateChanged() { if (this.hasAutomaticPaymentTerms) this.recalculateDueDate(); await this.refreshNumberPreview() },
@@ -452,7 +504,8 @@ document.addEventListener('alpine:init', () => {
         async refreshNumberPreview() {
             if (!this.issueDate) return;
             try {
-                const response = await fetch(`${this.numberPreviewUrl}?issue_date=${encodeURIComponent(this.issueDate)}`, { headers: { Accept: 'application/json' } });
+                const contractQuery = this.selectedContractId ? '&contract_id=' + encodeURIComponent(this.selectedContractId) : '';
+                const response = await fetch(this.numberPreviewUrl + '?issue_date=' + encodeURIComponent(this.issueDate) + contractQuery, { headers: { Accept: 'application/json' } });
                 if (!response.ok) return;
                 const data = await response.json();
                 this.invoiceCode = data.code; this.invoiceYear = data.year;
@@ -464,7 +517,8 @@ document.addEventListener('alpine:init', () => {
         contractDates(c) { return c.end_date ? `${this.formatDate(c.start_date)} — ${this.formatDate(c.end_date)}` : this.strings.indefiniteFrom.replace(':date', this.formatDate(c.start_date)) },
         itemSubtitle(item) { if (item.type === 'order') return this.strings.oneTime; if (!item.selectable) return item.unavailable_reason || this.strings.unavailable; return `${this.strings.subscription} · ${{ monthly: this.strings.monthly, quarterly: this.strings.quarterly, semiannual: this.strings.semiannual, annual: this.strings.annual, custom: this.strings.customPeriod }[item.billing_period] || this.strings.customPeriod}` },
         lineType(line) { return line.subscription_id ? this.strings.subscription : this.strings.oneTime },
-        money(value) { return `${(Number.parseFloat(value) || 0).toFixed(2)} ₼` },
+        moneyMinor(value) { return `${(Number(value || 0) / 100).toFixed(2)} ₼` },
+        money(value) { return this.moneyMinor(this.amountToMinor(value)) },
         parseDate(value) { const [y, m, d] = value.split('-').map(Number); return new Date(y, m - 1, d) },
         inputDate(date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` },
         formatDate(value) { if (!value) return '—'; const [y, m, d] = value.slice(0, 10).split('-'); return `${d}/${m}/${y}` },

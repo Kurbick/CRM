@@ -93,7 +93,10 @@ final class ApplyConfirmedPaymentLifecycle
         int $amountMinor
     ): void {
         $creditBalance = CreditBalance::query()->firstOrCreate(
-            ['company_id' => $invoice->company_id],
+            [
+                'company_id' => $invoice->company_id,
+                'organization_id' => $invoice->issuer_organization_id,
+            ],
             ['amount' => '0.00']
         );
 
@@ -102,7 +105,9 @@ final class ApplyConfirmedPaymentLifecycle
             ->lockForUpdate()
             ->firstOrFail();
 
-        if ((int) $lockedBalance->company_id !== (int) $invoice->company_id) {
+        if ((int) $lockedBalance->company_id !== (int) $invoice->company_id
+            || ($lockedBalance->organization_id !== null
+                && (int) $lockedBalance->organization_id !== (int) $invoice->issuer_organization_id)) {
             throw new LogicException('Credit Balance and Invoice companies do not match.');
         }
 

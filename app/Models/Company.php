@@ -43,6 +43,16 @@ class Company extends Model
     public function creditBalance(){
         return $this->hasOne(CreditBalance::class);
     }
+
+    public function creditBalances()
+    {
+        return $this->hasMany(CreditBalance::class);
+    }
+
+    public function organizationCreditBalance(Organization $organization)
+    {
+        return $this->creditBalances()->where('organization_id', $organization->getKey());
+    }
     public function getOrCreateCreditBalance(): CreditBalance{
         return $this->creditBalance ?? $this->creditBalance()->create(['amount' => 0]);
     }

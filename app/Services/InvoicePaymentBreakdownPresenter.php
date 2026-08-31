@@ -213,9 +213,11 @@ class InvoicePaymentBreakdownPresenter
         }
 
         if ($invoice->total_amount !== null) {
-            $storedTotal = $this->toMinorUnits($invoice->total_amount, 'Invoice total_amount');
-            if ($storedTotal !== $invoiceLinesTotal) {
-                throw new LogicException('Invoice line total does not equal Invoice total_amount.');
+            $storedSubtotal = $invoice->subtotal_amount !== null
+                ? $this->toMinorUnits($invoice->subtotal_amount, 'Invoice subtotal_amount')
+                : $this->toMinorUnits($invoice->total_amount, 'Invoice total_amount');
+            if ($storedSubtotal !== $invoiceLinesTotal) {
+                throw new LogicException('Invoice line total does not equal Invoice subtotal_amount.');
             }
         }
 

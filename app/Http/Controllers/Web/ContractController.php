@@ -9,6 +9,7 @@ use App\Exceptions\ContractDeletionException;
 use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\Contract;
+use App\Services\ActiveOrganizationContext;
 use App\Support\Access\PermissionName;
 use App\Support\CompanyPageContext;
 use App\Support\Navigation\AuthorizedLandingPage;
@@ -17,7 +18,7 @@ use Illuminate\Support\Facades\Gate;
 
 class ContractController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request, ActiveOrganizationContext $organizationContext)
     {
         Gate::authorize('viewAny', Contract::class);
 
@@ -28,7 +29,9 @@ class ContractController extends Controller
         $companyId = filter_var($request->input('company_id'), FILTER_VALIDATE_INT);
         $companyId = $companyId !== false && $companyId > 0 ? $companyId : null;
 
+        $organization = $organizationContext->resolve($request);
         $query = Contract::query()
+            ->tap(fn ($query) => $organizationContext->scopeFor($query, $organization))
             ->with('company:id,name');
 
         /*
@@ -201,9 +204,14 @@ class ContractController extends Controller
         );
     }
 
-    public function create(Request $request, ?Company $company = null)
+    public function create(Request $request, ActiveOrganizationContext $organizationContext, ?Company $company = null)
     {
         Gate::authorize('create', Contract::class);
+
+        $organization = $organizationContext->resolve($request);
+        if ($organization === null) {
+            return $this->organizationContextGuard($request, $organizationContext);
+        }
 
         $companies = Company::query()
             ->orderBy('name')
@@ -217,11 +225,20 @@ class ContractController extends Controller
 
         $companyContext = $company ? $this->safeCompanyContext($request, $company) : null;
         $backUrl = $this->createBackUrl($company, $companyContext);
+        $organizationMessage = null;
 
         return view(
             'contracts.create',
-            compact('company', 'companies', 'companyContext', 'backUrl')
+            compact('company', 'companies', 'companyContext', 'backUrl', 'organization', 'organizationMessage')
         );
+    }
+
+    private function organizationContextGuard(Request $request, ActiveOrganizationContext $organizationContext)
+    {
+        return view('organization-context.required', [
+            'state' => $organizationContext->activeOrganizations()->isEmpty() ? 'none' : 'selection',
+            'canManageOrganizations' => $request->user()?->hasRole('administrator') ?? false,
+        ]);
     }
 
     public function store(Request $request, CreateContract $createContract)
@@ -234,9 +251,13 @@ class ContractController extends Controller
             'start_date' => 'required|date',
             'end_date' => 'nullable|date|after:start_date',
             'status' => 'required|in:active,terminated',
+            'issuer_organization_id' => ['nullable', 'integer', 'exists:organizations,id'],
             'signed_document' => 'prohibited',
             'comment' => 'nullable|string',
+        ], [
+            'contract_number.unique' => __('contracts.validation.contract_number_unique'),
         ]);
+        unset($validated['issuer_organization_id']);
 
         $company = Company::query()->findOrFail($validated['company_id']);
         $contract = $createContract->handle($company, $validated, $request->user());
@@ -248,7 +269,7 @@ class ContractController extends Controller
     public function show(
         Request $request,
         Contract $contract,
-        DeleteContract $deleteContract
+        DeleteContract $deleteContract,
     ) {
         Gate::authorize('view', $contract);
 
@@ -257,6 +278,7 @@ class ContractController extends Controller
             || Gate::allows(PermissionName::ContractDocumentsDelete->value);
         $relations = [
             'company:id,name,status',
+            'issuerOrganization:id,name,is_active',
             'orders' => fn ($query) => $query
                 ->with('serviceType')
                 ->withExists('invoiceLines'),
@@ -287,6 +309,7 @@ class ContractController extends Controller
         $contractCanBeDeleted = Gate::allows('delete', $contract)
             && $canReadDocumentMetadata
             && $deleteContract->canDelete($contract);
+        $organization = $contract->issuerOrganization;
 
         return view(
             'contracts.show',
@@ -295,7 +318,8 @@ class ContractController extends Controller
                 'companyContext',
                 'contractCanBeDeleted',
                 'canUploadDocuments',
-                'canReadDocumentMetadata'
+                'canReadDocumentMetadata',
+                'organization',
             )
         );
     }
@@ -304,13 +328,14 @@ class ContractController extends Controller
     {
         Gate::authorize('update', $contract);
 
-        $contract->loadMissing('company:id,name');
+        $contract->loadMissing('company:id,name', 'issuerOrganization:id,name,is_active');
         $company = $contract->company;
         $returnContext = $this->editReturnContext($request, $contract);
+        $organizations = app(ActiveOrganizationContext::class)->activeOrganizations();
 
         return view(
             'contracts.edit',
-            compact('contract', 'company', 'returnContext')
+            compact('contract', 'company', 'returnContext', 'organizations')
         );
     }
 
@@ -323,8 +348,11 @@ class ContractController extends Controller
             'start_date' => 'required|date',
             'end_date' => 'nullable|date|after:start_date',
             'status' => 'required|in:active,terminated',
+            'issuer_organization_id' => ['nullable', 'integer', 'exists:organizations,id'],
             'signed_document' => 'prohibited',
             'comment' => 'nullable|string',
+        ], [
+            'contract_number.unique' => __('contracts.validation.contract_number_unique'),
         ]);
 
         $contract = $updateContract->handle($contract, $validated, $request->user());

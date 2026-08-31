@@ -45,6 +45,11 @@ class User extends Authenticatable
         return $this->belongsTo(self::class, 'created_by');
     }
 
+    public function lastOrganization(): BelongsTo
+    {
+        return $this->belongsTo(Organization::class, 'last_organization_id');
+    }
+
     public function createdUsers(): HasMany
     {
         return $this->hasMany(self::class, 'created_by');

@@ -10,6 +10,7 @@ use App\Http\Requests\StoreContractRequest;
 use App\Http\Requests\UpdateContractRequest;
 use App\Models\Company;
 use App\Models\Contract;
+use App\Services\ActiveOrganizationContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -27,11 +28,14 @@ class ContractController extends Controller
         'updated_at',
     ];
 
-    public function index(Company $company): JsonResponse
+    public function index(Company $company, ActiveOrganizationContext $organizationContext): JsonResponse
     {
         Gate::authorize('viewAny', Contract::class);
 
+        $organization = $organizationContext->resolve();
         $contracts = $company->contracts()
+            ->when($organization, fn ($query) => $query->where('issuer_organization_id', $organization->getKey()))
+            ->when(! $organization, fn ($query) => $query->whereRaw('1 = 0'))
             ->select(self::COMPACT_FIELDS)
             ->orderBy('id')
             ->get()

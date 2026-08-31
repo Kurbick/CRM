@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
+use App\Services\ActiveOrganizationContext;
 
 class Invoice extends Model
 {
@@ -21,6 +22,10 @@ class Invoice extends Model
         'due_date',
         'period_start',
         'period_end',
+        'subtotal_amount',
+        'vat_enabled',
+        'vat_rate',
+        'vat_amount',
         'total_amount',
         'status',
         'seller_name',
@@ -39,6 +44,10 @@ class Invoice extends Model
     protected $casts = [
         'invoice_number_year' => 'integer',
         'invoice_number_sequence' => 'integer',
+        'vat_enabled' => 'boolean',
+        'vat_rate' => 'decimal:2',
+        'subtotal_amount' => 'decimal:2',
+        'vat_amount' => 'decimal:2',
     ];
 
     public function company(): BelongsTo
@@ -74,19 +83,26 @@ class Invoice extends Model
      */
     public function getPaidAmountAttribute(): float
     {
+        return $this->paidMinorUnits() / 100;
+    }
+
+    private function paidMinorUnits(): int
+    {
         if ($this->relationLoaded('payments')) {
-            $paidAmount = $this->payments
+            $paidMinor = $this->payments
                 ->where('status', 'confirmed')
-                ->sum(fn(Payment $payment) => (float) $payment->amount);
+                ->sum(fn (Payment $payment): int => self::toMinorUnits(
+                    $payment->getRawOriginal('amount') ?: $payment->amount
+                ));
         } elseif (array_key_exists('confirmed_paid_amount', $this->attributes)) {
-            $paidAmount = $this->attributes['confirmed_paid_amount'];
+            $paidMinor = self::toMinorUnits($this->attributes['confirmed_paid_amount']);
         } else {
-            $paidAmount = $this->payments()
+            $paidMinor = self::toMinorUnits($this->payments()
                 ->where('status', 'confirmed')
-                ->sum('amount');
+                ->sum('amount'));
         }
 
-        return round((float) $paidAmount, 2);
+        return $paidMinor;
     }
 
     /**
@@ -97,13 +113,15 @@ class Invoice extends Model
      */
     public function getAppliedAmountAttribute(): float
     {
+        $paidMinor = $this->paidMinorUnits();
+
         return round(
             min(
-                (float) $this->total_amount,
-                (float) $this->paid_amount
+                self::toMinorUnits($this->total_amount),
+                $paidMinor
             ),
             2
-        );
+        ) / 100;
     }
 
     /**
@@ -111,14 +129,16 @@ class Invoice extends Model
      */
     public function getOverpaymentAmountAttribute(): float
     {
+        $paidMinor = $this->paidMinorUnits();
+
         return round(
             max(
                 0,
-                (float) $this->paid_amount
-                    - (float) $this->total_amount
+                $paidMinor
+                    - self::toMinorUnits($this->total_amount)
             ),
             2
-        );
+        ) / 100;
     }
 
     /**
@@ -128,14 +148,16 @@ class Invoice extends Model
      */
     public function getRemainingAmountAttribute(): float
     {
+        $paidMinor = $this->paidMinorUnits();
+
         return round(
             max(
                 0,
-                (float) $this->total_amount
-                    - (float) $this->paid_amount
+                self::toMinorUnits($this->total_amount)
+                    - $paidMinor
             ),
             2
-        );
+        ) / 100;
     }
 
     /**
@@ -161,8 +183,39 @@ class Invoice extends Model
 
     protected static function booted(): void
     {
+        static::creating(function (Invoice $invoice): void {
+            if ($invoice->getAttribute('subtotal_amount') === null && $invoice->getAttribute('total_amount') !== null) {
+                $invoice->setAttribute('subtotal_amount', $invoice->getAttribute('total_amount'));
+            }
+            $invoice->vat_enabled ??= false;
+            if ($invoice->getAttribute('vat_amount') === null) {
+                $invoice->setAttribute('vat_amount', '0.00');
+            }
+            if ($invoice->issuer_organization_id === null) {
+                $organization = app(ActiveOrganizationContext::class)->resolve();
+                if ($organization !== null) {
+                    $invoice->issuer_organization_id = $organization->getKey();
+                }
+            }
+        });
+
         static::deleting(function (Invoice $invoice): void {
             $invoice->lines()->delete();
         });
+    }
+
+    private static function toMinorUnits(mixed $amount): int
+    {
+        $value = trim((string) ($amount ?? '0.00'));
+        if (! preg_match('/^-?\d+(?:\.\d{1,2})?$/', $value)) {
+            throw new \LogicException("Invalid Invoice monetary value [{$value}].");
+        }
+
+        $negative = str_starts_with($value, '-');
+        $unsigned = $negative ? substr($value, 1) : $value;
+        [$whole, $fraction] = array_pad(explode('.', $unsigned, 2), 2, '');
+        $minor = ((int) $whole * 100) + (int) str_pad($fraction, 2, '0');
+
+        return $negative ? -$minor : $minor;
     }
 }

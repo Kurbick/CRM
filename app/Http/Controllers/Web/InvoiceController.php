@@ -23,6 +23,7 @@ use App\Services\InvoicePaymentAvailabilityService;
 use App\Services\InvoicePaymentBreakdownPresenter;
 use App\Services\InvoicePaymentSourceResolver;
 use App\Services\InvoiceNumberService;
+use App\Services\ActiveOrganizationContext;
 use App\Services\SubscriptionBillingSchedule;
 use App\Support\Access\PermissionName;
 use App\Support\CompanyActivityCategory;
@@ -55,6 +56,7 @@ class InvoiceController extends Controller
         private readonly UpdateInvoice $updateInvoice,
         private readonly CompanyActivityRecorder $activityRecorder,
         private readonly InvoiceNumberService $invoiceNumberService,
+        private readonly ActiveOrganizationContext $organizationContext,
     ) {}
 
     /**
@@ -68,7 +70,9 @@ class InvoiceController extends Controller
         $activeCompanyId = $this->validFilterId($request->input('company_id'), Company::class);
         $activeContractId = $this->validFilterId($request->input('contract_id'), Contract::class);
 
+        $organization = $this->organizationContext->resolve($request);
         $query = Invoice::query()
+            ->tap(fn ($query) => $this->organizationContext->scopeFor($query, $organization))
             ->with('company')
             ->withSum([
                 'payments as confirmed_paid_amount' => function ($paymentQuery) {
@@ -187,6 +191,7 @@ class InvoiceController extends Controller
             ]);
 
         $contracts = Contract::query()
+            ->tap(fn ($query) => $this->organizationContext->scopeFor($query, $organization))
             ->orderBy('contract_number')
             ->get([
                 'id',
@@ -262,10 +267,6 @@ class InvoiceController extends Controller
     {
         Gate::authorize('create', Invoice::class);
 
-        $companies = Company::where('status', 'active')
-            ->orderBy('name')
-            ->get();
-
         $prefilledCompany = null;
         $prefilledContract = null;
 
@@ -278,9 +279,30 @@ class InvoiceController extends Controller
                 ->first();
 
             if ($prefilledContract !== null) {
-                $prefilledCompany = $companies->firstWhere('id', $prefilledContract->company_id);
+                $prefilledContract->load([
+                    'issuerOrganization',
+                    'company:id,name,status',
+                ]);
+                $prefilledCompany = $prefilledContract->company;
+
+                if ($prefilledContract->issuerOrganization !== null
+                    && ! $prefilledContract->issuerOrganization->is_active) {
+                    return $this->contractIssuerGuard('organizations.errors.contract_issuer_inactive');
+                }
+                if ($prefilledContract->issuerOrganization === null
+                    && $this->organizationContext->singleActive() === null) {
+                    return $this->contractIssuerGuard('organizations.errors.contract_issuer_missing');
+                }
             }
         }
+
+        if ($prefilledContract === null && $this->organizationContext->resolve($request) === null) {
+            return $this->organizationContextGuard($request);
+        }
+
+        $companies = Company::where('status', 'active')
+            ->orderBy('name')
+            ->get();
 
         if ($prefilledCompany === null) {
             $companyId = $this->validFilterId($request->query('company_id'), Company::class);
@@ -310,8 +332,12 @@ class InvoiceController extends Controller
             ? CompanyPageContext::resolve($request, $prefilledCompany, 'invoices')
             : null;
 
-        $oldContractId = $this->validFilterId(old('contract_id'), Contract::class);
-        $oldCompanyId = $this->validFilterId(old('company_id'), Company::class);
+        $oldContractId = $prefilledContract !== null
+            ? $prefilledContract->id
+            : $this->validFilterId(old('contract_id'), Contract::class);
+        $oldCompanyId = $prefilledCompany !== null
+            ? $prefilledCompany->id
+            : $this->validFilterId(old('company_id'), Company::class);
         $oldSubscriptionIds = collect(old('lines', []))
             ->filter(fn (mixed $line): bool => is_array($line))
             ->pluck('subscription_id')
@@ -365,19 +391,22 @@ class InvoiceController extends Controller
 
         $numberPreview = null;
         $numberingError = null;
-        try {
-            $organization = Organization::query()->current()->first();
-            if (! $organization) {
-                throw ValidationException::withMessages([
-                    'organization' => __('invoices.errors.organization_not_configured'),
-                ]);
+        $organization = $prefilledContract !== null
+            ? ($prefilledContract->issuerOrganization ?? $this->organizationContext->singleActive())
+            : $this->organizationContext->resolve($request);
+        $invoiceVatPolicy = [
+            'enabled' => (bool) $organization?->is_vat_payer,
+            'rate' => $organization?->vat_rate !== null ? (string) $organization->vat_rate : null,
+        ];
+        if ($organization !== null) {
+            try {
+                $numberPreview = $this->invoiceNumberService->preview(
+                    $organization,
+                    CarbonImmutable::parse(old('issue_date', now()->toDateString()))->year,
+                );
+            } catch (ValidationException $exception) {
+                $numberingError = (string) ($exception->errors()['organization'][0] ?? $exception->getMessage());
             }
-            $numberPreview = $this->invoiceNumberService->preview(
-                $organization,
-                CarbonImmutable::parse(old('issue_date', now()->toDateString()))->year,
-            );
-        } catch (ValidationException $exception) {
-            $numberingError = (string) ($exception->errors()['organization'][0] ?? $exception->getMessage());
         }
 
         return view('invoices.create', compact(
@@ -391,6 +420,7 @@ class InvoiceController extends Controller
             'oldSubscriptionOccurrences',
             'numberPreview',
             'numberingError',
+            'invoiceVatPolicy',
         ));
     }
 
@@ -399,6 +429,7 @@ class InvoiceController extends Controller
         $validated = $request->validate([
             'issue_date' => ['required', 'date'],
             'invoice_id' => ['nullable', 'integer', 'exists:invoices,id'],
+            'contract_id' => ['nullable', 'integer', 'exists:contracts,id'],
         ]);
 
         if (! empty($validated['invoice_id'])) {
@@ -408,17 +439,55 @@ class InvoiceController extends Controller
             Gate::authorize('create', Invoice::class);
         }
 
-        $organization = Organization::query()->current()->first();
+        $previewInvoice = ! empty($validated['invoice_id'])
+            ? Invoice::query()->with(['contract.issuerOrganization', 'issuerOrganization'])->findOrFail($validated['invoice_id'])
+            : null;
+        if ($previewInvoice !== null) {
+            $organization = $previewInvoice->contract?->issuerOrganization
+                ?? ($previewInvoice->contract === null ? $previewInvoice->issuerOrganization : null);
+        } elseif (! empty($validated['contract_id'])) {
+            $contract = Contract::query()
+                ->with('issuerOrganization')
+                ->findOrFail($validated['contract_id']);
+            $organization = $contract->issuerOrganization ?? $this->organizationContext->singleActive();
+            if ($organization !== null && ! $organization->is_active) {
+                return response()->json([
+                    'message' => __('organizations.errors.contract_issuer_inactive'),
+                ], 422);
+            }
+        } else {
+            $organization = $this->organizationContext->resolve($request);
+        }
         if (! $organization) {
-            throw ValidationException::withMessages([
-                'organization' => __('invoices.errors.organization_not_configured'),
-            ]);
+            return response()->json([
+                'message' => $previewInvoice?->contract !== null || ! empty($validated['contract_id'])
+                    ? __('organizations.errors.contract_issuer_missing')
+                    : __($this->organizationContext->missingContextMessage()),
+            ], 422);
         }
 
         return response()->json($this->invoiceNumberService->preview(
             $organization,
             CarbonImmutable::parse($validated['issue_date'])->year,
         ));
+    }
+
+    private function organizationContextGuard(Request $request)
+    {
+        return view('organization-context.required', [
+            'state' => $this->organizationContext->activeOrganizations()->isEmpty() ? 'none' : 'selection',
+            'canManageOrganizations' => $request->user()?->hasRole('administrator') ?? false,
+        ]);
+    }
+
+    private function contractIssuerGuard(string $messageKey)
+    {
+        return view('organization-context.required', [
+            'state' => 'contract_inactive',
+            'title' => __('invoices.form.new_title'),
+            'message' => __($messageKey),
+            'canManageOrganizations' => false,
+        ]);
     }
 
     /**
@@ -436,6 +505,10 @@ class InvoiceController extends Controller
             'invoice_number_manual' => ['nullable', 'boolean'],
             'issue_date' => 'required|date',
             'due_date' => 'nullable|date',
+            'subtotal_amount' => 'prohibited',
+            'vat_enabled' => 'prohibited',
+            'vat_rate' => 'prohibited',
+            'vat_amount' => 'prohibited',
             'seller_name' => 'prohibited',
             'seller_voen' => 'prohibited',
             'seller_bank_name' => 'prohibited',
@@ -510,6 +583,7 @@ class InvoiceController extends Controller
         $invoice->load([
             'company',
             'contract',
+            'issuerOrganization',
             'lines',
         ]);
 
@@ -551,7 +625,14 @@ class InvoiceController extends Controller
         $creditBalanceMinor = 0;
         $creditMaximumMinor = 0;
         if ($canApplyCredit) {
-            $creditBalance = $invoice->company->creditBalance()->first();
+            $creditBalance = $invoice->company->creditBalances()
+                ->where('organization_id', $invoice->issuer_organization_id)
+                ->first();
+            if ($creditBalance === null && Organization::query()->active()->count() === 1) {
+                $creditBalance = $invoice->company->creditBalance()
+                    ->whereNull('organization_id')
+                    ->first();
+            }
             if ($creditBalance !== null) {
                 $creditBalanceMinor = $this->paymentAvailabilityService->toMinorUnits(
                     $creditBalance->getRawOriginal('amount')
@@ -757,8 +838,10 @@ class InvoiceController extends Controller
             'lines.order:id,payment_terms',
             'company',
             'contract',
+            'issuerOrganization',
         ]);
 
+        $invoice->loadMissing('issuerOrganization');
         return view('invoices.edit', compact('invoice', 'companyContext', 'editability'));
     }
 
@@ -779,6 +862,10 @@ class InvoiceController extends Controller
             'issue_date' => ['required', 'date'],
             'due_date' => ['nullable', 'date'],
             'comment' => ['nullable', 'string'],
+            'subtotal_amount' => ['prohibited'],
+            'vat_enabled' => ['prohibited'],
+            'vat_rate' => ['prohibited'],
+            'vat_amount' => ['prohibited'],
             'lines' => ['required', 'array', 'min:1'],
             'lines.*.id' => ['required', 'integer', 'distinct'],
             'lines.*.description' => ['required', 'string', 'max:255'],
@@ -853,12 +940,6 @@ class InvoiceController extends Controller
             }
 
             $contract = $invoice->contract;
-
-            if (! $contract) {
-                throw ValidationException::withMessages([
-                    'issue' => __('invoices.errors.issue_no_contract'),
-                ]);
-            }
 
             $lines = $invoice->lines()
                 ->lockForUpdate()
@@ -974,7 +1055,9 @@ class InvoiceController extends Controller
             $applyCreditToInvoice->execute($invoice, actor: $actor);
 
             $this->activityRecorder->record(
-                CompanyActivitySnapshot::companyFor($contract),
+                $contract
+                    ? CompanyActivitySnapshot::companyFor($contract)
+                    : CompanyActivitySnapshot::companyForInvoice($invoice),
                 CompanyActivityEventType::InvoiceIssued,
                 CompanyActivityCategory::Invoices,
                 CompanyActivityVisibilityScope::Financials,
@@ -1143,7 +1226,9 @@ class InvoiceController extends Controller
             }
 
             $this->activityRecorder->record(
-                CompanyActivitySnapshot::companyFor($invoice->contract),
+                $invoice->contract
+                    ? CompanyActivitySnapshot::companyFor($invoice->contract)
+                    : CompanyActivitySnapshot::companyForInvoice($invoice),
                 CompanyActivityEventType::InvoiceCancelled,
                 CompanyActivityCategory::Invoices,
                 CompanyActivityVisibilityScope::Financials,
@@ -1217,10 +1302,13 @@ class InvoiceController extends Controller
     /**
      * AJAX — контракты компании для формы инвойса
      */
-    public function getContracts(Company $company)
+    public function getContracts(Company $company, ActiveOrganizationContext $organizationContext)
     {
         $contracts = $company->contracts()
             ->where('status', 'active')
+            ->when($organizationContext->resolve(), fn ($query, $organization) => $query
+                ->where('issuer_organization_id', $organization->getKey()))
+            ->when(! $organizationContext->resolve(), fn ($query) => $query->whereRaw('1 = 0'))
             ->get(['id', 'contract_number', 'start_date', 'end_date']);
 
         return response()->json($contracts);

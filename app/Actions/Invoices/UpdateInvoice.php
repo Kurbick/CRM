@@ -9,6 +9,7 @@ use App\Services\InvoiceDueDateCalculator;
 use App\Services\InvoiceEditabilityService;
 use App\Services\InvoicePaymentAvailabilityService;
 use App\Services\InvoiceNumberService;
+use App\Services\InvoiceVatCalculator;
 use App\Services\SubscriptionBillingSchedule;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -24,6 +25,7 @@ final class UpdateInvoice
         private readonly InvoicePaymentAvailabilityService $paymentAvailabilityService,
         private readonly InvoiceNumberService $invoiceNumberService,
         private readonly SubscriptionBillingSchedule $billingSchedule,
+        private readonly InvoiceVatCalculator $vatCalculator,
     ) {}
 
     /**
@@ -100,8 +102,10 @@ final class UpdateInvoice
             $newTotalMinor = $this->paymentAvailabilityService->sumToMinorUnits(
                 collect($lines)->pluck('amount')
             );
+            $newVatSnapshot = $this->vatCalculator->recalculateFromInvoice($lockedInvoice, $newTotalMinor);
+            $newGrossMinor = $this->paymentAvailabilityService->toMinorUnits($newVatSnapshot['total_amount']);
 
-            if ($newTotalMinor < $paymentAvailability['pending_minor']) {
+            if ($newGrossMinor < $paymentAvailability['pending_minor']) {
                 throw ValidationException::withMessages([
                     'lines' => 'Сумма инвойса не может быть меньше суммы ожидающих платежей: '
                         .$this->paymentAvailabilityService->formatMinorUnits($paymentAvailability['pending_minor']).'.',
@@ -228,7 +232,10 @@ final class UpdateInvoice
                 true,
             );
             $changes = array_merge($changes, $numbering);
-            $changes['total_amount'] = $this->paymentAvailabilityService->fromMinorUnits($newTotalMinor);
+            $changes = array_merge(
+                $changes,
+                $newVatSnapshot,
+            );
 
             $lockedInvoice->update($changes);
 
@@ -465,12 +472,20 @@ final class UpdateInvoice
     /** @param array<string,mixed> $attributes @param array<string,mixed> $numbering @return array<string,mixed> */
     private function metadataAttributes(array $attributes, array $numbering): array
     {
-        unset($attributes['invoice_number_sequence'], $attributes['invoice_number_manual']);
+        unset(
+            $attributes['invoice_number_sequence'],
+            $attributes['invoice_number_manual'],
+            $attributes['issuer_organization_id'],
+        );
 
         if (! array_key_exists('invoice_number', $numbering)) {
             unset($attributes['invoice_number']);
         } else {
             $attributes['invoice_number'] = $numbering['invoice_number'];
+        }
+
+        if (array_key_exists('issuer_organization_id', $numbering)) {
+            $attributes['issuer_organization_id'] = $numbering['issuer_organization_id'];
         }
 
         return $attributes;

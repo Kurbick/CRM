@@ -145,7 +145,7 @@ class InvoiceCreditApplicationConcurrencyTest extends FinancialTestCase
         $this->assertExactApplicationState([$invoice], 3000);
     }
 
-    public function test_missing_balance_is_no_op_and_unique_company_index_owns_creation_race(): void
+    public function test_missing_balance_is_no_op_and_company_organization_index_owns_creation_race(): void
     {
         [$invoice] = $this->issuedFixture('100.00');
         $result = app(ApplyCreditToInvoice::class)->execute($invoice);
@@ -154,9 +154,12 @@ class InvoiceCreditApplicationConcurrencyTest extends FinancialTestCase
         $this->assertFalse($result->applied);
         $this->assertSame('no_credit_balance', $result->noOpReason);
         $this->assertDatabaseMissing('credit_balances', ['company_id' => $invoice->company_id]);
-        $this->assertTrue($indexes->contains(fn (object $index): bool => $index->Key_name === 'credit_balances_company_id_unique'
+        $this->assertTrue($indexes->contains(fn (object $index): bool => $index->Key_name === 'credit_balances_company_organization_unique'
             && (int) $index->Non_unique === 0
             && $index->Column_name === 'company_id'));
+        $this->assertTrue($indexes->contains(fn (object $index): bool => $index->Key_name === 'credit_balances_company_organization_unique'
+            && (int) $index->Non_unique === 0
+            && $index->Column_name === 'organization_id'));
     }
 
     /** @return callable(): array{issued: bool} */

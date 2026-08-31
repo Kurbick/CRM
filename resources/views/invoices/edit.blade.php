@@ -54,6 +54,9 @@
     $structuredNumber = $invoice->invoice_number_year !== null
         && $invoice->invoice_number_sequence !== null
         && filled($invoice->invoice_number_code);
+    $invoiceVatRateLabel = filled($invoice->vat_rate)
+        ? rtrim(rtrim((string) $invoice->vat_rate, '0'), '.')
+        : '—';
 @endphp
 <div class="mb-5">
     <a href="{{ route('invoices.show', ['invoice' => $invoice, ...$companyContext['query']]) }}" class="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-900">
@@ -62,6 +65,11 @@
     </a>
     <h1 class="mt-3 text-xl font-semibold text-slate-900">{{ __('invoices.form.edit_title') }}</h1>
     <p class="mt-1 text-sm text-slate-500"><span class="font-mono">{{ $invoice->invoice_number }}</span><span class="mx-1.5 text-slate-300">·</span>{{ $invoice->company?->name ?? $invoice->payer_name }}</p>
+    @if ($invoice->contract)
+        <p class="mt-1 text-sm text-slate-500"><span class="font-medium">{{ __('organizations.form.issuer') }}:</span> {{ $invoice->issuerOrganization->name }}</p>
+    @elseif ($invoice->issuerOrganization)
+        <p class="mt-1 text-sm text-slate-500"><span class="font-medium">{{ __('organizations.form.issuer') }}:</span> {{ $invoice->issuerOrganization->name }}</p>
+    @endif
 </div>
 
 @if ($editability['has_pending_payments'])
@@ -77,6 +85,8 @@
     invoiceNumberManual: @js((bool) old('invoice_number_manual', false)),
     invoiceCode: @js(old('invoice_number_code', $invoice->invoice_number_code)),
     invoiceYear: @js(old('invoice_number_year', $invoice->invoice_number_year)),
+    vatEnabled: @js((bool) $invoice->vat_enabled),
+    vatRate: @js($invoice->vat_rate),
     structuredNumber: @js($structuredNumber),
     numberPreviewUrl: @js(route('invoices.number-preview')),
     dueDate: @js(old('due_date', \Illuminate\Support\Carbon::parse($invoice->due_date)->toDateString())),
@@ -104,7 +114,7 @@
     async refreshNumberPreview() {
         if (!this.issueDate) return;
         try {
-            const response = await fetch(`${this.numberPreviewUrl}?issue_date=${encodeURIComponent(this.issueDate)}&invoice_id={{ $invoice->id }}`, { headers: { Accept: 'application/json' } });
+            const response = await fetch(this.numberPreviewUrl + '?issue_date=' + encodeURIComponent(this.issueDate) + '&invoice_id={{ $invoice->id }}', { headers: { Accept: 'application/json' } });
             if (!response.ok) return;
             const data = await response.json();
             this.invoiceCode = data.code; this.invoiceYear = data.year;
@@ -118,10 +128,16 @@
     normalisePeriodCount(line) { if (!line.subscription_id) return; const leader = this.subscriptionGroup(line)[0]; leader.period_count = Math.max(1, Math.min(24, Number.parseInt(leader.period_count, 10) || 1)); this.recalculateDueDate() },
     syncSubscriptionDescription(line) { this.subscriptionGroup(line).forEach(candidate => candidate.description = line.description) },
     subscriptionRange(line) { const group = this.subscriptionGroup(line); const count = this.periodCount(line); return [group[0]?.period_start, group[Math.min(count, group.length) - 1]?.period_end || group[group.length - 1]?.period_end] },
-    lineTotal(line) { return (Number.parseFloat(line.amount) || 0) * (line.subscription_id ? this.periodCount(line) : 1) },
-    periodSummary(line) { const count = this.periodCount(line); const noun = count === 1 ? this.strings.periodOne : (count >= 2 && count <= 4 ? this.strings.periodFew : this.strings.periodMany); return count === 1 ? `1 ${noun} · ${this.money(line.amount)}` : `${count} ${noun} × ${this.money(line.amount)} = ${this.money(this.lineTotal(line))}` },
-    total() { return this.lines.filter(line => this.isSubscriptionLeader(line)).reduce((sum, line) => sum + this.lineTotal(line), 0) },
-    money(value) { return `${(Number.parseFloat(value) || 0).toFixed(2)} ₼` },
+    get subtotalMinor() { return this.lines.filter(line => this.isSubscriptionLeader(line)).reduce((sum, line) => sum + this.lineTotalMinor(line), 0) },
+    get vatRateBasisPoints() { return this.amountToMinor(this.vatRate || '0') },
+    get vatMinor() { return this.vatEnabled ? Math.floor((this.subtotalMinor * this.vatRateBasisPoints + 5000) / 10000) : 0 },
+    get grossTotalMinor() { return this.subtotalMinor + this.vatMinor },
+    amountToMinor(value) { const match = String(value ?? '').trim().match(/^(\d+)(?:\.(\d{1,2}))?$/); return match ? (Number(match[1]) * 100 + Number((match[2] || '').padEnd(2, '0'))) : 0 },
+    lineTotalMinor(line) { return this.amountToMinor(line.amount) * (line.subscription_id ? this.periodCount(line) : 1) },
+    lineTotal(line) { return this.lineTotalMinor(line) },
+    periodSummary(line) { const count = this.periodCount(line); const noun = count === 1 ? this.strings.periodOne : (count >= 2 && count <= 4 ? this.strings.periodFew : this.strings.periodMany); return count === 1 ? `1 ${noun} · ${this.moneyMinor(this.amountToMinor(line.amount))}` : `${count} ${noun} × ${this.moneyMinor(this.amountToMinor(line.amount))} = ${this.moneyMinor(this.lineTotalMinor(line))}` },
+    moneyMinor(value) { return `${(Number(value || 0) / 100).toFixed(2)} ₼` },
+    money(value) { return this.moneyMinor(this.amountToMinor(value)) },
     type(line) { return line.subscription_id ? this.strings.subscription : (line.order_id ? this.strings.oneTime : this.strings.manualLine) },
     parseDate(value) { const [y, m, d] = value.split('-').map(Number); return new Date(y, m - 1, d) },
     inputDate(date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` },
@@ -220,7 +236,7 @@
                             <div class="sm:col-span-4">
                                 <label class="mb-1 block text-xs font-medium text-slate-500">{{ __('invoices.form.amount') }}</label>
                                 <template x-if="line.order_id || line.subscription_id">
-                                    <p class="py-2 font-mono text-sm font-semibold text-slate-900" x-text="money(lineTotal(line))"></p>
+                                    <p class="py-2 font-mono text-sm font-semibold text-slate-900" x-text="moneyMinor(lineTotalMinor(line))"></p>
                                 </template>
                                 <template x-if="!line.order_id && !line.subscription_id">
                                     <input type="number" :name="`lines[${index}][amount]`" x-model="line.amount" required min="0.01" step="0.01" class="w-full font-mono border-gray-200">
@@ -247,8 +263,16 @@
 
         <div class="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 px-4 py-4 sm:px-5">
             <div class="text-sm text-slate-600">
-                <span class="mr-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.total') }}</span>
-                <span class="font-semibold text-slate-900"><span x-text="total().toFixed(2)"></span> ₼</span>
+                @if ($invoice->vat_enabled)
+                    <div class="flex min-w-64 flex-col gap-1 text-right">
+                        <div class="flex justify-between gap-6"><span>{{ __('invoices.form.subtotal') }}</span><span class="font-semibold text-slate-900" x-text="moneyMinor(subtotalMinor)">{{ $invoice->subtotal_amount }} ₼</span></div>
+                        <div class="flex justify-between gap-6"><span>{{ __('invoices.form.vat', ['rate' => $invoiceVatRateLabel]) }}</span><span class="font-semibold text-slate-900" x-text="moneyMinor(vatMinor)">{{ $invoice->vat_amount }} ₼</span></div>
+                        <div class="flex justify-between gap-6 border-t border-slate-200 pt-1"><span class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.total') }}</span><span class="font-semibold text-slate-900" x-text="moneyMinor(grossTotalMinor)">{{ $invoice->total_amount }} ₼</span></div>
+                    </div>
+                @else
+                    <span class="mr-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('invoices.form.total') }}</span>
+                    <span class="font-semibold text-slate-900" x-text="moneyMinor(subtotalMinor)">{{ $invoice->total_amount }} ₼</span>
+                @endif
             </div>
             <div class="flex flex-wrap items-center gap-3">
                 <button type="submit" :disabled="!lines.length" class="bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50">{{ __('invoices.actions.save') }}</button>

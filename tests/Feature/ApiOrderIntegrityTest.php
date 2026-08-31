@@ -230,7 +230,11 @@ class ApiOrderIntegrityTest extends AuthorizationTestCase
         $this->assertOrderAttributesUnchanged($originalOrder, $order->fresh());
         $freshInvoice = $invoice->fresh();
         foreach ($originalInvoice as $attribute => $value) {
-            $this->assertSame($value, $freshInvoice->getRawOriginal($attribute));
+            $actual = $freshInvoice->getRawOriginal($attribute);
+            $this->assertSame(
+                $attribute === 'vat_enabled' ? (bool) $value : $value,
+                $attribute === 'vat_enabled' ? (bool) $actual : $actual,
+            );
         }
     }
 

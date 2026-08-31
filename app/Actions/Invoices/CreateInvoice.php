@@ -7,11 +7,14 @@ use App\Models\Contract;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
 use App\Models\Order;
+use App\Models\Organization;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Services\CompanyActivityRecorder;
+use App\Services\ActiveOrganizationContext;
 use App\Services\InvoiceDueDateCalculator;
 use App\Services\InvoiceNumberService;
+use App\Services\InvoiceVatCalculator;
 use App\Services\SubscriptionBillingSchedule;
 use App\Support\CompanyActivityCategory;
 use App\Support\CompanyActivityEventType;
@@ -32,6 +35,8 @@ final class CreateInvoice
         private readonly SubscriptionBillingSchedule $billingSchedule,
         private readonly InvoiceSellerSnapshot $sellerSnapshot,
         private readonly CompanyActivityRecorder $activityRecorder,
+        private readonly ActiveOrganizationContext $organizationContext,
+        private readonly InvoiceVatCalculator $vatCalculator,
     ) {}
 
     /**
@@ -40,7 +45,7 @@ final class CreateInvoice
      */
     public function execute(
         Company $company,
-        Contract $contract,
+        ?Contract $contract,
         array $attributes,
         array $lines,
         bool $canonicalizeSubjectAmounts = false,
@@ -54,14 +59,14 @@ final class CreateInvoice
                     ->lockForUpdate()
                     ->firstOrFail();
 
-                $lockedContract = Contract::query()
-                    ->select(['id', 'company_id', 'contract_number', 'start_date', 'end_date'])
+                $lockedContract = $contract === null ? null : Contract::query()
+                    ->select(['id', 'company_id', 'issuer_organization_id', 'contract_number', 'start_date', 'end_date'])
                     ->whereKey($contract->getKey())
                     ->where('company_id', $lockedCompany->getKey())
                     ->lockForUpdate()
                     ->first();
 
-                if (! $lockedContract) {
+                if ($contract !== null && ! $lockedContract) {
                     throw ValidationException::withMessages([
                         'contract_id' => 'Выбранный договор не принадлежит компании.',
                     ]);
@@ -93,31 +98,52 @@ final class CreateInvoice
                 $dueDate = $this->dueDateCalculator->calculate(
                     issueDate: (string) $attributes['issue_date'],
                     manualDueDate: $attributes['due_date'] ?? null,
-                    contractId: (int) $lockedContract->id,
+                    contractId: (int) ($lockedContract?->id ?? 0),
                     orderIds: $orderIds,
                     subscriptionIds: $subscriptionIds,
                 );
 
-                $totalMinorUnits = array_sum(array_map(
+                $subtotalMinorUnits = array_sum(array_map(
                     fn (array $line): int => $this->toMinorUnits($line['amount']),
                     $normalizedLines
                 ));
 
-                $numbering = $this->invoiceNumberService->allocateForCreate($attributes);
+                $issuerOrganization = $lockedContract === null
+                    ? $this->manualIssuerOrganization()
+                    : Organization::query()->find($lockedContract->issuer_organization_id);
+                if ($issuerOrganization === null && $lockedContract?->issuer_organization_id === null) {
+                    $issuerOrganization = $this->organizationContext->singleActive();
+                }
+                if ($issuerOrganization === null) {
+                    throw ValidationException::withMessages([
+                        'organization' => $lockedContract === null
+                            ? __($this->organizationContext->missingContextMessage())
+                        : __('organizations.errors.contract_issuer_missing'),
+                    ]);
+                }
+                if ($lockedContract !== null
+                    && $lockedContract->issuer_organization_id !== null
+                    && ! $issuerOrganization->is_active) {
+                    throw ValidationException::withMessages([
+                        'contract_id' => __('organizations.errors.contract_issuer_inactive'),
+                    ]);
+                }
+                $vatSnapshot = $this->vatCalculator->snapshotForOrganization($issuerOrganization, $subtotalMinorUnits);
+                $numbering = $this->invoiceNumberService->allocateForCreate($attributes, $issuerOrganization);
 
                 $invoice = $lockedCompany->invoices()->create([
-                    'contract_id' => $lockedContract->id,
+                    'contract_id' => $lockedContract?->id,
                     ...$numbering,
                     'issue_date' => $attributes['issue_date'],
                     'due_date' => $dueDate,
                     'period_start' => null,
                     'period_end' => null,
-                    'total_amount' => $this->formatMinorUnits($totalMinorUnits),
+                    ...$vatSnapshot,
                     'status' => 'draft',
-                    ...$this->sellerSnapshot->toArray(),
+                    ...$this->sellerSnapshot->toArray($issuerOrganization),
                     'payer_name' => $lockedCompany->name,
                     'payer_voen' => $lockedCompany->voen,
-                    'contract_reference' => $lockedContract->contract_number,
+                    'contract_reference' => $lockedContract?->contract_number,
                     'comment' => $attributes['comment'] ?? null,
                 ]);
 
@@ -163,7 +189,7 @@ final class CreateInvoice
      */
     private function normalizeLines(
         array $lines,
-        Contract $contract,
+        ?Contract $contract,
         bool $canonicalizeSubjectAmounts,
     ): array {
         $orders = [];
@@ -242,6 +268,7 @@ final class CreateInvoice
             if ($orderId !== null) {
                 $order = $orderRows->get($orderId);
                 if (! $order
+                    || $contract === null
                     || (int) $order->contract_id !== (int) $contract->id
                     || $order->status === 'cancelled') {
                     throw ValidationException::withMessages([
@@ -269,6 +296,7 @@ final class CreateInvoice
 
             $subscription = $subscriptionRows->get($subscriptionId);
             if (! $subscription
+                || $contract === null
                 || (int) $subscription->contract_id !== (int) $contract->id
                 || $subscription->status !== 'active') {
                 throw ValidationException::withMessages([
@@ -391,6 +419,19 @@ final class CreateInvoice
         }
 
         return (int) $value;
+    }
+
+    private function manualIssuerOrganization(): Organization
+    {
+        $organization = $this->organizationContext->resolve();
+
+        if (! $organization instanceof Organization) {
+            throw ValidationException::withMessages([
+                'organization' => __($this->organizationContext->missingContextMessage()),
+            ]);
+        }
+
+        return $organization;
     }
 
     private function toMinorUnits(mixed $value): int

@@ -20,7 +20,7 @@ class DashboardRouteAuthorizationCoverageTest extends AuthorizationTestCase
             'methods' => ['GET'],
             'controller' => DashboardController::class,
             'controller_method' => 'index',
-            'middleware' => ['web', 'auth', 'active', 'password.changed'],
+            'middleware' => ['web', 'auth', 'active', 'password.changed', 'organization.context'],
             'ability' => PermissionName::DashboardView->value,
             'exact_permission' => PermissionName::DashboardView->value,
             'wrong_permission' => PermissionName::CompaniesView->value,

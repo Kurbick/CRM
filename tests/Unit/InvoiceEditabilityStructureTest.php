@@ -17,7 +17,7 @@ class InvoiceEditabilityStructureTest extends TestCase
         $this->assertStringContainsString('DB::transaction(', $action);
         $this->assertStringContainsString('->lockForUpdate()', $action);
         $this->assertStringContainsString('billing_occurrence_key', $action);
-        $this->assertStringContainsString('$this->sellerSnapshot->toArray()', $action);
+        $this->assertStringContainsString('$this->sellerSnapshot->toArray($issuerOrganization)', $action);
     }
 
     public function test_web_update_locks_invoice_then_rechecks_shared_editability(): void

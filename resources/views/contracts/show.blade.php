@@ -124,6 +124,9 @@
                         <span>{{ $contract->company->name }}</span>
                     @endcan
                 </div>
+                @if ($organization)
+                    <div class="mt-2 text-xs text-slate-500"><span class="font-medium text-slate-600">{{ __('organizations.form.issuer') }}:</span> {{ $organization->name }}</div>
+                @endif
             </div>
 
             <div class="flex shrink-0 flex-wrap items-center gap-1">

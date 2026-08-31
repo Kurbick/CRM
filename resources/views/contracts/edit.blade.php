@@ -37,6 +37,22 @@
                         @enderror
                     </div>
 
+                    <div class="md:col-span-2">
+                        <label for="issuer_organization_id" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('organizations.form.issuer') }}</label>
+                        @php($contractHasInvoices = $contract->invoices()->exists())
+                        @if ($contractHasInvoices)
+                            <p class="text-sm font-medium text-slate-900">{{ $contract->issuerOrganization?->name ?? __('organizations.errors.none_available') }}</p>
+                            <p class="mt-1 text-xs text-slate-500">{{ __('organizations.form.issuer_locked') }}</p>
+                        @else
+                            <select name="issuer_organization_id" id="issuer_organization_id" required class="w-full @error('issuer_organization_id') border-red-300 @else border-gray-200 @enderror">
+                                @foreach ($organizations as $organization)
+                                    <option value="{{ $organization->id }}" @selected(old('issuer_organization_id', $contract->issuer_organization_id) == $organization->id)>{{ $organization->name }}</option>
+                                @endforeach
+                            </select>
+                            @error('issuer_organization_id')<p class="mt-1 text-xs text-red-500">{{ $message }}</p>@enderror
+                        @endif
+                    </div>
+
                     <div>
                         <label for="start_date" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('contracts.fields.start_date') }} <span class="text-red-500">*</span></label>
                         <x-form.date-input name="start_date" :value="old('start_date', $contract->start_date?->format('Y-m-d'))" required />

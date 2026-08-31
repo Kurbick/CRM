@@ -94,6 +94,8 @@ class OrganizationInvoiceIntegrationTest extends AuthorizationTestCase
     /** @return array<string, mixed> */
     private function apiPayload(Contract $contract, string $number): array
     {
+        $order = $this->subjectOrder($contract, ['price' => '10.00']);
+
         return [
             'contract_id' => $contract->id,
             'invoice_number' => $number,
@@ -103,6 +105,7 @@ class OrganizationInvoiceIntegrationTest extends AuthorizationTestCase
             'lines' => [[
                 'description' => 'Organization test line',
                 'amount' => '10.00',
+                'order_id' => $order->id,
             ]],
         ];
     }

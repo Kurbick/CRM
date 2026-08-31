@@ -7,11 +7,18 @@ use Illuminate\Support\Facades\DB;
 
 class CreditBalance extends Model
 {
-    protected $fillable = ['company_id', 'amount'];
+    protected $fillable = ['company_id', 'organization_id', 'amount'];
+
+    protected $casts = ['amount' => 'decimal:2'];
 
     public function company()
     {
         return $this->belongsTo(Company::class);
+    }
+
+    public function organization()
+    {
+        return $this->belongsTo(Organization::class);
     }
 
     public function entries()

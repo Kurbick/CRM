@@ -8,6 +8,7 @@ use App\Models\Contract;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\Subscription;
+use App\Services\ActiveOrganizationContext;
 use App\Support\Access\PermissionName;
 use App\Support\DashboardFinancials;
 use Illuminate\Support\Facades\Gate;
@@ -15,7 +16,7 @@ use Illuminate\View\View;
 
 final class DashboardController extends Controller
 {
-    public function index(DashboardFinancials $financials): View
+    public function index(DashboardFinancials $financials, ActiveOrganizationContext $organizationContext): View
     {
         Gate::authorize(PermissionName::DashboardView->value);
 
@@ -63,6 +64,14 @@ final class DashboardController extends Controller
         if ($abilities['contracts']) {
             $overview['active_subscriptions'] = Subscription::query()
                 ->where('status', 'active')
+                ->whereHas('contract', function ($query) use ($organizationContext): void {
+                    $organization = $organizationContext->resolve();
+                    if ($organization === null) {
+                        $query->whereRaw('1 = 0');
+                    } else {
+                        $organizationContext->scopeFor($query, $organization);
+                    }
+                })
                 ->count();
         }
 
@@ -90,6 +99,14 @@ final class DashboardController extends Controller
             if ($abilities['company_payments']) {
                 $companyQuery->with([
                     'payments' => fn ($query) => $query
+                        ->whereHas('invoice', function ($invoiceQuery) use ($organizationContext): void {
+                            $organization = $organizationContext->resolve();
+                            if ($organization === null) {
+                                $invoiceQuery->whereRaw('1 = 0');
+                            } else {
+                                $organizationContext->scopeFor($invoiceQuery, $organization);
+                            }
+                        })
                         ->select(['id', 'company_id', 'payment_date'])
                         ->where('status', 'confirmed')
                         ->orderByDesc('payment_date')

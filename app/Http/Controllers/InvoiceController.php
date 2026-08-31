@@ -12,6 +12,7 @@ use App\Models\Company;
 use App\Models\Contract;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
+use App\Services\ActiveOrganizationContext;
 use App\Support\ApiPagination;
 use DateTimeInterface;
 use Illuminate\Http\JsonResponse;
@@ -25,6 +26,7 @@ class InvoiceController extends Controller
     public function __construct(
         private readonly CreateInvoice $createInvoice,
         private readonly UpdateInvoice $updateInvoice,
+        private readonly ActiveOrganizationContext $organizationContext,
     ) {}
 
     public function index(Request $request, Company $company): JsonResponse
@@ -43,7 +45,10 @@ class InvoiceController extends Controller
             'created_at',
             'updated_at',
         ];
+        $organization = $this->organizationContext->resolve();
         $invoices = $company->invoices()
+            ->when($organization, fn ($query) => $query->where('issuer_organization_id', $organization->getKey()))
+            ->when(! $organization, fn ($query) => $query->whereRaw('1 = 0'))
             ->select($fields)
             ->withSum([
                 'payments as confirmed_paid_amount' => fn ($query) => $query
@@ -69,7 +74,9 @@ class InvoiceController extends Controller
     public function store(StoreInvoiceRequest $request, Company $company): JsonResponse
     {
         $validated = $request->validated();
-        $contract = Contract::query()->whereKey($validated['contract_id'])->firstOrFail();
+        $contract = ! empty($validated['contract_id'])
+            ? Contract::query()->whereKey($validated['contract_id'])->firstOrFail()
+            : null;
         $invoice = $this->createInvoice->execute(
             $company,
             $contract,

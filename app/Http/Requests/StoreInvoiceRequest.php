@@ -25,6 +25,7 @@ class StoreInvoiceRequest extends FormRequest
                     $this->route('company')->id
                 ),
             ],
+            'issuer_organization_id' => ['sometimes', 'nullable', 'integer', 'exists:organizations,id'],
             'invoice_number' => 'required_without:invoice_number_sequence|nullable|string|max:50|unique:invoices,invoice_number',
             'invoice_number_sequence' => ['nullable', 'integer', 'min:1'],
             'invoice_number_manual' => ['nullable', 'boolean'],
@@ -33,6 +34,10 @@ class StoreInvoiceRequest extends FormRequest
             'period_start' => 'nullable|date',
             'period_end' => 'nullable|date|after_or_equal:period_start',
             'total_amount' => 'required|numeric|min:0',
+            'subtotal_amount' => 'prohibited',
+            'vat_enabled' => 'prohibited',
+            'vat_rate' => 'prohibited',
+            'vat_amount' => 'prohibited',
             'status' => 'prohibited',
 
             // Реквизиты продавца принадлежат deployment configuration.
@@ -52,7 +57,15 @@ class StoreInvoiceRequest extends FormRequest
 
             // Строки инвойса — массив
             'lines' => 'required|array|min:1',
-            'lines.*' => 'array:description,amount,subscription_id,order_id,period_start,period_end,billing_occurrence_key',
+            'lines.*' => [
+                'array:description,amount,subscription_id,order_id,period_start,period_end,billing_occurrence_key',
+                function (string $attribute, mixed $line, \Closure $fail): void {
+                    if (! is_array($line)
+                        || (! filled($line['subscription_id'] ?? null) && ! filled($line['order_id'] ?? null))) {
+                        $fail(__('invoices.errors.subject_not_in_contract'));
+                    }
+                },
+            ],
             // lines — обязательный массив, минимум одна строка
             'lines.*.description' => 'required|string|max:255',
             // lines.* — правило применяется к каждому элементу массива

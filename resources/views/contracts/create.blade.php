@@ -47,6 +47,12 @@
                     </div>
 
                     <div class="md:col-span-2">
+                        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('organizations.form.issuer') }}</label>
+                        <p class="text-sm font-medium text-slate-900">{{ $organization?->name ?? $organizationMessage }}</p>
+                        <p class="mt-1 text-xs text-slate-500">{{ __('organizations.form.issuer_help') }}</p>
+                    </div>
+
+                    <div class="md:col-span-2">
                         <label for="contract_number" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('contracts.fields.number') }} <span class="text-red-500">*</span></label>
                         <input type="text" name="contract_number" id="contract_number" value="{{ old('contract_number') }}" placeholder="CTR-2026-001" required
                             class="w-full font-mono @error('contract_number') border-red-300 @else border-gray-200 @enderror">

@@ -3,17 +3,17 @@
 namespace App\Support\Invoices;
 
 use App\Models\Organization;
+use App\Services\ActiveOrganizationContext;
 use Illuminate\Validation\ValidationException;
 
 final class InvoiceSellerSnapshot
 {
+    public function __construct(private readonly ActiveOrganizationContext $context) {}
+
     /** @return array<string, ?string> */
-    public function toArray(): array
+    public function toArray(?Organization $organization = null): array
     {
-        $organization = Organization::query()
-            ->current()
-            ->lockForUpdate()
-            ->first();
+        $organization ??= $this->context->requireCurrent();
 
         if (! $organization) {
             throw ValidationException::withMessages([

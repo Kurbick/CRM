@@ -19,6 +19,7 @@ class StoreContractRequest extends FormRequest
             'start_date' => 'required|date',
             'end_date' => 'nullable|date|after:start_date',
             'status' => 'nullable|in:active,terminated',
+            'issuer_organization_id' => ['sometimes', 'nullable', 'integer', 'exists:organizations,id'],
             'signed_document' => 'prohibited',
             'comment' => 'nullable|string',
         ];

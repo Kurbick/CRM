@@ -136,6 +136,9 @@ return [
         'updated' => 'Müqavilə yeniləndi.',
         'deleted' => 'Müqavilə silindi.',
     ],
+    'validation' => [
+        'contract_number_unique' => 'Bu nömrəli müqavilə artıq mövcuddur.',
+    ],
     'errors' => [
         'delete_dependencies' => 'Müqavilə ilə xidmətlər, sənədlər və ya invoyslar əlaqəli olduğu üçün onu silmək mümkün deyil.',
     ],

@@ -54,14 +54,14 @@ class ApplicationShellTest extends TestCase
         $viewerResponse = $this->actingAs($viewer)->get(route('home'));
         $viewerResponse->assertSeeText('Администрирование')
             ->assertSeeText('Пользователи')
-            ->assertDontSeeText('Наша организация')
+            ->assertDontSeeText('Организации')
             ->assertDontSeeText('Группы')
             ->assertDontSeeText('Права доступа');
 
         $ordinary = User::factory()->create();
         $ordinaryResponse = $this->actingAs($ordinary)->get(route('home'));
         $ordinaryResponse->assertDontSeeText('Администрирование')
-            ->assertDontSeeText('Наша организация')
+            ->assertDontSeeText('Организации')
             ->assertDontSee(route('admin.users.index'), false);
 
         $administrator = User::factory()->create();
@@ -69,8 +69,8 @@ class ApplicationShellTest extends TestCase
 
         $adminResponse = $this->actingAs($administrator)->get(route('home'));
         $adminResponse->assertSeeText('Администрирование')
-            ->assertSeeText('Наша организация')
-            ->assertSee('href="'.route('admin.organization.show').'"', false)
+            ->assertSeeText('Организации')
+            ->assertSee('href="'.route('admin.organizations.index').'"', false)
             ->assertSeeText('Пользователи')
             ->assertSeeText('Доступ')
             ->assertDontSee('<span>Группы</span>', false)
@@ -89,7 +89,7 @@ class ApplicationShellTest extends TestCase
             ->assertSee(route('password.change'), false)
             ->assertSeeText('Сменить пароль')
             ->assertSeeText('Выйти')
-            ->assertDontSeeText('Наша организация');
+            ->assertDontSeeText('Организации');
         $this->assertSame(1, substr_count($response->getContent(), 'action="'.route('logout').'"'));
     }
 }

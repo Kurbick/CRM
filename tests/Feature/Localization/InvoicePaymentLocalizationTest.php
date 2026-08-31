@@ -135,4 +135,26 @@ class InvoicePaymentLocalizationTest extends AuthorizationTestCase
 
         $this->get(route('invoices.edit', $invoice))->assertForbidden();
     }
+
+    public function test_vat_breakdown_uses_the_approved_ru_and_az_labels(): void
+    {
+        $invoice = $this->invoice('issued', 'L10N4-VAT');
+        $invoice->update([
+            'subtotal_amount' => '100.00',
+            'vat_enabled' => true,
+            'vat_rate' => '18.00',
+            'vat_amount' => '18.00',
+            'total_amount' => '118.00',
+        ]);
+
+        $this->withSession(['locale' => 'ru'])
+            ->get(route('invoices.show', $invoice))
+            ->assertSeeText('Сумма без НДС')
+            ->assertSeeText('НДС (18%)');
+
+        $this->withSession(['locale' => 'az'])
+            ->get(route('invoices.show', $invoice))
+            ->assertSeeText('ƏDV-siz məbləğ')
+            ->assertSeeText('ƏDV (18%)');
+    }
 }

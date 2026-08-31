@@ -81,13 +81,13 @@
             <p class="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{{ __('admin.navigation.title') }}</p>
             <div class="space-y-1">
                 @if ($isAdministrator)
-                    <a href="{{ route('admin.organization.show') }}" @click="sidebarOpen = false"
-                        class="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition {{ request()->routeIs('admin.organization.*') ? 'bg-slate-100 text-slate-950' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950' }}"
-                        @if (request()->routeIs('admin.organization.*')) aria-current="page" @endif>
-                        <svg class="h-4 w-4 shrink-0 {{ request()->routeIs('admin.organization.*') ? 'text-slate-900' : 'text-slate-400' }}" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <a href="{{ route('admin.organizations.index') }}" @click="sidebarOpen = false"
+                        class="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition {{ request()->routeIs('admin.organization.*', 'admin.organizations.*') ? 'bg-slate-100 text-slate-950' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950' }}"
+                        @if (request()->routeIs('admin.organization.*', 'admin.organizations.*')) aria-current="page" @endif>
+                        <svg class="h-4 w-4 shrink-0 {{ request()->routeIs('admin.organization.*', 'admin.organizations.*') ? 'text-slate-900' : 'text-slate-400' }}" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 20h16M5.5 20V8.5L12 5l6.5 3.5V20M9 20v-5h6v5M9 10h.01M12 10h.01M15 10h.01" />
                         </svg>
-                        <span>{{ __('admin.navigation.organization') }}</span>
+                        <span>{{ __('organizations.admin.index_title') }}</span>
                     </a>
                 @endif
 

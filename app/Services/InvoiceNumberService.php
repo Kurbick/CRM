@@ -13,7 +13,10 @@ final class InvoiceNumberService
 {
     public const MAX_CODE_LENGTH = 12;
 
-    public function __construct(private readonly InvoiceNumberFormatter $formatter) {}
+    public function __construct(
+        private readonly InvoiceNumberFormatter $formatter,
+        private readonly ActiveOrganizationContext $context,
+    ) {}
 
     /**
      * Return the next candidate without creating or updating a counter row.
@@ -54,18 +57,27 @@ final class InvoiceNumberService
      * @param array<string,mixed> $attributes
      * @return array<string,mixed>
      */
-    public function allocateForCreate(array $attributes): array
+    public function allocateForCreate(array $attributes, ?Organization $issuer = null): array
     {
+        $issuer ??= $this->context->resolve();
+
         if ($this->isLegacy($attributes)) {
-            return ['invoice_number' => (string) $attributes['invoice_number']];
+            return array_filter([
+                'invoice_number' => (string) $attributes['invoice_number'],
+                'issuer_organization_id' => $issuer?->getKey(),
+            ], static fn (mixed $value): bool => $value !== null);
         }
 
-        $organization = $this->currentOrganization();
+        if ($issuer === null) {
+            throw ValidationException::withMessages([
+                'organization' => __('organizations.errors.none_available'),
+            ]);
+        }
         $year = $this->year($attributes['issue_date'] ?? null);
         $manual = $this->boolean($attributes['invoice_number_manual'] ?? false);
         $sequence = $manual ? $this->positiveSequence($attributes['invoice_number_sequence'] ?? null) : null;
 
-        return $this->allocate($organization, $year, $sequence);
+        return $this->allocate($issuer, $year, $sequence);
     }
 
     /**
@@ -77,6 +89,9 @@ final class InvoiceNumberService
      */
     public function changesForUpdate(Invoice $invoice, array $attributes): array
     {
+        $organization = $this->organizationForUpdate($invoice, $attributes);
+        $organizationChanged = $invoice->issuer_organization_id !== null
+            && (int) $organization->getKey() !== (int) $invoice->issuer_organization_id;
         $hasSequence = array_key_exists('invoice_number_sequence', $attributes);
         $hasLegacyNumber = array_key_exists('invoice_number', $attributes);
 
@@ -85,11 +100,11 @@ final class InvoiceNumberService
                 return ['invoice_number' => (string) $attributes['invoice_number']];
             }
 
-            if ($invoice->invoice_number_year !== null && array_key_exists('issue_date', $attributes)) {
-                $year = $this->year($attributes['issue_date']);
-                if ($year !== (int) $invoice->invoice_number_year) {
+            if ($invoice->invoice_number_year !== null && (array_key_exists('issue_date', $attributes) || $organizationChanged)) {
+                $year = $this->year($attributes['issue_date'] ?? $invoice->issue_date);
+                if ($year !== (int) $invoice->invoice_number_year || $organizationChanged) {
                     return $this->allocate(
-                        $this->organizationForInvoice($invoice),
+                        $organization,
                         $year,
                         null,
                         $invoice,
@@ -118,7 +133,6 @@ final class InvoiceNumberService
             return [];
         }
 
-        $organization = $this->organizationForInvoice($invoice);
         $allocation = $this->allocate(
             $organization,
             $year,
@@ -129,6 +143,17 @@ final class InvoiceNumberService
         );
 
         return $allocation;
+    }
+
+    private function organizationForUpdate(Invoice $invoice, array $attributes): Organization
+    {
+        $contractIssuerId = $invoice->contract?->issuer_organization_id;
+
+        if ($contractIssuerId !== null) {
+            return Organization::query()->findOrFail($contractIssuerId);
+        }
+
+        return $this->organizationForInvoice($invoice);
     }
 
     /** @return array<string,mixed> */
@@ -206,18 +231,6 @@ final class InvoiceNumberService
         }
     }
 
-    private function currentOrganization(): Organization
-    {
-        $organization = Organization::query()->current()->lockForUpdate()->first();
-        if (! $organization) {
-            throw ValidationException::withMessages([
-                'organization' => __('invoices.errors.organization_not_configured'),
-            ]);
-        }
-
-        return $organization;
-    }
-
     private function organizationForInvoice(Invoice $invoice): Organization
     {
         if ($invoice->issuer_organization_id !== null) {
@@ -230,7 +243,14 @@ final class InvoiceNumberService
             }
         }
 
-        return $this->currentOrganization();
+        $organization = $this->context->resolve();
+        if ($organization === null) {
+            throw ValidationException::withMessages([
+                'organization' => __('organizations.errors.none_available'),
+            ]);
+        }
+
+        return $organization;
     }
 
     private function code(Organization $organization): string

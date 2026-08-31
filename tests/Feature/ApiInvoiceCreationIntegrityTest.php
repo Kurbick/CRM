@@ -18,98 +18,54 @@ use Tests\Support\DomainQueryRecorder;
 
 class ApiInvoiceCreationIntegrityTest extends AuthorizationTestCase
 {
-    private const DETAIL_KEYS = [
-        'id',
-        'company_id',
-        'contract_id',
-        'invoice_number',
-        'issue_date',
-        'due_date',
-        'period_start',
-        'period_end',
-        'status',
-        'total_amount',
-        'paid_amount',
-        'remaining_amount',
-        'is_overdue',
-        'comment',
-        'seller_name',
-        'seller_voen',
-        'seller_bank_name',
-        'seller_iban',
-        'seller_bank_code',
-        'seller_bank_voen',
-        'seller_swift',
-        'payer_name',
-        'payer_voen',
-        'contract_reference',
-        'created_at',
-        'updated_at',
-        'company',
-        'contract',
-        'lines',
-    ];
-
-    public function test_manual_invoice_uses_bound_parent_server_snapshots_total_and_safe_response(): void
+    public function test_manual_invoice_lines_are_rejected_at_the_api_boundary(): void
     {
-        $sellerSnapshot = $this->configureSeller('API CREATE SELLER');
-        $company = $this->company('API CREATE PAYER');
-        $company->update(['short_name' => 'Payer', 'voen' => 'PAYER-VOEN']);
-        $otherCompany = $this->company('API CREATE OTHER');
+        $company = $this->company('API CREATE MANUAL REJECTED');
         $contract = $this->contract($company);
         $this->actingAsPermissions([PermissionName::InvoicesCreate->value]);
         $payload = $this->payload($contract, [[
             'description' => 'Manual line',
             'amount' => '10.05',
         ]], 'API-CREATE-MANUAL');
-        $payload += [
-            'company_id' => $otherCompany->id,
-            'payer_name' => 'FORGED PAYER',
-            'payer_voen' => 'FORGED VOEN',
-            'contract_reference' => 'FORGED CONTRACT',
-            'period_start' => '2020-01-01',
-            'period_end' => '2020-12-31',
-        ];
 
-        $response = $this->postJson(route('api.companies.invoices.store', $company), $payload)
-            ->assertCreated();
+        $this->postJson(route('api.companies.invoices.store', $company), $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('lines.0');
 
-        $invoice = Invoice::query()->sole();
-        $this->assertSame(self::DETAIL_KEYS, array_keys($response->json()));
-        $response
-            ->assertJsonPath('company', [
-                'id' => $company->id,
-                'name' => $company->name,
-                'short_name' => $company->short_name,
-            ])
-            ->assertJsonPath('contract', [
-                'id' => $contract->id,
-                'company_id' => $company->id,
-                'contract_number' => $contract->contract_number,
-            ])
-            ->assertJsonPath('status', 'draft')
-            ->assertJsonPath('total_amount', '10.05')
-            ->assertJsonPath('paid_amount', '0.00')
-            ->assertJsonPath('remaining_amount', '10.05')
-            ->assertJsonPath('payer_name', $company->name)
-            ->assertJsonPath('payer_voen', $company->voen)
-            ->assertJsonPath('contract_reference', $contract->contract_number)
-            ->assertJsonMissingPath('payments')
-            ->assertJsonMissingPath('lines.0.invoice_id')
-            ->assertJsonMissingPath('lines.0.order_id')
-            ->assertJsonMissingPath('lines.0.subscription_id')
-            ->assertJsonMissingPath('lines.0.billing_occurrence_key');
-        $this->assertSame($company->id, $invoice->company_id);
-        $this->assertSame($contract->id, $invoice->contract_id);
-        $this->assertSame('10.05', $invoice->total_amount);
-        $this->assertNull($invoice->period_start);
-        $this->assertNull($invoice->period_end);
-        $this->assertSellerSnapshot($invoice, $sellerSnapshot);
-        foreach ($sellerSnapshot as $field => $value) {
-            $response->assertJsonPath($field, $value);
-        }
+        $this->assertDatabaseCount('invoices', 0);
+        $this->assertDatabaseCount('invoice_lines', 0);
         $this->assertDatabaseCount('payments', 0);
         $this->assertDatabaseCount('credit_balance_entries', 0);
+    }
+
+    public function test_api_invoice_snapshots_issuer_vat_and_returns_gross_total(): void
+    {
+        $organization = Organization::query()->firstOrFail();
+        $organization->update([
+            'invoice_number_code' => 'API',
+            'is_vat_payer' => true,
+            'vat_rate' => '18.00',
+        ]);
+        $company = $this->company('API VAT customer');
+        $contract = $this->contract($company);
+        $order = $this->subjectOrder($contract, ['price' => '1000.00', 'title' => 'VAT service']);
+        $this->actingAsPermissions([PermissionName::InvoicesCreate->value]);
+
+        $this->postJson(
+            route('api.companies.invoices.store', $company),
+            $this->payload($contract, [$this->orderLine($order)], 'API-VAT-001')
+        )->assertCreated()
+            ->assertJsonPath('total_amount', '1180.00');
+
+        $this->assertDatabaseHas('invoices', [
+            'contract_id' => $contract->id,
+            'issuer_organization_id' => $organization->id,
+            'vat_enabled' => 1,
+            'vat_rate' => '18.00',
+            'subtotal_amount' => '1000.00',
+            'vat_amount' => '180.00',
+            'total_amount' => '1180.00',
+        ]);
     }
 
     public function test_forged_seller_fields_are_rejected_before_any_mutation(): void
@@ -165,15 +121,16 @@ class ApiInvoiceCreationIntegrityTest extends AuthorizationTestCase
         ]);
         $company = $this->company('API CREATE NULL SELLER');
         $contract = $this->contract($company);
+        $order = $this->subjectOrder($contract);
         $this->actingAsPermissions([PermissionName::InvoicesCreate->value]);
 
         $this->postJson(
             route('api.companies.invoices.store', $company),
-            $this->payload($contract, [$this->manualLine()], 'API-CREATE-NULL-SELLER')
+            $this->payload($contract, [$this->orderLine($order)], 'API-CREATE-NULL-SELLER')
         )->assertCreated();
 
         $invoice = Invoice::query()->sole();
-        $organization = Organization::current();
+        $organization = Organization::query()->first();
         $this->assertNotNull($organization);
         $this->assertSame($organization->name, $invoice->seller_name);
         $this->assertSame($organization->voen, $invoice->seller_voen);
@@ -189,11 +146,12 @@ class ApiInvoiceCreationIntegrityTest extends AuthorizationTestCase
         $snapshot = $this->configureSeller('API SELLER SNAPSHOT A');
         $company = $this->company('API CREATE IMMUTABLE SELLER');
         $contract = $this->contract($company);
+        $order = $this->subjectOrder($contract);
         $this->actingAsPermissions([PermissionName::InvoicesCreate->value]);
 
         $this->postJson(
             route('api.companies.invoices.store', $company),
-            $this->payload($contract, [$this->manualLine()], 'API-CREATE-IMMUTABLE-SELLER')
+            $this->payload($contract, [$this->orderLine($order)], 'API-CREATE-IMMUTABLE-SELLER')
         )->assertCreated();
 
         $invoice = Invoice::query()->sole();
@@ -208,9 +166,11 @@ class ApiInvoiceCreationIntegrityTest extends AuthorizationTestCase
         $otherCompany = $this->company('API CREATE CONTRACT OTHER');
         $contract = $this->contract($company);
         $otherContract = $this->contract($otherCompany);
+        $order = $this->subjectOrder($contract);
+        $otherOrder = $this->subjectOrder($otherContract);
         $this->actingAsPermissions([PermissionName::InvoicesCreate->value]);
 
-        $missing = $this->payload($contract, [$this->manualLine()], 'API-CREATE-NO-CONTRACT');
+        $missing = $this->payload($contract, [$this->orderLine($order)], 'API-CREATE-NO-CONTRACT');
         unset($missing['contract_id']);
         $this->postJson(route('api.companies.invoices.store', $company), $missing)
             ->assertUnprocessable()
@@ -218,7 +178,7 @@ class ApiInvoiceCreationIntegrityTest extends AuthorizationTestCase
 
         $this->postJson(
             route('api.companies.invoices.store', $company),
-            $this->payload($otherContract, [$this->manualLine()], 'API-CREATE-CROSS-CONTRACT')
+            $this->payload($otherContract, [$this->orderLine($otherOrder)], 'API-CREATE-CROSS-CONTRACT')
         )->assertUnprocessable()->assertJsonValidationErrors('contract_id');
 
         $this->assertDatabaseCount('invoices', 0);
@@ -406,21 +366,23 @@ class ApiInvoiceCreationIntegrityTest extends AuthorizationTestCase
         $this->assertDatabaseCount('invoice_lines', 0);
     }
 
-    public function test_distinct_sources_and_duplicate_manual_descriptions_are_allowed(): void
+    public function test_distinct_sources_and_duplicate_descriptions_are_allowed(): void
     {
         $company = $this->company('API CREATE DISTINCT SOURCES');
         $contract = $this->contract($company);
         $firstOrder = $this->subjectOrder($contract, ['payment_terms' => 30]);
         $secondOrder = $this->subjectOrder($contract, ['payment_terms' => 20]);
         $subscription = $this->subjectSubscription($contract, ['payment_terms' => 10]);
+        $repeatedFirst = $this->subjectOrder($contract, ['title' => 'Repeated manual', 'price' => '10.00']);
+        $repeatedSecond = $this->subjectOrder($contract, ['title' => 'Repeated manual', 'price' => '10.00']);
         $this->actingAsPermissions([PermissionName::InvoicesCreate->value]);
 
         $lines = [
             $this->orderLine($firstOrder),
             $this->orderLine($secondOrder),
             $this->subscriptionLine($subscription),
-            $this->manualLine('Repeated manual'),
-            $this->manualLine('Repeated manual'),
+            $this->orderLine($repeatedFirst),
+            $this->orderLine($repeatedSecond),
         ];
         $this->postJson(
             route('api.companies.invoices.store', $company),
@@ -438,10 +400,10 @@ class ApiInvoiceCreationIntegrityTest extends AuthorizationTestCase
         $this->actingAsPermissions([PermissionName::InvoicesCreate->value]);
 
         foreach (['0', '0.00', '0.001', '1.234', '-1', '1e2'] as $index => $amount) {
-            $payload = $this->payload($contract, [[
-                'description' => 'Invalid amount',
-                'amount' => $amount,
-            ]], "API-CREATE-AMOUNT-INVALID-{$index}");
+            $order = $this->subjectOrder($contract, ['title' => 'Invalid amount']);
+            $line = $this->orderLine($order);
+            $line['amount'] = $amount;
+            $payload = $this->payload($contract, [$line], "API-CREATE-AMOUNT-INVALID-{$index}");
 
             $this->postJson(route('api.companies.invoices.store', $company), $payload)
                 ->assertUnprocessable()
@@ -457,13 +419,19 @@ class ApiInvoiceCreationIntegrityTest extends AuthorizationTestCase
         $company = $this->company('API CREATE AMOUNT EXACT');
         $contract = $this->contract($company);
         $this->actingAsPermissions([PermissionName::InvoicesCreate->value]);
+        $orders = collect([
+            ['0.01', '0.01'],
+            ['1', '1'],
+            ['1.2', '1.2'],
+            ['1.23', '1.23'],
+            ['0.10', '0.10'],
+            ['0.20', '0.20'],
+        ])->map(fn (array $values): Order => $this->subjectOrder($contract, [
+            'title' => $values[0],
+            'price' => $values[1],
+        ]));
         $payload = $this->payload($contract, [
-            $this->manualLine('0.01', '0.01'),
-            $this->manualLine('1', '1'),
-            $this->manualLine('1.2', '1.2'),
-            $this->manualLine('1.23', '1.23'),
-            $this->manualLine('0.10', '0.10'),
-            $this->manualLine('0.20', '0.20'),
+            ...$orders->map(fn (Order $order): array => $this->orderLine($order))->all(),
         ], 'API-CREATE-AMOUNT-EXACT');
         $payload['total_amount'] = '999999.99';
 
@@ -479,29 +447,25 @@ class ApiInvoiceCreationIntegrityTest extends AuthorizationTestCase
         );
     }
 
-    public function test_manual_due_date_is_required_and_cannot_precede_issue_date(): void
+    public function test_due_date_is_required_and_subject_due_date_is_server_derived(): void
     {
         $company = $this->company('API CREATE MANUAL DUE');
         $contract = $this->contract($company);
+        $missingOrder = $this->subjectOrder($contract);
+        $validOrder = $this->subjectOrder($contract);
         $this->actingAsPermissions([PermissionName::InvoicesCreate->value]);
 
-        $missing = $this->payload($contract, [$this->manualLine()], 'API-CREATE-DUE-MISSING');
+        $missing = $this->payload($contract, [$this->orderLine($missingOrder)], 'API-CREATE-DUE-MISSING');
         unset($missing['due_date']);
         $this->postJson(route('api.companies.invoices.store', $company), $missing)
             ->assertUnprocessable()
             ->assertJsonValidationErrors('due_date');
 
-        $early = $this->payload($contract, [$this->manualLine()], 'API-CREATE-DUE-EARLY');
-        $early['due_date'] = '2026-07-31';
-        $this->postJson(route('api.companies.invoices.store', $company), $early)
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors('due_date');
-
-        $valid = $this->payload($contract, [$this->manualLine()], 'API-CREATE-DUE-VALID');
+        $valid = $this->payload($contract, [$this->orderLine($validOrder)], 'API-CREATE-DUE-VALID');
         $valid['due_date'] = '2026-09-05';
         $this->postJson(route('api.companies.invoices.store', $company), $valid)
             ->assertCreated()
-            ->assertJsonPath('due_date', '2026-09-05');
+            ->assertJsonPath('due_date', '2026-08-31');
     }
 
     public function test_multiple_sources_use_batch_queries_instead_of_per_line_queries(): void
@@ -550,6 +514,8 @@ class ApiInvoiceCreationIntegrityTest extends AuthorizationTestCase
     {
         $company = $this->company('API CREATE ROLLBACK');
         $contract = $this->contract($company);
+        $firstOrder = $this->subjectOrder($contract, ['title' => 'First']);
+        $secondOrder = $this->subjectOrder($contract, ['title' => 'Second']);
         $this->actingAsPermissions([PermissionName::InvoicesCreate->value]);
         $creating = 0;
         Event::listen('eloquent.creating: '.InvoiceLine::class, function () use (&$creating): void {
@@ -565,7 +531,7 @@ class ApiInvoiceCreationIntegrityTest extends AuthorizationTestCase
                 route('api.companies.invoices.store', $company),
                 $this->payload(
                     $contract,
-                    [$this->manualLine('First'), $this->manualLine('Second')],
+                    [$this->orderLine($firstOrder), $this->orderLine($secondOrder)],
                     'API-CREATE-ROLLBACK'
                 )
             );
@@ -590,12 +556,6 @@ class ApiInvoiceCreationIntegrityTest extends AuthorizationTestCase
             'comment' => 'Creation integrity comment',
             'lines' => $lines,
         ];
-    }
-
-    /** @return array<string, mixed> */
-    private function manualLine(string $description = 'Manual line', string $amount = '10.00'): array
-    {
-        return compact('description', 'amount');
     }
 
     /** @return array<string, mixed> */

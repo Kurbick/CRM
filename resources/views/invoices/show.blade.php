@@ -21,6 +21,9 @@
             $invoice->status === 'partially_paid' => 'text-orange-600',
             default => 'text-gray-900',
         };
+        $invoiceVatRateLabel = filled($invoice->vat_rate)
+            ? rtrim(rtrim((string) $invoice->vat_rate, '0'), '.')
+            : '—';
 
         $hasPaymentRegistration = in_array($invoice->status, ['issued', 'partially_paid'], true)
             && $invoice->remaining_amount > 0
@@ -79,6 +82,9 @@
                         <span class="font-mono">{{ $invoice->contract_reference }}</span>
                     @endif
                 </div>
+                @if ($invoice->issuerOrganization)
+                    <p class="mt-2 text-xs text-slate-500"><span class="font-medium text-slate-600">{{ __('organizations.form.issuer') }}:</span> {{ $invoice->issuerOrganization->name }}</p>
+                @endif
             </div>
 
             <div class="flex shrink-0 flex-wrap items-center gap-1">
@@ -467,6 +473,16 @@
 
                 {{-- Расчет итога --}}
                 <div class="invoice-totals border-t border-gray-100 pt-6 flex flex-col items-end gap-2 text-sm text-gray-600">
+                    @if ($invoice->vat_enabled)
+                        <div class="flex justify-between w-64">
+                            <span>{{ __('invoices.show.subtotal') }}</span>
+                            <span class="font-semibold text-gray-900 font-mono">{{ $formatMoney($invoice->subtotal_amount) }}</span>
+                        </div>
+                        <div class="flex justify-between w-64">
+                            <span>{{ __('invoices.show.vat', ['rate' => $invoiceVatRateLabel]) }}</span>
+                            <span class="font-semibold text-gray-900 font-mono">{{ $formatMoney($invoice->vat_amount) }}</span>
+                        </div>
+                    @endif
                     <div class="flex justify-between w-64">
                         <span>{{ __('invoices.show.total_invoice') }}</span>
 

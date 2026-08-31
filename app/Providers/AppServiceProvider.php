@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Models\User;
 use App\Support\Access\PermissionRegistry;
 use App\Support\Access\SystemRole;
+use App\Services\ActiveOrganizationContext;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
@@ -16,7 +17,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->scoped(ActiveOrganizationContext::class);
     }
 
     /**

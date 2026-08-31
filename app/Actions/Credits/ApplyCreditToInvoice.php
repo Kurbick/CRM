@@ -5,6 +5,7 @@ namespace App\Actions\Credits;
 use App\Actions\Payments\ApplyConfirmedPaymentLifecycle;
 use App\Models\CreditBalance;
 use App\Models\Invoice;
+use App\Models\Organization;
 use App\Models\Payment;
 use App\Models\User;
 use App\Services\CompanyActivityRecorder;
@@ -111,14 +112,25 @@ final class ApplyCreditToInvoice
                 return AppliedCreditResult::noOp(AppliedCreditResult::FULLY_RESERVED);
             }
 
+            $legacyCreditAllowed = Organization::query()->active()->count() === 1;
             $creditBalance = CreditBalance::query()
                 ->where('company_id', $lockedInvoice->company_id)
+                ->where(function ($query) use ($lockedInvoice, $legacyCreditAllowed): void {
+                    $query->where('organization_id', $lockedInvoice->issuer_organization_id);
+
+                    if ($legacyCreditAllowed) {
+                        $query->orWhereNull('organization_id');
+                    }
+                })
+                ->orderByRaw('organization_id IS NULL')
                 ->lockForUpdate()
                 ->first();
 
             $availableCreditMinor = 0;
             if ($creditBalance !== null) {
-                if ((int) $creditBalance->company_id !== (int) $lockedInvoice->company_id) {
+                if ((int) $creditBalance->company_id !== (int) $lockedInvoice->company_id
+                    || ($creditBalance->organization_id !== null
+                        && (int) $creditBalance->organization_id !== (int) $lockedInvoice->issuer_organization_id)) {
                     throw new LogicException('Credit Balance and Invoice companies do not match.');
                 }
 

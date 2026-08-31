@@ -4,6 +4,7 @@ use App\Http\Middleware\AuthorizeApiRoute;
 use App\Http\Middleware\EnsurePasswordWasChanged;
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\SetLocale;
+use App\Http\Middleware\SetActiveOrganization;
 use App\Support\Navigation\AuthorizedLandingPage;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -29,6 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => RoleMiddleware::class,
             'permission' => PermissionMiddleware::class,
             'role_or_permission' => RoleOrPermissionMiddleware::class,
+            'organization.context' => SetActiveOrganization::class,
         ]);
         $middleware->api(remove: [SubstituteBindings::class]);
         $middleware->prependToPriorityList(SubstituteBindings::class, AuthorizeApiRoute::class);

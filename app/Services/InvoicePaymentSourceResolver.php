@@ -21,31 +21,62 @@ class InvoicePaymentSourceResolver
      */
     public function addAggregates(Builder $query): Builder
     {
+        // Payment allocations are NET line-level amounts. For VAT invoices,
+        // source attribution is based on the confirmed payment's gross amount,
+        // but that payment must be counted once even when it has allocations
+        // for several invoice lines.
+        $vatPayments = "(SELECT COALESCE(SUM(source_vat_payments.amount), 0)
+            FROM payments AS source_vat_payments
+            WHERE source_vat_payments.invoice_id = invoices.id
+              AND source_vat_payments.status = 'confirmed')";
+        $netAllocations = "(SELECT COALESCE(SUM(source_net_allocations.amount), 0)
+            FROM payment_allocations AS source_net_allocations
+            INNER JOIN payments AS source_net_payments
+                ON source_net_payments.id = source_net_allocations.payment_id
+            WHERE source_net_payments.invoice_id = invoices.id
+              AND source_net_payments.status = 'confirmed')";
+        $creditVatPayments = "(SELECT COALESCE(SUM(source_credit_vat_payments.amount), 0)
+            FROM payments AS source_credit_vat_payments
+            WHERE source_credit_vat_payments.invoice_id = invoices.id
+              AND source_credit_vat_payments.status = 'confirmed'
+              AND EXISTS (
+                  SELECT 1
+                  FROM credit_balance_entries AS source_applied_entries
+                  WHERE source_applied_entries.payment_id = source_credit_vat_payments.id
+                    AND source_applied_entries.invoice_id = source_credit_vat_payments.invoice_id
+                    AND source_applied_entries.type = 'applied'
+              )
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM credit_balance_entries AS source_reversal_entries
+                  WHERE source_reversal_entries.payment_id = source_credit_vat_payments.id
+                    AND source_reversal_entries.invoice_id = source_credit_vat_payments.invoice_id
+                    AND source_reversal_entries.type = 'applied_reversal'
+              ))";
+        $creditNetAllocations = "(SELECT COALESCE(SUM(source_credit_net_allocations.amount), 0)
+            FROM payment_allocations AS source_credit_net_allocations
+            INNER JOIN payments AS source_credit_net_payments
+                ON source_credit_net_payments.id = source_credit_net_allocations.payment_id
+            WHERE source_credit_net_payments.invoice_id = invoices.id
+              AND source_credit_net_payments.status = 'confirmed'
+              AND EXISTS (
+                  SELECT 1
+                  FROM credit_balance_entries AS source_applied_entries
+                  WHERE source_applied_entries.payment_id = source_credit_net_payments.id
+                    AND source_applied_entries.invoice_id = source_credit_net_payments.invoice_id
+                    AND source_applied_entries.type = 'applied'
+              )
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM credit_balance_entries AS source_reversal_entries
+                  WHERE source_reversal_entries.payment_id = source_credit_net_payments.id
+                    AND source_reversal_entries.invoice_id = source_credit_net_payments.invoice_id
+                    AND source_reversal_entries.type = 'applied_reversal'
+              ))";
+
         return $query->addSelect([
-            self::TOTAL_APPLIED_AGGREGATE => DB::table('payment_allocations as source_allocations')
-                ->join('payments as source_payments', 'source_payments.id', '=', 'source_allocations.payment_id')
-                ->selectRaw('COALESCE(SUM(source_allocations.amount), 0)')
-                ->whereColumn('source_payments.invoice_id', 'invoices.id')
-                ->where('source_payments.status', 'confirmed'),
-            self::CREDIT_APPLIED_AGGREGATE => DB::table('payment_allocations as source_credit_allocations')
-                ->join('payments as source_credit_payments', 'source_credit_payments.id', '=', 'source_credit_allocations.payment_id')
-                ->selectRaw('COALESCE(SUM(source_credit_allocations.amount), 0)')
-                ->whereColumn('source_credit_payments.invoice_id', 'invoices.id')
-                ->where('source_credit_payments.status', 'confirmed')
-                ->whereExists(function ($entryQuery): void {
-                    $entryQuery->selectRaw('1')
-                        ->from('credit_balance_entries as source_applied_entries')
-                        ->whereColumn('source_applied_entries.payment_id', 'source_credit_payments.id')
-                        ->whereColumn('source_applied_entries.invoice_id', 'source_credit_payments.invoice_id')
-                        ->where('source_applied_entries.type', 'applied');
-                })
-                ->whereNotExists(function ($entryQuery): void {
-                    $entryQuery->selectRaw('1')
-                        ->from('credit_balance_entries as source_reversal_entries')
-                        ->whereColumn('source_reversal_entries.payment_id', 'source_credit_payments.id')
-                        ->whereColumn('source_reversal_entries.invoice_id', 'source_credit_payments.invoice_id')
-                        ->where('source_reversal_entries.type', 'applied_reversal');
-                }),
+            self::TOTAL_APPLIED_AGGREGATE => DB::raw("(CASE WHEN invoices.vat_enabled = 1 THEN {$vatPayments} ELSE {$netAllocations} END) AS ".self::TOTAL_APPLIED_AGGREGATE),
+            self::CREDIT_APPLIED_AGGREGATE => DB::raw("(CASE WHEN invoices.vat_enabled = 1 THEN {$creditVatPayments} ELSE {$creditNetAllocations} END) AS ".self::CREDIT_APPLIED_AGGREGATE),
         ]);
     }
 
@@ -84,10 +115,13 @@ class InvoicePaymentSourceResolver
                 $paymentAppliedMinor += $this->toMinorUnits($allocation->amount);
             }
 
-            $totalAppliedMinor += $paymentAppliedMinor;
+            $paymentSourceMinor = $invoice->vat_enabled
+                ? $this->toMinorUnits($payment->getRawOriginal('amount') ?: $payment->amount)
+                : $paymentAppliedMinor;
+            $totalAppliedMinor += $paymentSourceMinor;
 
-            if ($paymentAppliedMinor > 0 && $this->isActiveCreditBalancePayment($payment, (int) $invoice->getKey())) {
-                $creditAppliedMinor += $paymentAppliedMinor;
+            if ($paymentSourceMinor > 0 && $this->isActiveCreditBalancePayment($payment, (int) $invoice->getKey())) {
+                $creditAppliedMinor += $paymentSourceMinor;
                 $creditPaymentIds[] = (int) $payment->getKey();
             }
         }

@@ -81,12 +81,11 @@ final class CancelPayment
                     ]);
                 }
 
-                $remainingConfirmedAmount = round(
-                    (float) $invoice->payments()
+                $remainingConfirmedAmount = $this->money->toMinorUnits(
+                    $invoice->payments()
                         ->where('status', 'confirmed')
                         ->whereKeyNot($lockedPayment->getKey())
-                        ->sum('amount'),
-                    2
+                        ->sum('amount')
                 );
 
                 if ($appliedEntry !== null) {
@@ -100,7 +99,7 @@ final class CancelPayment
                 $invoice->forceFill([
                     'status' => $this->resolveInvoiceStatus(
                         confirmedAmount: $remainingConfirmedAmount,
-                        invoiceTotal: (float) $invoice->total_amount
+                        invoiceTotal: $this->money->toMinorUnits($invoice->getRawOriginal('total_amount'))
                     ),
                 ])->save();
 
@@ -179,7 +178,9 @@ final class CancelPayment
             ->firstOrFail();
 
         if ((int) $creditBalance->company_id !== (int) $invoice->company_id
-            || (int) $payment->company_id !== (int) $invoice->company_id) {
+            || (int) $payment->company_id !== (int) $invoice->company_id
+            || ($creditBalance->organization_id !== null
+                && (int) $creditBalance->organization_id !== (int) $invoice->issuer_organization_id)) {
             throw new LogicException('Credit reversal company ownership is inconsistent.');
         }
 
@@ -237,7 +238,9 @@ final class CancelPayment
             ->firstOrFail();
 
         if ((int) $creditBalance->company_id !== (int) $invoice->company_id
-            || (int) $cancelledPayment->company_id !== (int) $invoice->company_id) {
+            || (int) $cancelledPayment->company_id !== (int) $invoice->company_id
+            || ($creditBalance->organization_id !== null
+                && (int) $creditBalance->organization_id !== (int) $invoice->issuer_organization_id)) {
             throw new LogicException('Top-up reversal company ownership is inconsistent.');
         }
 
@@ -326,11 +329,8 @@ final class CancelPayment
         return $exactEntries->first();
     }
 
-    private function resolveInvoiceStatus(float $confirmedAmount, float $invoiceTotal): string
+    private function resolveInvoiceStatus(int $confirmedAmount, int $invoiceTotal): string
     {
-        $confirmedAmount = round($confirmedAmount, 2);
-        $invoiceTotal = round($invoiceTotal, 2);
-
         if ($confirmedAmount >= $invoiceTotal) {
             return 'paid';
         }

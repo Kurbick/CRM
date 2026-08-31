@@ -497,6 +497,13 @@ class ApiSubscriptionIntegrityTest extends AuthorizationTestCase
     private function assertRawAttributesUnchanged(array $expected, EloquentModel $actual): void
     {
         foreach ($expected as $attribute => $value) {
+            $actualValue = $actual->getRawOriginal($attribute);
+            if ($attribute === 'vat_enabled') {
+                $this->assertSame((bool) $value, (bool) $actualValue);
+
+                continue;
+            }
+
             if (in_array($attribute, [
                 'start_date',
                 'next_billing_date',
@@ -513,7 +520,7 @@ class ApiSubscriptionIntegrityTest extends AuthorizationTestCase
                 continue;
             }
 
-            $this->assertSame($value, $actual->getRawOriginal($attribute));
+            $this->assertSame($value, $actualValue);
         }
     }
 }

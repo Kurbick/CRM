@@ -7,9 +7,12 @@ use App\Exceptions\CompanyDeletionException;
 use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\Contract;
+use App\Models\CreditBalance;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
 use App\Models\Payment;
+use App\Models\Organization;
+use App\Services\ActiveOrganizationContext;
 use App\Services\CompanyActivityPresenter;
 use App\Services\CompanyActivityQuery;
 use App\Services\InvoiceBillingPeriodPresenter;
@@ -40,7 +43,7 @@ class CompanyController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index(Request $request)
+    public function index(Request $request, ActiveOrganizationContext $organizationContext)
     {
         Gate::authorize('viewAny', Company::class);
 
@@ -72,7 +75,7 @@ class CompanyController extends Controller
 
         if ($canViewFinancials) {
             $query->addSelect([
-                'calculated_debt' => $this->companyDebtSubquery(),
+                'calculated_debt' => $this->companyDebtSubquery($organizationContext->resolve($request)),
             ]);
         }
 
@@ -107,7 +110,7 @@ class CompanyController extends Controller
         ], fn (string|int|null $value): bool => $value !== null && $value !== ''));
 
         if ($canViewFinancials) {
-            $summaries = $this->financialSummaries($companies->getCollection());
+            $summaries = $this->financialSummaries($companies->getCollection(), null, $organizationContext->resolve($request));
 
             $companies->getCollection()->transform(function (Company $company) use ($summaries) {
                 foreach ($summaries->get($company->id) as $key => $value) {
@@ -222,6 +225,7 @@ class CompanyController extends Controller
         InvoicePaymentSourceResolver $paymentSourceResolver,
         CompanyActivityQuery $activityQuery,
         CompanyActivityPresenter $activityPresenter,
+        ActiveOrganizationContext $organizationContext,
     ) {
         Gate::authorize('view', $company);
 
@@ -231,6 +235,7 @@ class CompanyController extends Controller
         $canViewPayments = $canViewFinancials
             && Gate::allows('viewAny', Payment::class);
         $canViewContracts = Gate::allows('viewAny', Contract::class);
+        $organization = $organizationContext->resolve($request);
         $companyCanBeDeleted = Gate::allows('delete', $company)
             && $deleteCompany->canDelete($company);
 
@@ -240,31 +245,29 @@ class CompanyController extends Controller
 
         if ($canViewContracts) {
             $relations['contracts'] = fn ($q) => $q
+                ->tap(fn ($query) => $organizationContext->scopeFor($query, $organization))
                 ->withCount(['orders', 'subscriptions'])
                 ->orderBy('start_date', 'desc');
         }
 
         if ($canViewInvoices) {
-            $relations['invoices'] = function ($q) use ($paymentSourceResolver) {
-                $q->whereIn('status', self::COMPANY_INVOICE_DISPLAY_STATUSES);
-                $q->withSum([
-                    'payments as confirmed_paid_amount' => fn ($paymentQuery) => $paymentQuery
-                        ->where('status', 'confirmed'),
-                ], 'amount');
-                $q->withSum([
-                    'payments as pending_amount' => fn ($paymentQuery) => $paymentQuery
-                        ->where('status', 'pending'),
-                ], 'amount');
+            $relations['invoices'] = function ($q) use ($paymentSourceResolver, $organization, $organizationContext): void {
+                $q->whereIn('status', self::COMPANY_INVOICE_DISPLAY_STATUSES)
+                    ->tap(fn ($query) => $organizationContext->scopeFor($query, $organization))
+                    ->withSum([
+                        'payments as confirmed_paid_amount' => fn ($paymentQuery) => $paymentQuery->where('status', 'confirmed'),
+                    ], 'amount')
+                    ->withSum([
+                        'payments as pending_amount' => fn ($paymentQuery) => $paymentQuery->where('status', 'pending'),
+                    ], 'amount');
                 $paymentSourceResolver->addAggregates($q->getQuery());
-
-                return $q
-                    ->orderBy('issue_date', 'desc')
-                    ->orderByDesc('id');
+                $q->orderBy('issue_date', 'desc')->orderByDesc('id');
             };
         }
 
         if ($canViewPayments) {
             $relations['payments'] = fn ($q) => $q
+                ->whereHas('invoice', fn ($invoiceQuery) => $organizationContext->scopeFor($invoiceQuery, $organization))
                 ->when($canViewInvoices, fn ($paymentQuery) => $paymentQuery->with('invoice'))
                 ->orderBy('payment_date', 'desc');
         }
@@ -316,12 +319,14 @@ class CompanyController extends Controller
         if ($canViewFinancials) {
             $stats = $this->financialSummaries(
                 collect([$company]),
-                $canViewInvoices ? $company->invoices : null
+                $canViewInvoices ? $company->invoices : null,
+                $organization,
             )->get($company->id);
             $invoiceLines = InvoiceLine::query()
                 ->whereHas(
                     'invoice',
                     fn ($query) => $query->where('company_id', $company->id)
+                        ->tap(fn ($query) => $organizationContext->scopeFor($query, $organization))
                 )
                 ->with([
                     'invoice',
@@ -440,7 +445,7 @@ class CompanyController extends Controller
      * @param  Collection<int, Invoice>|null  $loadedInvoices
      * @return Collection<int, array{total_invoiced: float, total_paid: float, total_debt: float, credit_balance: float}>
      */
-    private function financialSummaries(Collection $companies, ?Collection $loadedInvoices = null): Collection
+    private function financialSummaries(Collection $companies, ?Collection $loadedInvoices = null, ?Organization $organization = null): Collection
     {
         $companyIds = $companies->pluck('id')->values();
 
@@ -448,10 +453,28 @@ class CompanyController extends Controller
             return collect();
         }
 
-        (new Company)->newCollection($companies->all())->loadMissing('creditBalance');
+        $organizationContext = app(ActiveOrganizationContext::class);
+        $legacyCreditAllowed = Organization::query()->active()->count() === 1;
+        $creditBalances = CreditBalance::query()
+            ->whereIn('company_id', $companyIds)
+            ->where(function ($query) use ($organization, $legacyCreditAllowed): void {
+                if ($organization === null) {
+                    $query->whereRaw('1 = 0');
+                } else {
+                    $query->where('organization_id', $organization->getKey());
+                }
+
+                if ($legacyCreditAllowed) {
+                    $query->orWhereNull('organization_id');
+                }
+            })
+            ->get()
+            ->sortBy(fn (CreditBalance $balance): int => $balance->organization_id === null ? 1 : 0)
+            ->keyBy('company_id');
 
         $invoices = $loadedInvoices ?? Invoice::query()
             ->whereIn('company_id', $companyIds)
+            ->tap(fn ($query) => $organizationContext->scopeFor($query, $organization))
             ->whereIn('status', ['issued', 'partially_paid', 'paid'])
             ->withSum([
                 'payments as confirmed_paid_amount' => fn ($query) => $query->where('status', 'confirmed'),
@@ -460,7 +483,7 @@ class CompanyController extends Controller
 
         $eligibleInvoices = $invoices->whereIn('status', ['issued', 'partially_paid', 'paid']);
 
-        return $companies->mapWithKeys(function (Company $company) use ($eligibleInvoices) {
+        return $companies->mapWithKeys(function (Company $company) use ($eligibleInvoices, $creditBalances) {
             $companyInvoices = $eligibleInvoices->where('company_id', $company->id);
 
             return [
@@ -472,13 +495,13 @@ class CompanyController extends Controller
                     'total_debt' => round((float) $companyInvoices->sum(
                         fn (Invoice $invoice) => $invoice->remaining_amount
                     ), 2),
-                    'credit_balance' => round((float) ($company->creditBalance?->amount ?? 0), 2),
+                    'credit_balance' => round((float) ($creditBalances->get($company->id)?->amount ?? 0), 2),
                 ],
             ];
         });
     }
 
-    private function companyDebtSubquery()
+    private function companyDebtSubquery(?Organization $organization = null)
     {
         $confirmedPayments = "(
             SELECT COALESCE(SUM(company_debt_payments.amount), 0)
@@ -493,6 +516,7 @@ class CompanyController extends Controller
                 ELSE invoices.total_amount - {$confirmedPayments}
             END), 0)")
             ->whereColumn('invoices.company_id', 'companies.id')
+            ->tap(fn ($query) => app(ActiveOrganizationContext::class)->scopeFor($query, $organization, 'invoices.issuer_organization_id'))
             ->whereIn('invoices.status', ['issued', 'partially_paid', 'paid']);
     }
 

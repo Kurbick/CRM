@@ -197,7 +197,7 @@ class InvoiceNumberingTest extends TestCase
 
     private function numberingOrganization(?string $code = 'ZL'): Organization
     {
-        $organization = Organization::query()->current()->firstOrFail();
+        $organization = Organization::query()->firstOrFail();
         $organization->update(['invoice_number_code' => $code]);
 
         return $organization->fresh();

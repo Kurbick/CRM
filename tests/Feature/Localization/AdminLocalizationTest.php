@@ -3,6 +3,7 @@
 namespace Tests\Feature\Localization;
 
 use App\Models\Role;
+use App\Models\Organization;
 use App\Models\User;
 use App\Services\AccessControlSynchronizer;
 use App\Support\Access\PermissionRegistry;
@@ -30,7 +31,7 @@ class AdminLocalizationTest extends TestCase
             ->get(route('admin.users.index'))
             ->assertOk()
             ->assertSeeText('Администрирование')
-            ->assertSeeText('Наша организация')
+            ->assertSeeText('Организации')
             ->assertSeeText('Пользователи')
             ->assertSeeText('Доступ')
             ->assertSeeText('Только просмотр');
@@ -39,7 +40,7 @@ class AdminLocalizationTest extends TestCase
             ->get(route('admin.users.index'))
             ->assertOk()
             ->assertSeeText('İdarəetmə')
-            ->assertSeeText('Təşkilatımız')
+            ->assertSeeText('Təşkilatlar')
             ->assertSeeText('İstifadəçilər')
             ->assertSeeText('İcazələr')
             ->assertSeeText('Yalnız baxış')
@@ -47,6 +48,38 @@ class AdminLocalizationTest extends TestCase
 
         $this->assertStringNotContainsString('Redakt', $az->getContent());
         $this->assertStringNotContainsString('Parol', $az->getContent());
+
+        $organization = Organization::query()->create([
+            'name' => 'ZeroLine',
+            'invoice_number_code' => 'ZL',
+            'is_active' => true,
+        ]);
+        $nonDefault = Organization::query()->create([
+            'name' => 'Maksim Ermakov',
+            'invoice_number_code' => 'ME',
+            'is_active' => true,
+        ]);
+        $this->get(route('admin.organizations.index'))
+            ->assertSeeText('Təşkilatlar');
+        $this->withSession(['locale' => 'ru'])
+            ->get(route('admin.organizations.show', $organization))
+            ->assertSeeText('Юридическое название')
+            ->assertSeeText('Расчётный счёт (H/h)')
+            ->assertSeeText('Корреспондентский счёт (M/h)');
+        $azShow = $this->withSession(['locale' => 'az'])
+            ->get(route('admin.organizations.show', $organization))
+            ->assertSeeText('← Təşkilatlara qayıt')
+            ->assertSeeText('Düzəliş et')
+            ->assertSeeText('Hüquqi ad')
+            ->assertSeeText('Hesablaşma hesabı (H/h)')
+            ->assertSeeText('Müxbir hesabı (M/h)')
+            ->assertDontSee('Standart təşkilat');
+        $this->get(route('admin.organizations.edit', $organization))
+            ->assertSeeText('← Təşkilata qayıt');
+
+        $this->get(route('admin.organizations.show', $nonDefault))
+            ->assertSeeText('← Təşkilatlara qayıt')
+            ->assertDontSee('Standart təşkilat');
 
         $this->get(route('admin.organization.show'))
             ->assertSeeText('Təşkilatımız')

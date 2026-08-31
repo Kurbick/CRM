@@ -88,6 +88,27 @@ class InvoicePaymentSourceResolverTest extends TestCase
         $this->assertNull($result['state']);
     }
 
+    public function test_vat_invoice_credit_source_uses_gross_payment_not_net_line_allocation(): void
+    {
+        $invoice = $this->invoice([
+            $this->payment(10, 'confirmed', '1180.00', '1000.00', ['applied']),
+        ]);
+        $invoice->forceFill([
+            'subtotal_amount' => '1000.00',
+            'vat_enabled' => true,
+            'vat_rate' => '18.00',
+            'vat_amount' => '180.00',
+            'total_amount' => '1180.00',
+        ]);
+
+        $result = $this->resolver->fromLoadedInvoice($invoice);
+
+        $this->assertSame(118000, $result['total_applied_minor']);
+        $this->assertSame(118000, $result['credit_balance_applied_minor']);
+        $this->assertSame('1180.00', $result['credit_balance_applied_amount']);
+        $this->assertSame('full', $result['state']);
+    }
+
     /** @param list<Payment> $payments */
     private function invoice(array $payments): Invoice
     {

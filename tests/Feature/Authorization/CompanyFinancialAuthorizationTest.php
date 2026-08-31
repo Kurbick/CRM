@@ -50,7 +50,8 @@ class CompanyFinancialAuthorizationTest extends AuthorizationTestCase
         $company = $response->viewData('company');
         $this->assertFalse($company->relationLoaded('invoices'));
         $this->assertFalse($company->relationLoaded('payments'));
-        $this->assertTrue($company->relationLoaded('creditBalance'));
+        $this->assertFalse($company->relationLoaded('creditBalance'));
+        $this->assertFalse($company->relationLoaded('creditBalances'));
     }
 
     public function test_invoice_list_requires_financials_and_invoice_view(): void

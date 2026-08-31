@@ -14,6 +14,7 @@ use App\Http\Controllers\Web\HomeController;
 use App\Http\Controllers\Web\InvoiceController;
 use App\Http\Controllers\Web\LocaleController;
 use App\Http\Controllers\Web\OrderController;
+use App\Http\Controllers\Web\OrganizationContextController;
 use App\Http\Controllers\Web\PaymentController;
 use App\Http\Controllers\Web\SubscriptionController;
 use App\Models\Company as CompanyModel;
@@ -37,14 +38,29 @@ Route::middleware(['auth', 'active'])->group(function (): void {
         ->name('password.change');
 });
 
-Route::middleware(['auth', 'active', 'password.changed'])->group(function (): void {
+Route::middleware(['auth', 'active', 'password.changed', 'organization.context'])->group(function (): void {
+
+    Route::post('organization-context', [OrganizationContextController::class, 'update'])
+        ->name('organization-context.update');
 
     Route::get('home', [HomeController::class, 'index'])->name('home');
 
+    Route::prefix('admin/organizations')->name('admin.organizations.')->controller(AdminOrganizationController::class)->group(function (): void {
+        Route::get('/', 'index')->name('index');
+        Route::get('/create', 'create')->name('create');
+        Route::post('/', 'store')->name('store');
+        Route::get('/{organization}', 'show')->name('show');
+        Route::get('/{organization}/edit', 'edit')->name('edit');
+        Route::put('/{organization}', 'update')->name('update');
+        Route::patch('/{organization}/activate', 'activate')->name('activate');
+        Route::patch('/{organization}/deactivate', 'deactivate')->name('deactivate');
+        Route::delete('/{organization}', 'destroy')->name('destroy');
+    });
+
     Route::prefix('admin/organization')->name('admin.organization.')->controller(AdminOrganizationController::class)->group(function (): void {
-        Route::get('/', 'show')->name('show');
-        Route::get('edit', 'edit')->name('edit');
-        Route::put('/', 'update')->name('update');
+        Route::get('/', 'legacyShow')->name('show');
+        Route::get('edit', 'legacyEdit')->name('edit');
+        Route::put('/', 'legacyUpdate')->name('update');
     });
 
     Route::prefix('admin/access-permissions')->name('admin.access-permissions.')->controller(AdminAccessPermissionController::class)->group(function (): void {
