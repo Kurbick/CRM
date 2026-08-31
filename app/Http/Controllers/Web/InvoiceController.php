@@ -1019,7 +1019,8 @@ class InvoiceController extends Controller
                 manualDueDate: $invoice->due_date,
                 contractId: $invoice->contract_id,
                 orderIds: $lines->pluck('order_id')->filter()->all(),
-                subscriptionIds: $lines->pluck('subscription_id')->filter()->all()
+                subscriptionIds: $lines->pluck('subscription_id')->filter()->all(),
+                contractEndDate: $contract?->end_date?->toDateString(),
             );
 
             /*

@@ -429,6 +429,7 @@ final class UpdateInvoice
                     contractId: (int) $invoice->contract_id,
                     orderIds: $lineCollection->pluck('order_id')->filter()->all(),
                     subscriptionIds: $lineCollection->pluck('subscription_id')->filter()->all(),
+                    contractEndDate: $invoice->contract?->end_date?->toDateString(),
                 );
             }
 

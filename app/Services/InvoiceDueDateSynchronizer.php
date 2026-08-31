@@ -46,7 +46,8 @@ class InvoiceDueDateSynchronizer
                 manualDueDate: $invoice->due_date,
                 contractId: (int) $invoice->contract_id,
                 orderIds: $lines->pluck('order_id')->filter()->all(),
-                subscriptionIds: $lines->pluck('subscription_id')->filter()->all()
+                subscriptionIds: $lines->pluck('subscription_id')->filter()->all(),
+                contractEndDate: $invoice->contract?->end_date?->toDateString(),
             );
 
             $invoice->update(['due_date' => $dueDate]);

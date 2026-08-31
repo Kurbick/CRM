@@ -101,6 +101,7 @@ final class CreateInvoice
                     contractId: (int) ($lockedContract?->id ?? 0),
                     orderIds: $orderIds,
                     subscriptionIds: $subscriptionIds,
+                    contractEndDate: $lockedContract?->end_date?->toDateString(),
                 );
 
                 $subtotalMinorUnits = array_sum(array_map(

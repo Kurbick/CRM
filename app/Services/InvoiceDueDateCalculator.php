@@ -14,35 +14,66 @@ class InvoiceDueDateCalculator
         ?string $manualDueDate,
         int $contractId,
         array $orderIds,
-        array $subscriptionIds
+        array $subscriptionIds,
+        ?string $contractEndDate = null,
     ): string {
+        $issueDateValue = Carbon::parse($issueDate)->startOfDay();
+        $contractEnd = $contractEndDate !== null
+            ? Carbon::parse($contractEndDate)->startOfDay()
+            : null;
+
+        if ($contractEnd && $issueDateValue->gt($contractEnd)) {
+            throw ValidationException::withMessages([
+                'issue_date' => __('invoices.errors.issue_date_after_contract_end', [
+                    'contract_end_date' => $contractEnd->format('d/m/Y'),
+                ]),
+            ]);
+        }
+
         $paymentTerms = $this->resolvePaymentTerms(
             contractId: $contractId,
             orderIds: $orderIds,
             subscriptionIds: $subscriptionIds
         );
 
-        $issueDateValue = Carbon::parse($issueDate)->startOfDay();
-
         if ($paymentTerms !== null) {
-            return $issueDateValue->copy()->addDays($paymentTerms)->toDateString();
-        }
-
-        if (!$manualDueDate) {
+            $dueDate = $issueDateValue->copy()->addDays($paymentTerms);
+        } elseif (!$manualDueDate) {
             throw ValidationException::withMessages([
                 'due_date' => 'Укажите срок оплаты для инвойса без условий оплаты в позициях.',
             ]);
+        } else {
+            $manualDueDateValue = Carbon::parse($manualDueDate)->startOfDay();
+
+            if ($manualDueDateValue->lt($issueDateValue)) {
+                throw ValidationException::withMessages([
+                    'due_date' => 'Срок оплаты не может быть раньше даты выставления.',
+                ]);
+            }
+
+            $dueDate = $manualDueDateValue;
         }
 
-        $manualDueDateValue = Carbon::parse($manualDueDate)->startOfDay();
+        if ($contractEnd && $dueDate->gt($contractEnd)) {
+            $parameters = [
+                'due_date' => $dueDate->format('d/m/Y'),
+                'contract_end_date' => $contractEnd->format('d/m/Y'),
+            ];
+            if ($paymentTerms !== null) {
+                $parameters['days'] = $paymentTerms;
+            }
 
-        if ($manualDueDateValue->lt($issueDateValue)) {
             throw ValidationException::withMessages([
-                'due_date' => 'Срок оплаты не может быть раньше даты выставления.',
+                'due_date' => __(
+                    $paymentTerms === null
+                        ? 'invoices.errors.due_date_after_contract_end_manual'
+                        : 'invoices.errors.due_date_after_contract_end',
+                    $parameters,
+                ),
             ]);
         }
 
-        return $manualDueDateValue->toDateString();
+        return $dueDate->toDateString();
     }
 
     private function resolvePaymentTerms(
