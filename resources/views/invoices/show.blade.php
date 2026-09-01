@@ -89,9 +89,9 @@
 
             <div class="flex shrink-0 flex-wrap items-center gap-1">
                 @can('print', $invoice)
-                    <button type="button" onclick="window.print()" class="crm-light-action">
+                    <a href="{{ route('invoices.print', $invoice) }}" target="_blank" rel="noopener" class="crm-light-action">
                         {{ __('invoices.actions.print') }}
-                    </button>
+                    </a>
                 @endcan
 
                 @can('update', $invoice)

@@ -311,6 +311,11 @@ Route::middleware(['auth', 'active', 'password.changed', 'organization.context']
         [InvoiceController::class, 'numberPreview']
     )->name('invoices.number-preview');
 
+    Route::get(
+        'invoices/{invoice}/print',
+        [InvoiceController::class, 'print']
+    )->name('invoices.print');
+
     Route::resource(
         'invoices',
         InvoiceController::class
