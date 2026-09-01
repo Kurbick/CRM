@@ -53,26 +53,37 @@ class InvoicePrintAndDisplayTest extends TestCase
         $response = $this->get(route('invoices.print', $invoice))->assertOk();
 
         $response->assertSee('data-testid="invoice-print-document"', false)
-            ->assertSee('data-logo-asset="images/zeroline-logo.svg"', false)
+            ->assertSee('data-logo-asset="images/zeroline-logo.png"', false)
+            ->assertSee('src="'.asset('images/zeroline-logo.png').'"', false)
             ->assertSee('Snapshot Seller')
             ->assertSee('ZeroLine Legal Name')
             ->assertSee('CORR-001')
             ->assertSee('Buyer Company')
             ->assertSee('BUYER-SNAPSHOT')
             ->assertSee('+994 50 000 00 00')
-            ->assertSee('По договору № '.$invoice->contract->contract_number.' — Веб-сайт и техническая поддержка за август 2026.')
+            ->assertSee('По договору № '.$invoice->contract->contract_number.' — Веб-сайт и техническая поддержка (01.08.2026–31.08.2026)')
             ->assertSee('100,00 ₼')
             ->assertSee('100,00 ₼')
             ->assertSee('19,00 ₼')
             ->assertSee('119,00 ₼')
+            ->assertSee('<tfoot', false)
+            ->assertSee('data-canonical-subtotal="100.00"', false)
+            ->assertSee('class="invoice-empty-row"', false)
             ->assertSee('INVOICE')
             ->assertSee('Директор:')
             ->assertSee('М.П.')
             ->assertSee('СПАСИБО ЗА СОТРУДНИЧЕСТВО!')
             ->assertDontSee('crm-global-navigation')
+            ->assertDontSee('print-toolbar', false)
+            ->assertDontSee('party-grid', false)
+            ->assertDontSee('zeroline-logo.svg', false)
             ->assertDontSee('Срок оплаты:')
+            ->assertDontSee('Договор:')
             ->assertDontSee('Ожидает подтверждения:')
-            ->assertDontSee('Остаток к оплате:');
+            ->assertDontSee('Остаток к оплате:')
+            ->assertDontSee('Оплачено')
+            ->assertDontSee('История платежей')
+            ->assertDontSee('Credit Balance');
     }
 
     public function test_print_route_localizes_labels_and_line_periods_in_az(): void
@@ -101,13 +112,30 @@ class InvoicePrintAndDisplayTest extends TestCase
             ->assertSee('Sifarişçi')
             ->assertSee('AÇIQLAMA')
             ->assertSee('MƏBLƏĞ')
-            ->assertSee('avqust 2026')
-            ->assertSee('sentyabr 2026')
-            ->assertSee('ƏDV-siz məbləğ', false)
+            ->assertSee('(01.08.2026–31.08.2026)')
+            ->assertSee('(01.09.2026–30.09.2026)')
+            ->assertSee('Tarix: '.\Illuminate\Support\Carbon::parse($invoice->issue_date)->format('d.m.Y'))
+            ->assertSee('Hesab №: '.$invoice->invoice_number)
             ->assertSee('Yekun')
             ->assertSee('BİZİMLƏ ƏMƏKDAŞLIQ ETDİYİNİZ ÜÇÜN TƏŞƏKKÜR EDİRİK!')
+            ->assertDontSee('İnvoys tarixi:')
+            ->assertDontSee('İnvoys nömrəsi:')
+            ->assertDontSee('Cəmi')
+            ->assertDontSee('ƏDV-siz məbləğ')
             ->assertDontSee('ƏDV (')
             ->assertDontSee('Ödəniş müddəti:');
+    }
+
+    public function test_az_invoice_show_uses_sifarisci_label(): void
+    {
+        $invoice = $this->invoice('issued', '100.00');
+        $this->line($invoice, 'Veb-sayt xidməti', '100.00');
+
+        $this->withSession(['locale' => 'az'])
+            ->get(route('invoices.show', $invoice))
+            ->assertOk()
+            ->assertSee('Sifarişçi')
+            ->assertDontSee('Ödəyici');
     }
 
     public function test_print_route_uses_vat_snapshot_and_omits_vat_for_historical_vat_neutral_invoice(): void
@@ -141,7 +169,30 @@ class InvoicePrintAndDisplayTest extends TestCase
         $this->get(route('invoices.print', $neutralInvoice))
             ->assertOk()
             ->assertSee('100,00 ₼')
+            ->assertSee('Итого')
+            ->assertDontSee('Сумма без НДС')
             ->assertDontSee('НДС (');
+    }
+
+    public function test_az_vat_enabled_print_uses_word_totals_labels(): void
+    {
+        $invoice = $this->invoice('issued', '119.00');
+        $this->line($invoice, 'Veb-sayt xidməti', '100.00');
+        $invoice->forceFill([
+            'subtotal_amount' => '100.00',
+            'vat_enabled' => true,
+            'vat_rate' => '19.00',
+            'vat_amount' => '19.00',
+            'total_amount' => '119.00',
+        ])->save();
+
+        $this->withSession(['locale' => 'az'])
+            ->get(route('invoices.print', $invoice))
+            ->assertOk()
+            ->assertSee('Cəmi')
+            ->assertSee('ƏDV (19%)')
+            ->assertSee('Yekun')
+            ->assertSee('119,00 ₼');
     }
 
     public function test_print_route_outputs_every_multi_period_invoice_line_without_recalculating_amounts(): void
@@ -164,9 +215,9 @@ class InvoicePrintAndDisplayTest extends TestCase
             ->assertSee('Период один')
             ->assertSee('Период два')
             ->assertSee('Период три')
-            ->assertSee('август 2026')
-            ->assertSee('сентябрь 2026')
-            ->assertSee('октябрь 2026')
+            ->assertSee('(01.08.2026–31.08.2026)')
+            ->assertSee('(01.09.2026–30.09.2026)')
+            ->assertSee('(01.10.2026–31.10.2026)')
             ->assertSee('data-canonical-total="300.00"', false)
             ->assertSee('300,00 ₼');
     }

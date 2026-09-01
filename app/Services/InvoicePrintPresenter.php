@@ -60,15 +60,9 @@ final class InvoicePrintPresenter
             return null;
         }
 
-        if ($start->day === 1
-            && $end->isLastOfMonth()
-            && $start->isSameMonth($end)) {
-            return __('invoices.print.months.'.$start->month).' '.$start->year;
-        }
-
         return __('invoices.print.period_range', [
-            'start' => $start->format('d/m/Y'),
-            'end' => $end->format('d/m/Y'),
+            'start' => $start->format('d.m.Y'),
+            'end' => $end->format('d.m.Y'),
         ]);
     }
 

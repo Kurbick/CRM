@@ -3,15 +3,12 @@
         return number_format((float) $amount, 2, ',', ' ') . ' ₼';
     };
     $formatDate = static fn ($date): string => $date
-        ? \Illuminate\Support\Carbon::parse($date)->format('d/m/Y')
+        ? \Illuminate\Support\Carbon::parse($date)->format('d'.'.'.'m'.'.'.'Y')
         : '—';
     $vatRateLabel = filled($invoice->vat_rate)
         ? rtrim(rtrim((string) $invoice->vat_rate, '0'), '.')
         : '—';
-    $buyerName = $buyer['name'] ?? null;
-    $contractNumber = $invoice->contract?->contract_number ?: $invoice->contract_reference;
-    $logoAvailable = is_file(public_path('images/zeroline-logo.svg'));
-    $emptyRowCount = max(0, 10 - count($printLines));
+    $emptyRowCount = max(0, 4 - count($printLines));
 @endphp
 <!doctype html>
 <html lang="{{ app()->getLocale() }}">
@@ -21,340 +18,403 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ __('invoices.print.heading') }} — {{ $invoice->invoice_number }}</title>
     <style>
-        :root {
-            color-scheme: light;
-            --ink: #182b3b;
-            --muted: #5e7182;
-            --line: #b8c9d6;
-            --blue: #dceefa;
-            --blue-strong: #6fa9d0;
-        }
-
         * { box-sizing: border-box; }
 
-        html, body { margin: 0; min-height: 100%; }
+        html,
+        body { margin: 0; min-height: 100%; }
 
         body {
-            background: #eef3f7;
-            color: var(--ink);
-            font-family: Arial, "Helvetica Neue", sans-serif;
-            font-size: 12px;
-            line-height: 1.45;
-        }
-
-        .print-toolbar {
-            display: flex;
-            justify-content: flex-end;
-            gap: 8px;
-            max-width: 210mm;
-            margin: 0 auto;
-            padding: 16px 0;
-        }
-
-        .print-toolbar a,
-        .print-toolbar button {
-            border: 1px solid #cbd5df;
-            border-radius: 4px;
             background: #fff;
-            color: #334e62;
-            cursor: pointer;
-            font: inherit;
-            padding: 7px 12px;
-            text-decoration: none;
+            color: #000;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 12pt;
+            line-height: 1.15;
         }
 
         .invoice-paper {
             width: 210mm;
             min-height: 297mm;
-            margin: 0 auto 24px;
-            padding: 15mm 14mm 12mm;
+            margin: 0 auto;
+            padding: 12.7mm 19.05mm;
             background: #fff;
-            box-shadow: 0 8px 30px rgb(35 55 70 / 10%);
         }
 
-        .invoice-header {
+        .word-document {
+            width: 169.9mm;
+            max-width: 100%;
+            margin: 0;
+        }
+
+        .document-grid {
             display: grid;
-            grid-template-columns: minmax(0, 1fr) auto;
-            gap: 18mm;
+            grid-template-columns: 23.86mm 76.12mm 3.77mm 22.24mm 43.96mm;
+            width: 169.9mm;
+            max-width: 100%;
+        }
+
+        .header-row {
+            min-height: 29.97mm;
             align-items: start;
-            border-bottom: 2px solid var(--blue-strong);
-            padding-bottom: 8mm;
         }
 
-        .logo-frame {
-            display: flex;
-            align-items: center;
-            min-height: 19mm;
-            margin-bottom: 4mm;
+        .logo-block {
+            grid-column: 1 / 4;
+            position: relative;
+            min-height: 29.97mm;
         }
 
-        .logo-frame img {
+        .logo-block img {
             display: block;
-            width: auto;
-            max-width: 48mm;
-            max-height: 19mm;
+            width: 59.84mm;
+            height: auto;
+            max-width: 100%;
         }
 
-        .logo-fallback {
-            color: #193b56;
-            font-size: 25px;
-            font-weight: 800;
-            letter-spacing: -.06em;
+        .invoice-meta {
+            grid-column: 4 / 6;
+            align-self: start;
+            text-align: right;
         }
 
-        .issuer-name {
-            font-size: 17px;
+        .invoice-heading {
+            margin: 0 0 4mm;
+            color: #595959;
+            font-size: 26pt;
             font-weight: 700;
-            line-height: 1.2;
+            line-height: 1;
         }
 
-        .issuer-legal,
-        .issuer-tax,
-        .bank-list,
-        .meta-list,
-        .buyer-details {
-            color: var(--muted);
+        .meta-line {
+            margin: 0;
+            font-size: 12pt;
+            line-height: 1.35;
+            white-space: nowrap;
         }
 
-        .issuer-legal { margin-top: 2px; font-size: 11px; }
-        .issuer-tax { margin-top: 4px; font-family: Consolas, monospace; font-size: 11px; }
-        .bank-list { display: grid; gap: 1px; margin-top: 5mm; font-size: 10.5px; }
-        .bank-list strong, .meta-list strong, .buyer-details strong { color: var(--ink); font-weight: 600; }
-        .bank-value { overflow-wrap: anywhere; }
+        .seller-row {
+            min-height: 12.68mm;
+            align-items: start;
+        }
 
-        .invoice-meta { min-width: 48mm; text-align: right; }
-        .invoice-heading { margin: 0 0 7mm; color: #1e4967; font-size: 25px; font-weight: 700; letter-spacing: .06em; }
-        .meta-list { display: grid; gap: 4px; font-size: 11px; }
-        .meta-list div { display: grid; grid-template-columns: auto auto; gap: 7px; justify-content: end; }
-        .meta-value { color: var(--ink); font-family: Consolas, monospace; }
+        .seller-block {
+            grid-column: 1 / 4;
+            padding-top: 5mm;
+            padding-bottom: 4mm;
+            font-size: 12pt;
+            font-weight: 700;
+            line-height: 1.25;
+        }
 
-        .party-grid {
+        .seller-name,
+        .seller-legal,
+        .seller-tax { display: block; }
+
+        .seller-tax { margin-top: .4mm; }
+
+        .details-row {
+            min-height: 21.5mm;
+            align-items: start;
+        }
+
+        .bank-block {
+            grid-column: 1 / 3;
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12mm;
-            margin: 8mm 0 9mm;
-            padding: 5mm 6mm;
-            border: 1px solid #c6d9e6;
-            background: #f8fbfd;
+            grid-template-columns: 23.86mm 76.12mm;
+            align-content: start;
+            font-size: 10pt;
+            line-height: 1.25;
         }
 
-        .party { min-width: 0; }
-        .party + .party { border-left: 1px solid #c6d9e6; padding-left: 12mm; }
-        .section-label { color: #52758d; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
-        .party h2 { margin: 2mm 0 1mm; font-size: 14px; line-height: 1.25; }
-        .buyer-details { display: grid; gap: 1px; font-size: 11px; }
+        .bank-line { display: contents; }
 
-        .items-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-        .items-table col.number { width: 11mm; }
-        .items-table col.amount { width: 36mm; }
+        .bank-label,
+        .bank-value,
+        .buyer-label,
+        .buyer-value {
+            min-width: 0;
+            overflow-wrap: anywhere;
+        }
+
+        .bank-label { padding-right: 1mm; }
+
+        .buyer-block {
+            grid-column: 4 / 6;
+            display: grid;
+            grid-template-columns: 22.24mm 43.96mm;
+            align-content: start;
+            font-size: 10pt;
+            line-height: 1.35;
+        }
+
+        .buyer-label { font-weight: 700; }
+
+        .items-wrap {
+            width: 168.65mm;
+            max-width: 100%;
+            margin-top: 15mm;
+        }
+
+        .items-table {
+            width: 168.65mm;
+            max-width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            font-size: 12pt;
+            line-height: 1.15;
+        }
+
+        .items-table col.number { width: 14.46mm; }
+        .items-table col.description { width: 121.27mm; }
+        .items-table col.amount { width: 32.91mm; }
+
         .items-table th,
-        .items-table td { border: 1px solid var(--line); }
-        .items-table thead th {
-            padding: 3mm 3mm;
-            background: var(--blue);
-            color: #274b63;
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: .08em;
-            text-align: left;
+        .items-table td {
+            padding: 1mm 1.5mm;
+            border: 1px solid #a6a6a6;
+            vertical-align: middle;
         }
-        .items-table thead th:first-child,
-        .items-table tbody td:first-child { text-align: center; }
-        .items-table thead th:last-child,
-        .items-table tbody td:last-child { text-align: right; }
-        .items-table tbody td { min-height: 10mm; padding: 3mm; vertical-align: top; }
-        .items-table tbody tr { break-inside: avoid; page-break-inside: avoid; }
-        .line-description { overflow-wrap: anywhere; font-size: 11.5px; }
-        .line-number { color: #688296; font-family: Consolas, monospace; }
-        .line-amount { color: var(--ink); font-family: Consolas, monospace; font-size: 11.5px; white-space: nowrap; }
-        .empty-row td { height: 9mm; padding: 0; }
-        .totals-row td { padding: 0; border-top: 2px solid var(--blue-strong); }
-        .totals { display: grid; gap: 2mm; width: 84mm; margin: 0 0 0 auto; padding: 5mm 3mm 4mm; }
-        .total-line { display: flex; justify-content: space-between; gap: 8mm; color: var(--muted); }
-        .total-value { color: var(--ink); font-family: Consolas, monospace; white-space: nowrap; }
-        .total-grand { margin-top: 1mm; padding-top: 3mm; border-top: 1px solid var(--line); color: var(--ink); font-size: 14px; font-weight: 700; }
 
-        .signature {
-            display: grid;
-            grid-template-columns: 1fr 48mm;
-            gap: 20mm;
-            align-items: end;
-            margin-top: 17mm;
+        .items-table thead th {
+            padding: 1mm;
+            border-color: #03b7eb;
+            background: #82d2f5;
+            font-weight: 700;
+            text-align: center;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        .items-table tbody tr,
+        .items-table tfoot tr {
             break-inside: avoid;
             page-break-inside: avoid;
         }
-        .signature-title { font-size: 12px; }
-        .signature-line { width: 62mm; margin-top: 13mm; border-bottom: 1px solid #6b7e8b; }
-        .signature-stamp { text-align: center; color: var(--muted); font-size: 11px; }
-        .signature-stamp::before { content: ""; display: block; height: 17mm; margin-bottom: 2mm; border: 1px solid #b9c9d3; }
+
+        .items-table tbody td:first-child { text-align: center; }
+        .items-table td:last-child { text-align: right; white-space: nowrap; }
+        .line-description { overflow-wrap: anywhere; }
+        .invoice-empty-row {
+            height: 5.7mm;
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+
+        .invoice-empty-row > td {
+            height: 5.7mm;
+            min-height: 5.7mm;
+            padding: 0;
+            font-size: 12pt;
+            line-height: 12pt;
+            color: transparent;
+        }
+
+        .invoice-empty-row > td::before {
+            content: "\00a0";
+        }
+
+        .items-table tfoot td {
+            padding: 1mm 1.5mm;
+            font-weight: 700;
+        }
+
+        .items-table tfoot td:first-child { font-weight: 400; }
+        .items-table tfoot td:nth-child(2) { text-align: right; }
+        .items-table tfoot td:last-child { text-align: right; }
+
+        .signature {
+            display: grid;
+            grid-template-columns: 82.45mm 44.98mm;
+            grid-template-rows: 4mm 5mm 5mm 4mm;
+            width: 127.5mm;
+            max-width: 100%;
+            margin-top: 20mm;
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+
+        .signature-director {
+            grid-column: 1;
+            grid-row: 2;
+            align-self: center;
+            font-size: 12pt;
+        }
+
+        .signature-line {
+            grid-column: 2;
+            grid-row: 2;
+            align-self: end;
+            border-bottom: 1px solid #000;
+        }
+
+        .signature-stamp {
+            grid-column: 2;
+            grid-row: 3;
+            text-align: right;
+            font-size: 10pt;
+        }
 
         .invoice-footer {
-            margin-top: 18mm;
-            padding-top: 4mm;
-            border-top: 1px solid #d6e0e7;
-            color: #52758d;
-            font-size: 10px;
+            margin-top: 14mm;
+            font-size: 10pt;
             font-weight: 700;
-            letter-spacing: .1em;
             text-align: center;
         }
 
-        @page { size: A4 portrait; margin: 12mm; }
+        @page {
+            size: A4 portrait;
+            margin: 12.7mm 19.05mm;
+        }
 
         @media print {
-            html, body { background: #fff; }
-            body { font-size: 12px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            .print-toolbar { display: none !important; }
-            .invoice-paper { width: auto; min-height: 0; margin: 0; padding: 0; box-shadow: none; }
-            .invoice-header, .party-grid, .items-table, .signature, .invoice-footer { break-inside: avoid; page-break-inside: avoid; }
+            html,
+            body { background: #fff; }
+
+            body {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+
+            .invoice-paper {
+                width: auto;
+                min-height: 0;
+                margin: 0;
+                padding: 0;
+            }
+
             .items-table thead { display: table-header-group; }
             .items-table tfoot { display: table-row-group; }
         }
 
-        @media screen and (max-width: 220mm) {
-            .print-toolbar { padding-right: 16px; padding-left: 16px; }
-            .invoice-paper { width: calc(100% - 32px); padding: 36px 28px; }
-        }
-
-        @media screen and (max-width: 640px) {
-            .invoice-header, .party-grid, .signature { grid-template-columns: 1fr; gap: 6mm; }
-            .invoice-meta { text-align: left; }
-            .meta-list div { justify-content: start; }
-            .party + .party { border-left: 0; border-top: 1px solid #c6d9e6; padding-top: 5mm; padding-left: 0; }
-            .totals { width: 100%; }
+        @media screen and (max-width: 210mm) {
+            .invoice-paper {
+                width: 100%;
+                min-height: 0;
+                padding: 12.7mm 19.05mm;
+            }
         }
     </style>
 </head>
 
 <body>
-    <nav class="print-toolbar" aria-label="{{ __('invoices.print.controls') }}">
-        <a href="{{ route('invoices.show', $invoice) }}">{{ __('invoices.actions.back_to_invoice') }}</a>
-        <button type="button" onclick="window.print()">{{ __('invoices.actions.print') }}</button>
-    </nav>
-
     <main class="invoice-paper" data-testid="invoice-print-document">
-        <header class="invoice-header">
-            <section aria-label="{{ __('invoices.print.supplier') }}">
-                <div class="logo-frame" data-logo-asset="images/zeroline-logo.svg">
-                    @if ($logoAvailable)
-                        <img src="{{ asset('images/zeroline-logo.svg') }}" alt="ZeroLine">
-                    @else
-                        <div class="logo-fallback" aria-label="ZeroLine">ZeroLine</div>
-                    @endif
+        <div class="word-document">
+            <header class="document-grid header-row">
+                <div class="logo-block" data-logo-asset="images/zeroline-logo.png">
+                    <img src="{{ asset('images/zeroline-logo.png') }}" alt="ZeroLine">
                 </div>
-                @if (filled($seller['name']))
-                    <div class="issuer-name">{{ $seller['name'] }}</div>
-                @endif
-                @if (filled($seller['legal_name']) && $seller['legal_name'] !== $seller['name'])
-                    <div class="issuer-legal"><strong>{{ __('invoices.print.legal_name') }}:</strong> {{ $seller['legal_name'] }}</div>
-                @endif
-                @if (filled($seller['voen']))
-                    <div class="issuer-tax"><strong>{{ __('invoices.print.voen') }}:</strong> {{ $seller['voen'] }}</div>
-                @endif
 
-                <div class="bank-list">
-                    @if (filled($seller['iban']))
-                        <div><strong>{{ __('invoices.print.account') }}:</strong> <span class="bank-value">{{ $seller['iban'] }}</span></div>
+                <section class="invoice-meta" aria-label="{{ __('invoices.print.heading') }}">
+                    <h1 class="invoice-heading">{{ __('invoices.print.heading') }}</h1>
+                    <p class="meta-line">{{ __('invoices.print.issue_date') }}: {{ $formatDate($invoice->issue_date) }}</p>
+                    <p class="meta-line">{{ __('invoices.print.invoice_number') }}: {{ $invoice->invoice_number }}</p>
+                </section>
+            </header>
+
+            <section class="document-grid seller-row" aria-label="{{ __('invoices.print.supplier') }}">
+                <div class="seller-block">
+                    @if (filled($seller['name']))
+                        <span class="seller-name">{{ $seller['name'] }}</span>
                     @endif
-                    @if (filled($seller['bank_name']))
-                        <div><strong>{{ __('invoices.print.bank') }}:</strong> <span class="bank-value">{{ $seller['bank_name'] }}</span></div>
+                    @if (filled($seller['legal_name']) && $seller['legal_name'] !== $seller['name'])
+                        <span class="seller-legal">{{ $seller['legal_name'] }}</span>
                     @endif
-                    @if (filled($seller['bank_voen']))
-                        <div><strong>{{ __('invoices.print.bank_voen') }}:</strong> <span class="bank-value">{{ $seller['bank_voen'] }}</span></div>
-                    @endif
-                    @if (filled($seller['correspondent_account']))
-                        <div><strong>{{ __('invoices.print.correspondent_account') }}:</strong> <span class="bank-value">{{ $seller['correspondent_account'] }}</span></div>
-                    @endif
-                    @if (filled($seller['bank_code']))
-                        <div><strong>{{ __('invoices.print.bank_code') }}:</strong> <span class="bank-value">{{ $seller['bank_code'] }}</span></div>
-                    @endif
-                    @if (filled($seller['swift']))
-                        <div><strong>{{ __('invoices.print.swift') }}:</strong> <span class="bank-value">{{ $seller['swift'] }}</span></div>
+                    @if (filled($seller['voen']))
+                        <span class="seller-tax">{{ __('invoices.print.voen') }}: {{ $seller['voen'] }}</span>
                     @endif
                 </div>
             </section>
 
-            <section class="invoice-meta" aria-label="{{ __('invoices.print.heading') }}">
-                <h1 class="invoice-heading">{{ __('invoices.print.heading') }}</h1>
-                <div class="meta-list">
-                    <div><strong>{{ __('invoices.print.issue_date') }}</strong><span class="meta-value">{{ $formatDate($invoice->issue_date) }}</span></div>
-                    <div><strong>{{ __('invoices.print.invoice_number') }}</strong><span class="meta-value">{{ $invoice->invoice_number }}</span></div>
+            <section class="document-grid details-row">
+                <div class="bank-block" aria-label="{{ __('invoices.print.supplier') }}">
+                    @foreach ([
+                        ['label' => __('invoices.print.account_short'), 'value' => $seller['iban']],
+                        ['label' => __('invoices.print.bank_short'), 'value' => $seller['bank_name']],
+                        ['label' => __('invoices.print.voen_short'), 'value' => $seller['bank_voen']],
+                        ['label' => __('invoices.print.correspondent_short'), 'value' => $seller['correspondent_account']],
+                        ['label' => __('invoices.print.bank_code_short'), 'value' => $seller['bank_code']],
+                        ['label' => __('invoices.print.swift_short'), 'value' => $seller['swift']],
+                    ] as $bankLine)
+                        @if (filled($bankLine['value']))
+                            <div class="bank-line">
+                                <span class="bank-label">{{ $bankLine['label'] }}</span>
+                                <span class="bank-value">{{ $bankLine['value'] }}</span>
+                            </div>
+                        @endif
+                    @endforeach
                 </div>
-            </section>
-        </header>
 
-        <section class="party-grid">
-            <div class="party">
-                <div class="section-label">{{ __('invoices.print.buyer') }}</div>
-                <h2>{{ $buyerName ?: __('invoices.print.not_specified') }}</h2>
-                <div class="buyer-details">
+                <div class="buyer-block" aria-label="{{ __('invoices.print.buyer') }}">
+                    @if (filled($buyer['name'] ?? null))
+                        <span class="buyer-label">{{ __('invoices.print.buyer') }}:</span>
+                        <span class="buyer-value">{{ $buyer['name'] }}</span>
+                    @endif
                     @if (filled($buyer['voen'] ?? null))
-                        <div><strong>{{ __('invoices.print.voen') }}:</strong> {{ $buyer['voen'] }}</div>
+                        <span class="buyer-label">{{ __('invoices.print.voen') }}:</span>
+                        <span class="buyer-value">{{ $buyer['voen'] }}</span>
                     @endif
                     @if (filled($buyer['phone'] ?? null))
-                        <div><strong>{{ __('invoices.print.phone') }}:</strong> {{ $buyer['phone'] }}</div>
+                        <span class="buyer-label">{{ __('invoices.print.phone') }}:</span>
+                        <span class="buyer-value">{{ $buyer['phone'] }}</span>
                     @endif
                 </div>
-            </div>
-            @if (filled($contractNumber))
-                <div class="party">
-                    <div class="section-label">{{ __('invoices.print.contract') }}</div>
-                    <h2 class="meta-value">{{ $contractNumber }}</h2>
-                </div>
-            @endif
-        </section>
+            </section>
 
-        <section aria-label="{{ __('invoices.print.description') }}">
-            <table class="items-table">
-                <colgroup>
-                    <col class="number">
-                    <col>
-                    <col class="amount">
-                </colgroup>
-                <thead>
-                    <tr>
-                        <th scope="col">{{ __('invoices.print.number') }}</th>
-                        <th scope="col">{{ __('invoices.print.description') }}</th>
-                        <th scope="col">{{ __('invoices.print.amount') }}</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach ($printLines as $index => $line)
+            <section class="items-wrap" aria-label="{{ __('invoices.print.description') }}">
+                <table class="items-table">
+                    <colgroup>
+                        <col class="number">
+                        <col class="description">
+                        <col class="amount">
+                    </colgroup>
+                    <thead>
                         <tr>
-                            <td class="line-number">{{ $index + 1 }}</td>
-                            <td class="line-description">{{ $line['description'] }}</td>
-                            <td class="line-amount">{{ $formatMoney($line['amount']) }}</td>
+                            <th scope="col">{{ __('invoices.print.number') }}</th>
+                            <th scope="col">{{ __('invoices.print.description') }}</th>
+                            <th scope="col">{{ __('invoices.print.amount') }}</th>
                         </tr>
-                    @endforeach
-                    @for ($index = 0; $index < $emptyRowCount; $index++)
-                        <tr class="empty-row" aria-hidden="true"><td></td><td></td><td></td></tr>
-                    @endfor
-                </tbody>
-                <tfoot>
-                    <tr class="totals-row">
-                        <td colspan="3">
-                            <div class="totals" data-canonical-subtotal="{{ $invoice->subtotal_amount }}" data-canonical-vat="{{ $invoice->vat_amount }}" data-canonical-total="{{ $invoice->total_amount }}">
-                                <div class="total-line"><span>{{ __('invoices.print.subtotal') }}</span><span class="total-value">{{ $formatMoney($invoice->subtotal_amount) }}</span></div>
-                                @if ($invoice->vat_enabled)
-                                    <div class="total-line"><span>{{ __('invoices.print.vat', ['rate' => $vatRateLabel]) }}</span><span class="total-value">{{ $formatMoney($invoice->vat_amount) }}</span></div>
-                                @endif
-                                <div class="total-line total-grand"><span>{{ __('invoices.print.total') }}</span><span class="total-value">{{ $formatMoney($invoice->total_amount) }}</span></div>
-                            </div>
-                        </td>
-                    </tr>
-                </tfoot>
-            </table>
-        </section>
+                    </thead>
+                    <tbody>
+                        @foreach ($printLines as $index => $line)
+                            <tr>
+                                <td>{{ $index + 1 }}</td>
+                                <td class="line-description">{{ $line['description'] }}</td>
+                                <td>{{ $formatMoney($line['amount']) }}</td>
+                            </tr>
+                        @endforeach
+                        @for ($index = 0; $index < $emptyRowCount; $index++)
+                            <tr class="invoice-empty-row" aria-hidden="true"><td></td><td></td><td></td></tr>
+                        @endfor
+                    </tbody>
+                    <tfoot data-canonical-subtotal="{{ $invoice->subtotal_amount }}" data-canonical-vat="{{ $invoice->vat_amount }}" data-canonical-total="{{ $invoice->total_amount }}">
+                        @if ($invoice->vat_enabled)
+                            <tr>
+                                <td></td>
+                                <td>{{ __('invoices.print.subtotal') }}</td>
+                                <td>{{ $formatMoney($invoice->subtotal_amount) }}</td>
+                            </tr>
+                            <tr>
+                                <td></td>
+                                <td>{{ __('invoices.print.vat', ['rate' => $vatRateLabel]) }}</td>
+                                <td>{{ $formatMoney($invoice->vat_amount) }}</td>
+                            </tr>
+                        @endif
+                        <tr>
+                            <td></td>
+                            <td>{{ __('invoices.print.total') }}</td>
+                            <td>{{ $formatMoney($invoice->total_amount) }}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </section>
 
-        <section class="signature">
-            <div>
-                <div class="signature-title">{{ __('invoices.print.director') }}: {{ __('invoices.print.signature_placeholder') }}</div>
-                <div class="signature-line"></div>
-            </div>
-            <div class="signature-stamp">{{ __('invoices.print.stamp') }}</div>
-        </section>
+            <section class="signature">
+                <div class="signature-director">{{ __('invoices.print.director') }}: {{ __('invoices.print.signature_placeholder') }}</div>
+                <div class="signature-line" aria-hidden="true"></div>
+                <div class="signature-stamp">{{ __('invoices.print.stamp') }}</div>
+            </section>
 
-        <footer class="invoice-footer">{{ __('invoices.print.footer') }}</footer>
+            <footer class="invoice-footer">{{ __('invoices.print.footer') }}</footer>
+        </div>
     </main>
 </body>
 
