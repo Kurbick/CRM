@@ -8,7 +8,7 @@
     $vatRateLabel = filled($invoice->vat_rate)
         ? rtrim(rtrim((string) $invoice->vat_rate, '0'), '.')
         : '—';
-    $emptyRowCount = max(0, 4 - count($printLines));
+    $emptyRowCount = max(0, 7 - count($printLines));
 @endphp
 <!doctype html>
 <html lang="{{ app()->getLocale() }}">
@@ -40,8 +40,11 @@
         }
 
         .word-document {
+            display: flex;
+            flex-direction: column;
             width: 169.9mm;
             max-width: 100%;
+            min-height: 271.6mm;
             margin: 0;
         }
 
@@ -194,14 +197,14 @@
         .items-table td:last-child { text-align: right; white-space: nowrap; }
         .line-description { overflow-wrap: anywhere; }
         .invoice-empty-row {
-            height: 5.7mm;
+            height: 9mm;
             break-inside: avoid;
             page-break-inside: avoid;
         }
 
         .invoice-empty-row > td {
-            height: 5.7mm;
-            min-height: 5.7mm;
+            height: 9mm;
+            min-height: 9mm;
             padding: 0;
             font-size: 12pt;
             line-height: 12pt;
@@ -213,7 +216,11 @@
         }
 
         .items-table tfoot td {
-            padding: 1mm 1.5mm;
+            height: 9mm;
+            min-height: 9mm;
+            padding: 0 1.5mm;
+            line-height: 12pt;
+            vertical-align: middle;
             font-weight: 700;
         }
 
@@ -227,7 +234,7 @@
             grid-template-rows: 4mm 5mm 5mm 4mm;
             width: 127.5mm;
             max-width: 100%;
-            margin-top: 20mm;
+            margin-top: auto;
             break-inside: avoid;
             page-break-inside: avoid;
         }

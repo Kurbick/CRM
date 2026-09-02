@@ -89,9 +89,52 @@
 
             <div class="flex shrink-0 flex-wrap items-center gap-1">
                 @can('print', $invoice)
-                    <a href="{{ route('invoices.print', $invoice) }}" target="_blank" rel="noopener" class="crm-light-action">
-                        {{ __('invoices.actions.print') }}
-                    </a>
+                    <div data-testid="invoice-print-menu" class="relative" x-data="{
+                        open: false,
+                        close() {
+                            this.open = false;
+                            this.$nextTick(() => this.$refs.trigger.focus());
+                        }
+                    }" x-on:click.outside="open = false" x-on:keydown.escape.window="if (open) close()">
+                        <button type="button" x-ref="trigger" x-on:click="open = !open"
+                            aria-haspopup="menu" x-bind:aria-expanded="open.toString()"
+                            aria-controls="invoice-print-menu" aria-label="{{ __('invoices.actions.print_and_export') }}"
+                            title="{{ __('invoices.actions.print_and_export') }}"
+                            class="inline-flex h-11 min-w-[52px] items-center justify-center gap-1 rounded-md px-2 py-2.5 text-slate-500 transition hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1">
+                            <svg class="h-5 w-5" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6.5 8.5V4.75h11v3.75M6 17.5h12m-10.5-6h9A1.5 1.5 0 0 1 18 13v6.25H6V13a1.5 1.5 0 0 1 1.5-1.5ZM5 8.5h14A2.5 2.5 0 0 1 21.5 11v4H18v-2H6v2H2.5v-4A2.5 2.5 0 0 1 5 8.5Z" />
+                            </svg>
+                            <svg class="h-3 w-3 text-slate-400" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m7 10 5 5 5-5" />
+                            </svg>
+                        </button>
+
+                        <div id="invoice-print-menu" x-show="open" x-cloak x-transition role="menu"
+                            class="absolute right-0 top-full z-50 mt-1.5 w-44 overflow-hidden rounded-md border border-slate-200 bg-white py-1 shadow-lg">
+                            <a href="{{ route('invoices.print', $invoice) }}" target="_blank" rel="noopener" role="menuitem"
+                                x-on:click="open = false"
+                                class="flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-900 focus:bg-slate-50 focus:outline-none">
+                                <svg class="h-4 w-4 shrink-0 text-slate-500" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6.5 8.5V4.75h11v3.75M6 17.5h12m-10.5-6h9A1.5 1.5 0 0 1 18 13v6.25H6V13a1.5 1.5 0 0 1 1.5-1.5ZM5 8.5h14A2.5 2.5 0 0 1 21.5 11v4H18v-2H6v2H2.5v-4A2.5 2.5 0 0 1 5 8.5Z" />
+                                </svg>
+                                <span>{{ __('invoices.actions.print') }}</span>
+                            </a>
+                            <span role="menuitem" aria-disabled="true"
+                                class="flex cursor-not-allowed items-center gap-2 px-3 py-2 text-xs font-medium text-slate-500">
+                                <svg class="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 3.75h8l4 4V20.25H6V3.75Zm8 0v4h4M8.5 12h7M8.5 15h7" />
+                                </svg>
+                                <span>{{ __('invoices.actions.word_export') }}</span>
+                            </span>
+                            <span role="menuitem" aria-disabled="true"
+                                class="flex cursor-not-allowed items-center gap-2 px-3 py-2 text-xs font-medium text-slate-500">
+                                <svg class="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 4.5h14v15H5v-15Zm0 4h14M9.5 4.5v15m4.5-15v15M5 13.5h14" />
+                                </svg>
+                                <span>{{ __('invoices.actions.excel_export') }}</span>
+                            </span>
+                        </div>
+                    </div>
                 @endcan
 
                 @can('update', $invoice)

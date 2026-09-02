@@ -52,6 +52,8 @@ class InvoicePrintAndDisplayTest extends TestCase
 
         $response = $this->get(route('invoices.print', $invoice))->assertOk();
 
+        $this->assertSame(6, substr_count($response->getContent(), 'class="invoice-empty-row"'));
+
         $response->assertSee('data-testid="invoice-print-document"', false)
             ->assertSee('data-logo-asset="images/zeroline-logo.png"', false)
             ->assertSee('src="'.asset('images/zeroline-logo.png').'"', false)
@@ -66,6 +68,9 @@ class InvoicePrintAndDisplayTest extends TestCase
             ->assertSee('100,00 ₼')
             ->assertSee('19,00 ₼')
             ->assertSee('119,00 ₼')
+            ->assertSee('Итого')
+            ->assertSee('НДС (19%)')
+            ->assertSee('Всего к оплате')
             ->assertSee('<tfoot', false)
             ->assertSee('data-canonical-subtotal="100.00"', false)
             ->assertSee('class="invoice-empty-row"', false)
@@ -116,7 +121,7 @@ class InvoicePrintAndDisplayTest extends TestCase
             ->assertSee('(01.09.2026–30.09.2026)')
             ->assertSee('Tarix: '.\Illuminate\Support\Carbon::parse($invoice->issue_date)->format('d.m.Y'))
             ->assertSee('Hesab №: '.$invoice->invoice_number)
-            ->assertSee('Yekun')
+            ->assertSee('Ödəniləcək məbləğ')
             ->assertSee('BİZİMLƏ ƏMƏKDAŞLIQ ETDİYİNİZ ÜÇÜN TƏŞƏKKÜR EDİRİK!')
             ->assertDontSee('İnvoys tarixi:')
             ->assertDontSee('İnvoys nömrəsi:')
@@ -135,6 +140,10 @@ class InvoicePrintAndDisplayTest extends TestCase
             ->get(route('invoices.show', $invoice))
             ->assertOk()
             ->assertSee('Sifarişçi')
+            ->assertSee('aria-label="Çap və ixrac"', false)
+            ->assertSee('Çap')
+            ->assertSee('Word (.docx)')
+            ->assertSee('Excel (.xlsx)')
             ->assertDontSee('Ödəyici');
     }
 
@@ -169,7 +178,7 @@ class InvoicePrintAndDisplayTest extends TestCase
         $this->get(route('invoices.print', $neutralInvoice))
             ->assertOk()
             ->assertSee('100,00 ₼')
-            ->assertSee('Итого')
+            ->assertSee('Всего к оплате')
             ->assertDontSee('Сумма без НДС')
             ->assertDontSee('НДС (');
     }
@@ -191,7 +200,7 @@ class InvoicePrintAndDisplayTest extends TestCase
             ->assertOk()
             ->assertSee('Cəmi')
             ->assertSee('ƏDV (19%)')
-            ->assertSee('Yekun')
+            ->assertSee('Ödəniləcək məbləğ')
             ->assertSee('119,00 ₼');
     }
 
@@ -239,6 +248,11 @@ class InvoicePrintAndDisplayTest extends TestCase
             ->assertSee('Поставщик услуг')
             ->assertSee($invoice->invoice_number)
             ->assertSee('invoice-sidebar crm-print-hide', false)
+            ->assertSee('data-testid="invoice-print-menu"', false)
+            ->assertSee('aria-label="Печать и экспорт"', false)
+            ->assertSee('Word (.docx)')
+            ->assertSee('Excel (.xlsx)')
+            ->assertSee('aria-disabled="true"', false)
             ->assertSee('invoice-payment-history crm-print-hide', false)
             ->assertSee('crm-print-hide pb-3 text-left pr-4 print:hidden">Оплачено', false)
             ->assertSee('crm-print-hide pb-3 text-left pr-4 print:hidden">Остаток', false)

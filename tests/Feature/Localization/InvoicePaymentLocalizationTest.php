@@ -149,12 +149,16 @@ class InvoicePaymentLocalizationTest extends AuthorizationTestCase
 
         $this->withSession(['locale' => 'ru'])
             ->get(route('invoices.show', $invoice))
-            ->assertSeeText('Сумма без НДС')
-            ->assertSeeText('НДС (18%)');
+            ->assertSeeText('Итого')
+            ->assertSeeText('НДС (18%)')
+            ->assertSeeText('Всего к оплате')
+            ->assertDontSeeText('Сумма без НДС');
 
         $this->withSession(['locale' => 'az'])
             ->get(route('invoices.show', $invoice))
-            ->assertSeeText('ƏDV-siz məbləğ')
-            ->assertSeeText('ƏDV (18%)');
+            ->assertSeeText('Cəmi')
+            ->assertSeeText('ƏDV (18%)')
+            ->assertSeeText('Ödəniləcək məbləğ')
+            ->assertDontSeeText('ƏDV-siz məbləğ');
     }
 }
