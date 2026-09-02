@@ -23,7 +23,7 @@ use App\Services\InvoicePaymentAvailabilityService;
 use App\Services\InvoicePaymentBreakdownPresenter;
 use App\Services\InvoicePaymentSourceResolver;
 use App\Services\InvoiceNumberService;
-use App\Services\InvoicePrintPresenter;
+use App\Services\InvoiceDocumentPresenter;
 use App\Services\ActiveOrganizationContext;
 use App\Services\SubscriptionBillingSchedule;
 use App\Support\Access\PermissionName;
@@ -57,7 +57,7 @@ class InvoiceController extends Controller
         private readonly UpdateInvoice $updateInvoice,
         private readonly CompanyActivityRecorder $activityRecorder,
         private readonly InvoiceNumberService $invoiceNumberService,
-        private readonly InvoicePrintPresenter $printPresenter,
+        private readonly InvoiceDocumentPresenter $documentPresenter,
         private readonly ActiveOrganizationContext $organizationContext,
     ) {}
 
@@ -701,39 +701,14 @@ class InvoiceController extends Controller
             'lines',
         ]);
 
-        $sellerFallback = $this->sellerSnapshot->legacyFallback();
-        $organization = $invoice->issuerOrganization;
-        $sellerValue = static function (mixed $snapshot, mixed $organizationValue, mixed $fallback): ?string {
-            foreach ([$snapshot, $organizationValue, $fallback] as $value) {
-                if (is_string($value) && trim($value) !== '') {
-                    return trim($value);
-                }
-            }
-
-            return null;
-        };
-
-        $seller = [
-            'name' => $sellerValue($invoice->seller_name, $organization?->name, $sellerFallback['seller_name']),
-            'legal_name' => $organization?->legal_name,
-            'voen' => $sellerValue($invoice->seller_voen, $organization?->voen, $sellerFallback['seller_voen']),
-            'bank_name' => $sellerValue($invoice->seller_bank_name, $organization?->bank_name, $sellerFallback['seller_bank_name']),
-            'iban' => $sellerValue($invoice->seller_iban, $organization?->iban, $sellerFallback['seller_iban']),
-            'correspondent_account' => $organization?->bank_correspondent_account,
-            'bank_code' => $sellerValue($invoice->seller_bank_code, $organization?->bank_code, $sellerFallback['seller_bank_code']),
-            'bank_voen' => $sellerValue($invoice->seller_bank_voen, $organization?->bank_voen, $sellerFallback['seller_bank_voen']),
-            'swift' => $sellerValue($invoice->seller_swift, $organization?->swift, $sellerFallback['seller_swift']),
-        ];
+        $document = $this->documentPresenter->present($invoice);
 
         return view('invoices.print', [
             'invoice' => $invoice,
-            'seller' => $seller,
-            'buyer' => [
-                'name' => $invoice->payer_name ?: $invoice->company?->name,
-                'voen' => $invoice->payer_voen ?: $invoice->company?->voen,
-                'phone' => $invoice->company?->phone,
-            ],
-            'printLines' => $this->printPresenter->lines($invoice),
+            'seller' => $document['seller'],
+            'buyer' => $document['buyer'],
+            'printLines' => $document['lines'],
+            'emptyRowCount' => $document['empty_row_count'],
         ]);
     }
 

@@ -119,20 +119,20 @@
                                 </svg>
                                 <span>{{ __('invoices.actions.print') }}</span>
                             </a>
-                            <span role="menuitem" aria-disabled="true"
-                                class="flex cursor-not-allowed items-center gap-2 px-3 py-2 text-xs font-medium text-slate-500">
+                            <a href="{{ route('invoices.export.word', $invoice) }}" role="menuitem"
+                                class="flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-900 focus:bg-slate-50 focus:outline-none">
                                 <svg class="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 3.75h8l4 4V20.25H6V3.75Zm8 0v4h4M8.5 12h7M8.5 15h7" />
                                 </svg>
                                 <span>{{ __('invoices.actions.word_export') }}</span>
-                            </span>
-                            <span role="menuitem" aria-disabled="true"
-                                class="flex cursor-not-allowed items-center gap-2 px-3 py-2 text-xs font-medium text-slate-500">
+                            </a>
+                            <a href="{{ route('invoices.export.excel', $invoice) }}" role="menuitem"
+                                class="flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-900 focus:bg-slate-50 focus:outline-none">
                                 <svg class="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 4.5h14v15H5v-15Zm0 4h14M9.5 4.5v15m4.5-15v15M5 13.5h14" />
                                 </svg>
                                 <span>{{ __('invoices.actions.excel_export') }}</span>
-                            </span>
+                            </a>
                         </div>
                     </div>
                 @endcan

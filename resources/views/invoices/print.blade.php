@@ -8,7 +8,6 @@
     $vatRateLabel = filled($invoice->vat_rate)
         ? rtrim(rtrim((string) $invoice->vat_rate, '0'), '.')
         : '—';
-    $emptyRowCount = max(0, 7 - count($printLines));
 @endphp
 <!doctype html>
 <html lang="{{ app()->getLocale() }}">
@@ -143,13 +142,17 @@
         .buyer-block {
             grid-column: 4 / 6;
             display: grid;
-            grid-template-columns: 22.24mm 43.96mm;
+            grid-template-columns: 24.5mm 41.7mm;
             align-content: start;
             font-size: 10pt;
             line-height: 1.35;
         }
 
-        .buyer-label { font-weight: 700; }
+        .buyer-label {
+            font-weight: 700;
+            white-space: nowrap;
+            overflow-wrap: normal;
+        }
 
         .items-wrap {
             width: 168.65mm;

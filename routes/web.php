@@ -12,6 +12,7 @@ use App\Http\Controllers\Web\ContractSubjectController;
 use App\Http\Controllers\Web\DashboardController;
 use App\Http\Controllers\Web\HomeController;
 use App\Http\Controllers\Web\InvoiceController;
+use App\Http\Controllers\Web\InvoiceExportController;
 use App\Http\Controllers\Web\LocaleController;
 use App\Http\Controllers\Web\OrderController;
 use App\Http\Controllers\Web\OrganizationContextController;
@@ -315,6 +316,16 @@ Route::middleware(['auth', 'active', 'password.changed', 'organization.context']
         'invoices/{invoice}/print',
         [InvoiceController::class, 'print']
     )->name('invoices.print');
+
+    Route::get(
+        'invoices/{invoice}/export/word',
+        [InvoiceExportController::class, 'word']
+    )->name('invoices.export.word');
+
+    Route::get(
+        'invoices/{invoice}/export/excel',
+        [InvoiceExportController::class, 'excel']
+    )->name('invoices.export.excel');
 
     Route::resource(
         'invoices',
