@@ -65,10 +65,27 @@ class InvoiceExportTest extends AuthorizationTestCase
         $this->assertContains('ƏDV (19%)', array_column($rows, 'B'));
         $this->assertContains('Ödəniləcək məbləğ', array_column($rows, 'B'));
         $this->assertContains('S.W.I.F.T:', array_column($rows, 'A'));
+        $this->assertContains($sheet->getStyle('A14')->getAlignment()->getHorizontal(), [Alignment::HORIZONTAL_LEFT, Alignment::HORIZONTAL_GENERAL]);
+        $this->assertContains($sheet->getStyle('B14')->getAlignment()->getHorizontal(), [Alignment::HORIZONTAL_LEFT, Alignment::HORIZONTAL_GENERAL]);
+        $this->assertFalse($sheet->getStyle('A14')->getAlignment()->getShrinkToFit());
+        $this->assertFalse($sheet->getStyle('B14')->getAlignment()->getShrinkToFit());
+        $this->assertSame(Alignment::HORIZONTAL_RIGHT, $sheet->getStyle('C2')->getAlignment()->getHorizontal());
+        $this->assertSame(Alignment::HORIZONTAL_LEFT, $sheet->getStyle('D2')->getAlignment()->getHorizontal());
+        $this->assertSame(Alignment::HORIZONTAL_RIGHT, $sheet->getStyle('C5')->getAlignment()->getHorizontal());
+        $this->assertSame(Alignment::HORIZONTAL_LEFT, $sheet->getStyle('D5')->getAlignment()->getHorizontal());
         $this->assertCount(1, $sheet->getDrawingCollection());
         $this->assertContains('A5:B5', $sheet->getMergeCells());
-        $this->assertContains('C5:D5', $sheet->getMergeCells());
-        $this->assertContains('A14:B14', $sheet->getMergeCells());
+        $this->assertNotContains('C5:D5', $sheet->getMergeCells());
+        $this->assertNotContains('A14:B14', $sheet->getMergeCells());
+        $this->assertContains('B14:C14', $sheet->getMergeCells());
+        $this->assertNotContains('C14:C14', $sheet->getMergeCells());
+        $this->assertContains('B9:C9', $sheet->getMergeCells());
+        $this->assertNotContains('A9:A9', $sheet->getMergeCells());
+        foreach (['A9', 'A10', 'A11', 'A12', 'A13', 'A14'] as $labelCell) {
+            $this->assertContains($sheet->getStyle($labelCell)->getAlignment()->getHorizontal(), [Alignment::HORIZONTAL_LEFT, Alignment::HORIZONTAL_GENERAL]);
+            $this->assertSame(0, $sheet->getStyle($labelCell)->getAlignment()->getIndent());
+        }
+        $this->assertSame(0, $sheet->getStyle('B14')->getAlignment()->getIndent());
 
         $totals = $this->findRowsByLabel($rows, ['Cəmi', 'ƏDV (19%)', 'Ödəniləcək məbləğ']);
         $this->assertSame(DataType::TYPE_NUMERIC, $sheet->getCell('D'.$totals['Cəmi'])->getDataType());
@@ -87,7 +104,22 @@ class InvoiceExportTest extends AuthorizationTestCase
         $this->assertFalse($sheet->getPrintGridlines());
         $this->assertSame('', $sheet->getAutoFilter()->getRange());
         $this->assertSame(PageSetup::PAPERSIZE_A4, $sheet->getPageSetup()->getPaperSize());
-        $this->assertSame('A1:D'.$totals['Ödəniləcək məbləğ'], $sheet->getPageSetup()->getPrintArea());
+        $this->assertSame(PageSetup::ORIENTATION_PORTRAIT, $sheet->getPageSetup()->getOrientation());
+        $this->assertTrue($sheet->getPageSetup()->getFitToPage());
+        $this->assertSame(1, $sheet->getPageSetup()->getFitToWidth());
+        $this->assertSame(1, $sheet->getPageSetup()->getFitToHeight());
+        $footerRow = array_search('BİZİMLƏ ƏMƏKDAŞLIQ ETDİYİNİZ ÜÇÜN TƏŞƏKKÜR EDİRİK!', array_column($rows, 'A'), true);
+        $this->assertNotFalse($footerRow);
+        $footerRow++;
+        $this->assertSame('A1:D'.$footerRow, $sheet->getPageSetup()->getPrintArea());
+        $directorRow = array_search('Direktor: ____________________', array_column($rows, 'A'), true);
+        $this->assertNotFalse($directorRow);
+        $directorRow++;
+        $this->assertSame(
+            Border::BORDER_THIN,
+            $sheet->getStyle('D'.$directorRow)->getBorders()->getBottom()->getBorderStyle()
+        );
+        $this->assertSame('M.Y.', $sheet->getCell('D'.($directorRow + 2))->getValue());
         $this->assertSame('19.00', $invoice->fresh()->vat_amount);
     }
 
@@ -107,9 +139,10 @@ class InvoiceExportTest extends AuthorizationTestCase
         $this->assertStringNotContainsString("\n", (string) $sheet->getCell('C5')->getValue());
         $this->assertNotContains('C5:D5', $sheet->getMergeCells());
         $this->assertFalse($sheet->getStyle('C5')->getAlignment()->getWrapText());
-        $this->assertTrue($sheet->getStyle('C5')->getAlignment()->getShrinkToFit());
+        $this->assertFalse($sheet->getStyle('C5')->getAlignment()->getShrinkToFit());
         $this->assertSame(0, $sheet->getStyle('C5')->getAlignment()->getIndent());
-        $this->assertSame(Alignment::HORIZONTAL_LEFT, $sheet->getStyle('C5')->getAlignment()->getHorizontal());
+        $this->assertSame(Alignment::HORIZONTAL_RIGHT, $sheet->getStyle('C5')->getAlignment()->getHorizontal());
+        $this->assertSame(Alignment::HORIZONTAL_LEFT, $sheet->getStyle('D5')->getAlignment()->getHorizontal());
         $this->assertSame(Alignment::VERTICAL_CENTER, $sheet->getStyle('C5')->getAlignment()->getVertical());
         $this->assertSame(11.0, (float) $sheet->getStyle('C5')->getFont()->getSize());
         $this->assertSame(-1.0, (float) $sheet->getRowDimension(5)->getRowHeight());
@@ -123,6 +156,16 @@ class InvoiceExportTest extends AuthorizationTestCase
                 $sheet->getStyle("{$column}{$totalRow}")->getBorders()->getBottom()->getBorderStyle()
             );
         }
+        $rowsByColumnA = array_column($rows, 'A');
+        $this->assertContains('Директор: ____________________', $rowsByColumnA);
+        $directorRow = array_search('Директор: ____________________', $rowsByColumnA, true);
+        $this->assertNotFalse($directorRow);
+        $directorRow++;
+        $this->assertSame('М.П.', $sheet->getCell('D'.($directorRow + 2))->getValue());
+        $footerRow = array_search('СПАСИБО ЗА СОТРУДНИЧЕСТВО!', $rowsByColumnA, true);
+        $this->assertNotFalse($footerRow);
+        $footerRow++;
+        $this->assertSame('A1:D'.$footerRow, $sheet->getPageSetup()->getPrintArea());
     }
 
     public function test_vat_neutral_exports_omit_vat_row_and_keep_canonical_total(): void

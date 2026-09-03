@@ -56,7 +56,7 @@ final class InvoiceExcelExporter
             ->setOrientation(PageSetup::ORIENTATION_PORTRAIT)
             ->setFitToPage(true)
             ->setFitToWidth(1)
-            ->setFitToHeight(0)
+            ->setFitToHeight(1)
             ->setHorizontalCentered(true);
         $sheet->getPageMargins()
             ->setTop(0.5)
@@ -75,6 +75,8 @@ final class InvoiceExcelExporter
         $sheet->getStyle('D1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
         $this->setLabelValue($sheet, 2, 'C', 'D', $this->withColon(__('invoices.print.invoice_number')), $invoice->invoice_number);
         $this->setLabelValue($sheet, 3, 'C', 'D', $this->withColon(__('invoices.print.issue_date')), $this->formatDate($invoice->issue_date));
+        $this->alignMetadataPair($sheet, 2);
+        $this->alignMetadataPair($sheet, 3);
         $sheet->getRowDimension(1)->setRowHeight(60);
         $sheet->getRowDimension(2)->setRowHeight(20);
         $sheet->getRowDimension(3)->setRowHeight(20);
@@ -83,17 +85,29 @@ final class InvoiceExcelExporter
         if (app()->getLocale() === 'ru') {
             $this->setLabelValue($sheet, 5, 'C', 'D', $this->withColon(__('invoices.print.buyer')), $buyer['name'] ?? '');
         } else {
-            $this->mergeText($sheet, 'C5:D5', 'C5', $this->labelValue(__('invoices.print.buyer'), $buyer['name'] ?? ''));
+            $this->setLabelValue($sheet, 5, 'C', 'D', $this->withColon(__('invoices.print.buyer')), $buyer['name'] ?? '');
         }
         $this->mergeText($sheet, 'A6:B6', 'A6', $this->labelValue(__('invoices.print.voen'), $seller['voen'] ?? ''));
-        $this->mergeText($sheet, 'C6:D6', 'C6', $this->labelValue(__('invoices.print.voen'), $buyer['voen'] ?? ''));
+        $this->setLabelValue($sheet, 6, 'C', 'D', $this->withColon(__('invoices.print.voen')), $buyer['voen'] ?? '');
         $this->mergeText($sheet, 'A7:B7', 'A7', $this->labelValue($this->sellerLabel('legal_name'), $seller['legal_name'] ?? ''));
-        $this->mergeText($sheet, 'C7:D7', 'C7', $this->labelValue(__('invoices.print.phone'), $buyer['phone'] ?? ''));
+        $this->setLabelValue($sheet, 7, 'C', 'D', $this->withColon(__('invoices.print.phone')), $buyer['phone'] ?? '');
+        $this->alignMetadataPair($sheet, 5);
+        $this->alignMetadataPair($sheet, 6);
+        $this->alignMetadataPair($sheet, 7);
 
         $bankRow = 9;
         foreach (['bank_name', 'iban', 'bank_voen', 'correspondent_account', 'bank_code', 'swift'] as $key) {
             if (filled($seller[$key] ?? null)) {
-                $this->setMergedLabelValue($sheet, $bankRow, 'A:B', 'C:D', $this->withColon($this->sellerLabel($key)), $seller[$key]);
+                $this->setMergedLabelValue(
+                    $sheet,
+                    $bankRow,
+                    'A:A',
+                    'B:C',
+                    $this->withColon($this->sellerLabel($key)),
+                    $seller[$key],
+                    false,
+                );
+
                 $bankRow++;
             }
         }
@@ -144,17 +158,20 @@ final class InvoiceExcelExporter
             ->setVertical(Alignment::VERTICAL_CENTER);
         $sheet->getStyle("D{$headerRow}:D{$lineRow}")->getNumberFormat()->setFormatCode(self::MONEY_FORMAT);
         $sheet->getStyle("B{$totalStartRow}:C{$lineRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-        $sheet->getStyle("A1:D{$lineRow}")->getFont()->setName('Arial');
+
+        $footerRow = $this->addSignatureBlock($sheet, $grandTotalRow);
+
+        $sheet->getStyle("A1:D{$footerRow}")->getFont()->setName('Arial');
 
         $sheet->freezePane("A".($headerRow + 1));
-        $pageSetup->setPrintArea("A1:D{$lineRow}");
+        $pageSetup->setPrintArea("A1:D{$footerRow}");
 
         if (app()->getLocale() === 'ru') {
             $sheet->getStyle('C5')->getAlignment()
                 ->setWrapText(false)
-                ->setShrinkToFit(true)
+                ->setShrinkToFit(false)
                 ->setIndent(0)
-                ->setHorizontal(Alignment::HORIZONTAL_LEFT)
+                ->setHorizontal(Alignment::HORIZONTAL_RIGHT)
                 ->setVertical(Alignment::VERTICAL_CENTER);
         }
 
@@ -203,13 +220,96 @@ final class InvoiceExcelExporter
         $sheet->getStyle("{$labelColumn}{$row}")->getFont()->setBold(true);
     }
 
-    private function setMergedLabelValue(Worksheet $sheet, int $row, string $labelRange, string $valueRange, string $label, mixed $value): void
+    private function alignMetadataPair(Worksheet $sheet, int $row): void
     {
+        $sheet->getStyle("C{$row}")->getAlignment()
+            ->setHorizontal(Alignment::HORIZONTAL_RIGHT)
+            ->setVertical(Alignment::VERTICAL_CENTER)
+            ->setWrapText(false)
+            ->setShrinkToFit(false)
+            ->setIndent(0);
+        $sheet->getStyle("D{$row}")->getAlignment()
+            ->setHorizontal(Alignment::HORIZONTAL_LEFT)
+            ->setVertical(Alignment::VERTICAL_CENTER)
+            ->setWrapText(false)
+            ->setShrinkToFit(false)
+            ->setIndent(0);
+    }
+
+    private function setMergedLabelValue(
+        Worksheet $sheet,
+        int $row,
+        string $labelRange,
+        string $valueRange,
+        string $label,
+        mixed $value,
+        bool $shrinkToFit = true,
+    ): void {
         $labelStart = explode(':', $labelRange, 2)[0];
         $valueStart = explode(':', $valueRange, 2)[0];
         $this->mergeText($sheet, $this->rangeForRow($labelRange, $row), "{$labelStart}{$row}", $label);
         $this->mergeText($sheet, $this->rangeForRow($valueRange, $row), "{$valueStart}{$row}", $value ?? '');
         $sheet->getStyle("{$labelStart}{$row}")->getFont()->setBold(true);
+        $sheet->getStyle("{$labelStart}{$row}")->getAlignment()
+            ->setHorizontal(Alignment::HORIZONTAL_LEFT)
+            ->setVertical(Alignment::VERTICAL_CENTER)
+            ->setWrapText(false)
+            ->setShrinkToFit($shrinkToFit)
+            ->setIndent(0);
+        $sheet->getStyle("{$valueStart}{$row}")->getAlignment()
+            ->setHorizontal(Alignment::HORIZONTAL_LEFT)
+            ->setVertical(Alignment::VERTICAL_CENTER)
+            ->setWrapText(false)
+            ->setShrinkToFit($shrinkToFit)
+            ->setIndent(0);
+    }
+
+    private function addSignatureBlock(Worksheet $sheet, int $grandTotalRow): int
+    {
+        $signatureStartRow = $grandTotalRow + 4;
+        $directorRow = $signatureStartRow + 1;
+        $stampRow = $signatureStartRow + 3;
+        $footerRow = $signatureStartRow + 5;
+
+        $sheet->getRowDimension($signatureStartRow)->setRowHeight(18);
+        $sheet->getRowDimension($directorRow)->setRowHeight(22);
+        $sheet->getRowDimension($stampRow)->setRowHeight(18);
+        $sheet->getRowDimension($footerRow)->setRowHeight(28);
+
+        $this->mergeText(
+            $sheet,
+            "A{$directorRow}:C{$directorRow}",
+            "A{$directorRow}",
+            __('invoices.print.director') . ': ' . __('invoices.print.signature_placeholder'),
+        );
+        $sheet->getStyle("A{$directorRow}")->getAlignment()
+            ->setHorizontal(Alignment::HORIZONTAL_LEFT)
+            ->setVertical(Alignment::VERTICAL_CENTER)
+            ->setWrapText(false)
+            ->setShrinkToFit(true);
+        $sheet->getStyle("D{$directorRow}")->applyFromArray([
+            'borders' => [
+                'bottom' => [
+                    'borderStyle' => Border::BORDER_THIN,
+                    'color' => ['rgb' => '000000'],
+                ],
+            ],
+        ]);
+
+        $this->setText($sheet, "D{$stampRow}", __('invoices.print.stamp'));
+        $sheet->getStyle("D{$stampRow}")->getAlignment()
+            ->setHorizontal(Alignment::HORIZONTAL_RIGHT)
+            ->setVertical(Alignment::VERTICAL_CENTER);
+
+        $this->mergeText($sheet, "A{$footerRow}:D{$footerRow}", "A{$footerRow}", __('invoices.print.footer'));
+        $sheet->getStyle("A{$footerRow}")->getFont()->setBold(true)->setSize(10);
+        $sheet->getStyle("A{$footerRow}")->getAlignment()
+            ->setHorizontal(Alignment::HORIZONTAL_CENTER)
+            ->setVertical(Alignment::VERTICAL_CENTER)
+            ->setWrapText(false)
+            ->setShrinkToFit(true);
+
+        return $footerRow;
     }
 
     private function rangeForRow(string $range, int $row): string
@@ -224,6 +324,13 @@ final class InvoiceExcelExporter
 
     private function mergeText(Worksheet $sheet, string $range, string $cell, mixed $value): void
     {
+        $rangeParts = explode(':', $range, 2);
+        if ($range === $cell || (count($rangeParts) === 2 && $rangeParts[0] === $rangeParts[1])) {
+            $this->setText($sheet, $cell, $value);
+
+            return;
+        }
+
         $sheet->mergeCells($range);
         $this->setText($sheet, $cell, $value);
     }
