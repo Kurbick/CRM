@@ -65,12 +65,14 @@ final class InvoiceWordExporter
             'seller_swift' => $seller['swift'] ?? '',
             'buyer_label' => __('invoices.print.buyer').':',
             'buyer_name' => $buyer['name'] ?? '',
-            'buyer_voen_line' => filled($buyer['voen'] ?? null)
-                ? __('invoices.print.voen').': '.$buyer['voen']
+            'buyer_voen_label' => filled($buyer['voen'] ?? null)
+                ? __('invoices.print.voen').':'
                 : '',
-            'buyer_phone_line' => filled($buyer['phone'] ?? null)
-                ? __('invoices.print.phone').': '.$buyer['phone']
+            'buyer_voen_line' => $buyer['voen'] ?? '',
+            'buyer_phone_label' => filled($buyer['phone'] ?? null)
+                ? __('invoices.print.phone').':'
                 : '',
+            'buyer_phone_line' => $buyer['phone'] ?? '',
             'number_label' => __('invoices.print.number'),
             'description_label' => __('invoices.print.description'),
             'amount_label' => __('invoices.print.amount'),

@@ -42,6 +42,21 @@ class InvoiceExportTest extends AuthorizationTestCase
         }
     }
 
+    public function test_authorized_user_can_download_az_word_with_localized_invoice_content(): void
+    {
+        $invoice = $this->configuredInvoice();
+        $this->actingAsPermissions([PermissionName::InvoicesPrint->value]);
+
+        $response = $this->withSession(['locale' => 'az'])
+            ->get(route('invoices.export.word', $invoice))
+            ->assertOk();
+
+        $documentXml = $this->docxDocumentXml($response->streamedContent());
+        foreach (['INVOICE', 'Tarix', 'Hesab №', 'Sifarişçi', 'VÖEN', 'Telefon', 'H/h:', 'Bank:', 'M/h:', 'Kod:', 'S.W.I.F.T:', 'AÇIQLAMA', 'MƏBLƏĞ', 'Cəmi', 'ƏDV (19%)', 'Ödəniləcək məbləğ', 'Direktor', 'M.Y.', 'BİZİMLƏ ƏMƏKDAŞLIQ ETDİYİNİZ ÜÇÜN TƏŞƏKKÜR EDİRİK!'] as $text) {
+            $this->assertStringContainsString($text, $documentXml);
+        }
+    }
+
     public function test_authorized_user_can_download_az_excel_with_numeric_snapshot_totals(): void
     {
         $invoice = $this->configuredInvoice();
