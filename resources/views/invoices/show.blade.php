@@ -44,8 +44,9 @@
                 {{ $canReturnToCompany ? $companyContext['label'] : __('invoices.actions.back_to_list') }}
         </a>
 
-        <div class="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-end sm:justify-between">
-            <div class="min-w-0">
+        <div class="grid grid-cols-1 items-start gap-5 border-b border-slate-200 pb-4 lg:grid-cols-[minmax(0,2fr)_minmax(280px,0.85fr)]">
+            <div class="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-2">
                     <h1 class="truncate font-mono text-xl font-semibold leading-tight text-slate-900">
                         {{ $invoice->invoice_number }}
@@ -85,9 +86,9 @@
                 @if ($invoice->issuerOrganization)
                     <p class="mt-2 text-xs text-slate-500"><span class="font-medium text-slate-600">{{ __('organizations.form.issuer') }}:</span> {{ $invoice->issuerOrganization->name }}</p>
                 @endif
-            </div>
+                </div>
 
-            <div class="flex shrink-0 flex-wrap items-center gap-1">
+                <div class="flex shrink-0 flex-wrap items-center gap-1">
                 @can('print', $invoice)
                     <div data-testid="invoice-print-menu" class="relative" x-data="{
                         open: false,
@@ -159,7 +160,9 @@
                         </form>
                     @endif
                 @endcan
+                </div>
             </div>
+            <div class="hidden lg:block" aria-hidden="true"></div>
         </div>
     </div>
 
@@ -183,8 +186,7 @@
 
     <div data-testid="invoice-workspace" @class([
         'invoice-screen-grid grid grid-cols-1 items-start gap-5',
-        'lg:grid-cols-[minmax(0,2fr)_minmax(280px,0.85fr)]' => $hasPaymentRegistration,
-        'lg:grid-cols-1' => ! $hasPaymentRegistration,
+        'lg:grid-cols-[minmax(0,2fr)_minmax(280px,0.85fr)]',
     ])>
 
         {{-- Основной документ инвойса (2/3 ширины) --}}
