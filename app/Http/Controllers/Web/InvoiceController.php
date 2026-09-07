@@ -662,6 +662,28 @@ class InvoiceController extends Controller
             $invoice->unsetRelation('payments');
         }
 
+        $billingResultBackUrl = null;
+        $billingResultContext = $request->session()->get('billing_run_result');
+        if ($request->boolean('billing_result')
+            && Gate::allows('create', Invoice::class)
+            && is_array($billingResultContext)
+            && (int) ($billingResultContext['user_id'] ?? 0) === (int) $request->user()->getKey()) {
+            $billingResultBackUrl = route('invoices.billing.result');
+        }
+
+        $billingPreviewBackUrl = null;
+        if ($request->boolean('billing_preview') && Gate::allows('create', Invoice::class)) {
+            $month = filter_var($request->query('month'), FILTER_VALIDATE_INT);
+            $year = filter_var($request->query('year'), FILTER_VALIDATE_INT);
+
+            if ($month !== false && $year !== false && $month >= 1 && $month <= 12 && $year >= 2000 && $year <= 2100) {
+                $billingPreviewBackUrl = route('invoices.billing.preview', [
+                    'month' => $month,
+                    'year' => $year,
+                ]);
+            }
+        }
+
         $viewData = compact(
             'invoice',
             'companyContext',
@@ -670,7 +692,9 @@ class InvoiceController extends Controller
             'paymentAvailability',
             'editability',
             'hasPayments',
-            'actionablePayments'
+            'actionablePayments',
+            'billingResultBackUrl',
+            'billingPreviewBackUrl',
         );
         $viewData += compact(
             'canApplyCredit',

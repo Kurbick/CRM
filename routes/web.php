@@ -10,6 +10,7 @@ use App\Http\Controllers\Web\ContractController;
 use App\Http\Controllers\Web\ContractDocumentController;
 use App\Http\Controllers\Web\ContractSubjectController;
 use App\Http\Controllers\Web\DashboardController;
+use App\Http\Controllers\Web\BillingController;
 use App\Http\Controllers\Web\HomeController;
 use App\Http\Controllers\Web\InvoiceController;
 use App\Http\Controllers\Web\InvoiceExportController;
@@ -291,6 +292,26 @@ Route::middleware(['auth', 'active', 'password.changed', 'organization.context']
     | Инвойсы
     |--------------------------------------------------------------------------
     */
+
+    Route::get(
+        'invoices/billing',
+        [BillingController::class, 'index']
+    )->name('invoices.billing');
+
+    Route::get(
+        'invoices/billing/preview',
+        [BillingController::class, 'preview']
+    )->name('invoices.billing.preview');
+
+    Route::get(
+        'invoices/billing/result',
+        [BillingController::class, 'result']
+    )->name('invoices.billing.result');
+
+    Route::post(
+        'invoices/billing/drafts',
+        [BillingController::class, 'storeDrafts']
+    )->name('invoices.billing.drafts');
 
     Route::post(
         'invoices/{invoice}/issue',

@@ -8,6 +8,12 @@ return [
     'sections' => [
         'financial' => 'Maliyyə',
         'companies' => 'Şirkətlər',
+        'attention' => 'Diqqət tələb edir',
+    ],
+    'billing' => [
+        'title' => 'Rəsmiləşdirilməlidir',
+        'count' => ':count hesab :period üçün',
+        'empty' => ':period üçün rəsmiləşdiriləcək hesab yoxdur',
     ],
     'metrics' => [
         'total_debt' => 'Ümumi borc',

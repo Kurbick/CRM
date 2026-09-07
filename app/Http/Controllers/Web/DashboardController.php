@@ -9,14 +9,20 @@ use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\Subscription;
 use App\Services\ActiveOrganizationContext;
+use App\Services\BillingPeriodPreview;
 use App\Support\Access\PermissionName;
 use App\Support\DashboardFinancials;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 
 final class DashboardController extends Controller
 {
-    public function index(DashboardFinancials $financials, ActiveOrganizationContext $organizationContext): View
+    public function index(
+        DashboardFinancials $financials,
+        ActiveOrganizationContext $organizationContext,
+        BillingPeriodPreview $billingPreview,
+    ): View
     {
         Gate::authorize(PermissionName::DashboardView->value);
 
@@ -27,6 +33,7 @@ final class DashboardController extends Controller
             'invoices' => Gate::allows('viewAny', Invoice::class),
             'payments' => Gate::allows('viewAny', Payment::class),
             'company_financials' => Gate::allows(PermissionName::CompaniesFinancialsView->value),
+            'billing' => Gate::allows('create', Invoice::class),
         ];
         $abilities['global_debt'] = $abilities['invoices']
             && $abilities['payments']
@@ -36,6 +43,11 @@ final class DashboardController extends Controller
         $abilities['company_payments'] = $abilities['companies'] && $abilities['payments'];
 
         $overview = [];
+        $billingSummary = null;
+
+        if ($abilities['billing']) {
+            $billingSummary = $billingPreview->dashboardSummary(CarbonImmutable::now()->startOfMonth());
+        }
 
         if ($abilities['invoices'] || $abilities['payments']) {
             $financialOverview = $financials->overview(now()->toDateString());
@@ -62,17 +74,18 @@ final class DashboardController extends Controller
         }
 
         if ($abilities['contracts']) {
-            $overview['active_subscriptions'] = Subscription::query()
-                ->where('status', 'active')
-                ->whereHas('contract', function ($query) use ($organizationContext): void {
-                    $organization = $organizationContext->resolve();
-                    if ($organization === null) {
-                        $query->whereRaw('1 = 0');
-                    } else {
-                        $organizationContext->scopeFor($query, $organization);
-                    }
-                })
-                ->count();
+            $overview['active_subscriptions'] = $billingSummary['active_subscription_count']
+                ?? Subscription::query()
+                    ->where('status', 'active')
+                    ->whereHas('contract', function ($query) use ($organizationContext): void {
+                        $organization = $organizationContext->resolve();
+                        if ($organization === null) {
+                            $query->whereRaw('1 = 0');
+                        } else {
+                            $organizationContext->scopeFor($query, $organization);
+                        }
+                    })
+                    ->count();
         }
 
         $companies = collect();
@@ -148,13 +161,15 @@ final class DashboardController extends Controller
         $hasDomainBlocks = $abilities['companies']
             || $abilities['contracts']
             || $abilities['invoices']
-            || $abilities['payments'];
+            || $abilities['payments']
+            || $abilities['billing'];
 
         return view('dashboard', compact(
             'abilities',
             'overview',
             'companies',
-            'hasDomainBlocks'
+            'hasDomainBlocks',
+            'billingSummary'
         ));
     }
 }

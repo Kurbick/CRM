@@ -69,6 +69,38 @@
                 </div>
             @endif
         </div>
+
+        @if ($abilities['billing'])
+            <section data-testid="dashboard-billing-attention" class="mb-8">
+                <h2 class="mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                    {{ __('dashboard.sections.attention') }}
+                </h2>
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    <a href="{{ route('invoices.billing') }}"
+                        data-testid="dashboard-billing-card"
+                        class="group flex w-full max-w-md items-center gap-4 rounded-lg border border-slate-200 bg-white px-4 py-4 shadow-sm transition hover:border-slate-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 sm:px-5">
+                        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-amber-50 text-amber-700" aria-hidden="true">
+                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M7 3.75h10v16.5l-5-2.75-5 2.75V3.75Zm3 4h4m-4 4h4m-4 4h2" />
+                            </svg>
+                        </span>
+                        <span class="min-w-0 flex-1">
+                            <span class="block text-sm font-semibold text-slate-900">{{ __('dashboard.billing.title') }}</span>
+                            <span class="mt-1 block text-2xl font-semibold tabular-nums text-slate-950">{{ $billingSummary['preview']['count'] }}</span>
+                            <span class="block text-sm text-slate-500">
+                                @if ($billingSummary['preview']['count'] > 0)
+                                    {{ trans_choice('dashboard.billing.count', $billingSummary['preview']['count'], ['count' => $billingSummary['preview']['count'], 'period' => now()->locale(app()->getLocale())->translatedFormat('F Y')]) }}
+                                    · {{ $billingSummary['preview']['total_display'] }}
+                                @else
+                                    {{ __('dashboard.billing.empty', ['period' => now()->locale(app()->getLocale())->translatedFormat('F Y')]) }}
+                                @endif
+                            </span>
+                        </span>
+                        <span class="text-xl text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-slate-600" aria-hidden="true">›</span>
+                    </a>
+                </div>
+            </section>
+        @endif
     @endif
 
     @if ($abilities['companies'])

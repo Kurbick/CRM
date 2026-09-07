@@ -8,6 +8,12 @@ return [
     'sections' => [
         'financial' => 'Финансы',
         'companies' => 'Компании',
+        'attention' => 'Требует внимания',
+    ],
+    'billing' => [
+        'title' => 'К выставлению',
+        'count' => ':count счет за :period|:count счета за :period|:count счетов за :period',
+        'empty' => 'За :period счетов к выставлению нет',
     ],
     'metrics' => [
         'total_debt' => 'Общий долг',
