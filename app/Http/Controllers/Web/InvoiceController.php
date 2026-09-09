@@ -33,6 +33,7 @@ use App\Support\CompanyActivityEventType;
 use App\Support\CompanyActivitySnapshot;
 use App\Support\CompanyActivityVisibilityScope;
 use App\Support\CompanyPageContext;
+use App\Support\DashboardFinancials;
 use App\Support\Invoices\InvoiceSellerSnapshot;
 use App\Support\Navigation\AuthorizedLandingPage;
 use Carbon\CarbonImmutable;
@@ -63,6 +64,7 @@ class InvoiceController extends Controller
         private readonly InvoiceNumberService $invoiceNumberService,
         private readonly InvoiceDocumentPresenter $documentPresenter,
         private readonly ActiveOrganizationContext $organizationContext,
+        private readonly DashboardFinancials $dashboardFinancials,
     ) {}
 
     /**
@@ -141,6 +143,10 @@ class InvoiceController extends Controller
 
         $activeOverdue = $request->boolean('overdue');
         $activeUnpaid = $request->boolean('unpaid');
+        $activeDebt = $request->boolean('debt');
+        if ($activeDebt) {
+            $this->dashboardFinancials->constrainOutstanding($query);
+        }
         if ($activeUnpaid) {
             $query->whereIn('status', ['issued', 'partially_paid']);
         }
@@ -178,6 +184,9 @@ class InvoiceController extends Controller
         }
         if ($activeUnpaid) {
             $paginationParameters['unpaid'] = 1;
+        }
+        if ($activeDebt) {
+            $paginationParameters['debt'] = 1;
         }
         $paginationParameters['sort'] = $sort;
         $paginationParameters['direction'] = $direction;
@@ -225,7 +234,8 @@ class InvoiceController extends Controller
             'activeCompanyId',
             'activeContractId',
             'activeOverdue',
-            'activeUnpaid'
+            'activeUnpaid',
+            'activeDebt',
         ));
     }
 

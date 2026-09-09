@@ -24,6 +24,12 @@ return [
         'active_companies' => 'Активные компании',
         'subscriptions' => 'Подписки',
     ],
+    'debt_breakdown' => [
+        'title' => 'Структура долга',
+        'show_all' => 'Показать все долги',
+        'no_debt' => 'Задолженности нет',
+        'open_company' => 'Открыть долг компании :name',
+    ],
     'table' => [
         'company' => 'Компания',
         'status' => 'Статус',

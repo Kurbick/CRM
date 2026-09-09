@@ -44,4 +44,18 @@ class DashboardSummaryViewTest extends TestCase
         $this->assertStringContainsString('<table class="crm-table">', $source);
         $this->assertStringContainsString('class="crm-table-shell"', $source);
     }
+
+    public function test_dashboard_debt_kpi_uses_a_compact_accessible_popover_card(): void
+    {
+        $source = file_get_contents(resource_path('views/dashboard.blade.php'));
+
+        $this->assertStringContainsString('data-testid="dashboard-financial-debt-trigger"', $source);
+        $this->assertStringContainsString('data-testid="dashboard-debt-popover"', $source);
+        $this->assertStringContainsString("__('dashboard.debt_breakdown.title')", $source);
+        $this->assertStringContainsString("route('companies.show', \$debtCompany['model'])", $source);
+        $this->assertStringContainsString("route('invoices.index', ['debt' => 1])", $source);
+        $this->assertStringContainsString('group-focus-within:visible', $source);
+        $this->assertStringContainsString('w-[26rem]', $source);
+        $this->assertStringContainsString('border-t border-slate-200', $source);
+    }
 }

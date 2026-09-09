@@ -114,6 +114,53 @@ class DashboardFinancialCorrectnessTest extends FinancialTestCase
         $this->assertApiOverview('100.00', '0.00', '100.00');
     }
 
+    public function test_web_dashboard_debt_breakdown_matches_the_canonical_invoice_debt_filter(): void
+    {
+        $skyCell = $this->company('SkyCell');
+        $teleqraf = $this->company('Teleqraf Informasiya Agentliyi MMC');
+        $skyCellInvoice = $this->invoice($skyCell, '600.00', 'issued', now()->addDay()->toDateString());
+        $this->payment($skyCellInvoice, '18.00', 'confirmed');
+        $this->invoice($teleqraf, '416.00', 'issued', now()->addDay()->toDateString());
+        $this->invoice($this->company('No debt'), '200.00', 'draft', now()->addDay()->toDateString());
+
+        $dashboard = $this->get(route('dashboard'))->assertOk();
+        $breakdown = $dashboard->viewData('debtBreakdown');
+
+        $this->assertSame('998.00', number_format((float) $dashboard->viewData('overview')['total_debt'], 2, '.', ''));
+        $this->assertSame(['SkyCell', 'Teleqraf Informasiya Agentliyi MMC'], $breakdown->pluck('name')->all());
+        $this->assertSame(['582.00', '416.00'], $breakdown->pluck('total_debt')->map(fn ($amount): string => number_format((float) $amount, 2, '.', ''))->all());
+        $this->assertSame('998.00', number_format((float) $breakdown->sum('total_debt'), 2, '.', ''));
+
+        $dashboard
+            ->assertSee('Структура долга')
+            ->assertSee('SkyCell')
+            ->assertSee('582.00')
+            ->assertSee('Teleqraf Informasiya Agentliyi MMC')
+            ->assertSee('416.00')
+            ->assertSee('Показать все долги')
+            ->assertSee('href="'.htmlspecialchars(route('companies.show', $skyCell), ENT_QUOTES, 'UTF-8').'"', false)
+            ->assertSee('href="'.htmlspecialchars(route('companies.show', $teleqraf), ENT_QUOTES, 'UTF-8').'"', false)
+            ->assertSee('href="'.htmlspecialchars(route('invoices.index', ['debt' => 1]), ENT_QUOTES, 'UTF-8').'"', false);
+
+        $invoiceIndex = $this->get(route('invoices.index', ['debt' => 1]))
+            ->assertOk()
+            ->viewData('invoices');
+        $this->assertSame(2, $invoiceIndex->total());
+        $this->assertSame('998.00', number_format((float) $invoiceIndex->getCollection()->sum(fn (Invoice $invoice): float => $invoice->remaining_amount), 2, '.', ''));
+    }
+
+    public function test_zero_dashboard_debt_does_not_render_an_interactive_breakdown(): void
+    {
+        $dashboard = $this->get(route('dashboard'))->assertOk();
+
+        $dashboard
+            ->assertSee('Общий долг')
+            ->assertSee('0.00 ₼')
+            ->assertDontSee('data-testid="dashboard-financial-debt-trigger"', false)
+            ->assertDontSee('data-testid="dashboard-debt-popover"', false)
+            ->assertDontSee('Структура долга');
+    }
+
     public function test_company_financial_queries_remain_bounded_as_fixtures_grow(): void
     {
         $first = $this->company('Bounded first');

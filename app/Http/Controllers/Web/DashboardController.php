@@ -18,6 +18,8 @@ use Illuminate\View\View;
 
 final class DashboardController extends Controller
 {
+    private const MAX_DEBT_BREAKDOWN_COMPANIES = 7;
+
     public function index(
         DashboardFinancials $financials,
         ActiveOrganizationContext $organizationContext,
@@ -89,6 +91,7 @@ final class DashboardController extends Controller
         }
 
         $companies = collect();
+        $debtBreakdown = collect();
 
         if ($abilities['companies']) {
             $companyQuery = Company::query()
@@ -156,6 +159,20 @@ final class DashboardController extends Controller
 
                 return $row;
             });
+
+            if ($abilities['company_debt']) {
+                $debtBreakdown = $companies
+                    ->filter(fn (array $company): bool => (float) ($company['total_debt'] ?? 0) > 0
+                        && Gate::allows('view', $company['model']))
+                    ->sortByDesc(fn (array $company): float => (float) $company['total_debt'])
+                    ->take(self::MAX_DEBT_BREAKDOWN_COMPANIES)
+                    ->values()
+                    ->map(fn (array $company): array => [
+                        'model' => $company['model'],
+                        'name' => $company['name'],
+                        'total_debt' => $company['total_debt'],
+                    ]);
+            }
         }
 
         $hasDomainBlocks = $abilities['companies']
@@ -168,6 +185,7 @@ final class DashboardController extends Controller
             'abilities',
             'overview',
             'companies',
+            'debtBreakdown',
             'hasDomainBlocks',
             'billingSummary'
         ));

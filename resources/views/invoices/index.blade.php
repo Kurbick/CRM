@@ -21,6 +21,9 @@
         if ($activeUnpaid) {
             $preservedFilters['unpaid'] = 1;
         }
+        if ($activeDebt) {
+            $preservedFilters['debt'] = 1;
+        }
 
         $sortUrl = function (string $column) use ($currentSort, $currentDirection, $preservedFilters): string {
             $direction = $currentSort === $column && $currentDirection === 'desc' ? 'asc' : 'desc';
@@ -106,6 +109,9 @@
 
             <input type="hidden" name="sort" value="{{ $currentSort }}">
             <input type="hidden" name="direction" value="{{ $currentDirection }}">
+            @if ($activeDebt)
+                <input type="hidden" name="debt" value="1">
+            @endif
 
             {{-- Поиск --}}
             <div class="flex-1 relative">
@@ -296,7 +302,7 @@
                     {{ __('invoices.index.find') }}
                 </button>
 
-                @if ($search !== '' || $activeStatuses !== [] || $activeCompanyId !== null || $activeContractId !== null || $activeOverdue || $activeUnpaid || $currentSort !== 'issue_date' || $currentDirection !== 'desc')
+                @if ($search !== '' || $activeStatuses !== [] || $activeCompanyId !== null || $activeContractId !== null || $activeOverdue || $activeUnpaid || $activeDebt || $currentSort !== 'issue_date' || $currentDirection !== 'desc')
                     <a href="{{ route('invoices.index') }}"
                         class="px-4 py-2 border border-gray-200 hover:bg-gray-50
                                text-gray-500 text-sm font-medium rounded-lg

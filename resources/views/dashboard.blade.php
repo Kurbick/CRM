@@ -16,17 +16,63 @@
     @endunless
 
     @if ($hasDomainBlocks)
-        <div data-testid="dashboard-financial-summary" class="mb-8 overflow-hidden border-y border-slate-200 bg-white">
+        <div data-testid="dashboard-financial-summary" class="mb-8 overflow-visible border-y border-slate-200 bg-white">
             <div class="border-b border-slate-200 px-4 py-3 sm:px-5">
                 <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">{{ __('dashboard.sections.financial') }}</h2>
             </div>
 
             <div class="grid grid-cols-1 divide-y divide-slate-200 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
             @if ($abilities['global_debt'])
-                <div data-testid="dashboard-financial-debt" class="px-4 py-4 sm:px-5">
-                    <p class="text-xs font-medium uppercase tracking-wide text-slate-500">{{ __('dashboard.metrics.total_debt') }}</p>
-                    <p class="mt-1 text-xl font-semibold {{ $overview['total_debt'] > 0 ? 'text-red-600' : 'text-slate-900' }}">{{ number_format($overview['total_debt'], 2) }} ₼</p>
-                </div>
+                @if ($abilities['company_debt'] && (float) $overview['total_debt'] > 0 && $debtBreakdown->isNotEmpty())
+                    <div data-testid="dashboard-financial-debt" class="relative px-4 py-4 sm:px-5">
+                        <div class="group relative inline-block">
+                            <button type="button"
+                                data-testid="dashboard-financial-debt-trigger"
+                                aria-describedby="dashboard-debt-popover"
+                                class="block text-left focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2">
+                                <span class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-slate-500">
+                                    {{ __('dashboard.metrics.total_debt') }}
+                                    <span aria-hidden="true" class="text-sm leading-none text-slate-400">⌄</span>
+                                </span>
+                                <span class="mt-1 block text-xl font-semibold {{ $overview['total_debt'] > 0 ? 'text-red-600' : 'text-slate-900' }}">{{ number_format($overview['total_debt'], 2) }} ₼</span>
+                            </button>
+
+                            <div id="dashboard-debt-popover"
+                                role="dialog"
+                                aria-labelledby="dashboard-debt-popover-title"
+                                data-testid="dashboard-debt-popover"
+                                class="invisible absolute left-0 top-full z-30 w-[26rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-md border border-slate-200 bg-white opacity-0 shadow-xl transition group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
+                                <div class="border-b border-slate-200 px-4 py-3">
+                                    <h3 id="dashboard-debt-popover-title" class="text-sm font-semibold text-slate-900">
+                                        {{ __('dashboard.debt_breakdown.title') }}
+                                    </h3>
+                                </div>
+
+                                <div class="py-1">
+                                    @foreach ($debtBreakdown as $debtCompany)
+                                        <a href="{{ route('companies.show', $debtCompany['model']) }}"
+                                            class="group/debt-row flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50 focus:bg-slate-50 focus:outline-none">
+                                            <span class="min-w-0 flex-1 truncate font-medium">{{ $debtCompany['name'] }}</span>
+                                            <span class="shrink-0 font-semibold tabular-nums text-slate-800">{{ number_format($debtCompany['total_debt'], 2) }} ₼</span>
+                                            <span aria-hidden="true" class="shrink-0 text-lg leading-none text-slate-400 transition group-hover/debt-row:translate-x-0.5 group-hover/debt-row:text-slate-600">›</span>
+                                        </a>
+                                    @endforeach
+                                </div>
+
+                                <a href="{{ route('invoices.index', ['debt' => 1]) }}"
+                                    class="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-sm font-medium text-blue-700 transition hover:bg-slate-50 hover:text-blue-800 focus:bg-slate-50 focus:outline-none">
+                                    <span>{{ __('dashboard.debt_breakdown.show_all') }}</span>
+                                    <span aria-hidden="true" class="text-lg leading-none">→</span>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                @else
+                    <div data-testid="dashboard-financial-debt" class="px-4 py-4 sm:px-5">
+                        <p class="text-xs font-medium uppercase tracking-wide text-slate-500">{{ __('dashboard.metrics.total_debt') }}</p>
+                        <p class="mt-1 text-xl font-semibold {{ $overview['total_debt'] > 0 ? 'text-red-600' : 'text-slate-900' }}">{{ number_format($overview['total_debt'], 2) }} ₼</p>
+                    </div>
+                @endif
             @endif
 
             @if ($abilities['invoices'])

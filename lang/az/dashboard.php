@@ -24,6 +24,12 @@ return [
         'active_companies' => 'Aktiv şirkətlər',
         'subscriptions' => 'Abunəliklər',
     ],
+    'debt_breakdown' => [
+        'title' => 'Borc strukturu',
+        'show_all' => 'Bütün borclara bax',
+        'no_debt' => 'Borc yoxdur',
+        'open_company' => ':name şirkətinin borcunu aç',
+    ],
     'table' => [
         'company' => 'Şirkət',
         'status' => 'Status',

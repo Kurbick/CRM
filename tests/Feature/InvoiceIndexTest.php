@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
+use App\Models\Payment;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\Feature\FinancialTestCase as TestCase;
@@ -251,6 +252,28 @@ class InvoiceIndexTest extends TestCase
             ->assertDontSee('INV-OVERDUE-ISSUED')
             ->assertDontSee('INV-OVERDUE-PAID')
             ->assertDontSee('INV-CURRENT-ISSUED');
+    }
+
+    public function test_debt_filter_uses_outstanding_amount_and_canonical_invoice_statuses(): void
+    {
+        $issued = $this->invoice(['status' => 'issued', 'invoice_number' => 'INV-DEBT-ISSUED']);
+        Payment::query()->create(['invoice_id' => $issued->id, 'company_id' => $issued->company_id, 'payment_date' => now()->toDateString(), 'amount' => '40.00', 'payment_method' => 'transfer', 'status' => 'confirmed']);
+        $partial = $this->invoice(['status' => 'partially_paid', 'invoice_number' => 'INV-DEBT-PARTIAL']);
+        Payment::query()->create(['invoice_id' => $partial->id, 'company_id' => $partial->company_id, 'payment_date' => now()->toDateString(), 'amount' => '25.00', 'payment_method' => 'transfer', 'status' => 'confirmed']);
+        $paidWithBalance = $this->invoice(['status' => 'paid', 'invoice_number' => 'INV-DEBT-PAID-STATUS']);
+        $fullyPaid = $this->invoice(['status' => 'paid', 'invoice_number' => 'INV-DEBT-FULLY-PAID']);
+        Payment::query()->create(['invoice_id' => $fullyPaid->id, 'company_id' => $fullyPaid->company_id, 'payment_date' => now()->toDateString(), 'amount' => '100.00', 'payment_method' => 'transfer', 'status' => 'confirmed']);
+        $this->invoice(['status' => 'draft', 'invoice_number' => 'INV-DEBT-DRAFT']);
+        $this->invoice(['status' => 'cancelled', 'invoice_number' => 'INV-DEBT-CANCELLED']);
+
+        $this->get(route('invoices.index', ['debt' => 1]))
+            ->assertOk()
+            ->assertSee('INV-DEBT-ISSUED')
+            ->assertSee('INV-DEBT-PARTIAL')
+            ->assertSee('INV-DEBT-PAID-STATUS')
+            ->assertDontSee('INV-DEBT-FULLY-PAID')
+            ->assertDontSee('INV-DEBT-DRAFT')
+            ->assertDontSee('INV-DEBT-CANCELLED');
     }
 
     public function test_sorts_issue_date_descending(): void
