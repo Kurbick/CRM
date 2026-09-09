@@ -106,6 +106,35 @@ class CompanyActivityPresenterTest extends TestCase
         $this->assertSame('CTR-2026-001 · 1 200,00 ₼', $presentation['context']);
     }
 
+    public function test_updated_invoice_uses_draft_wording_and_invoice_context(): void
+    {
+        $presentation = $this->present(CompanyActivityEventType::InvoiceUpdated, [
+            'invoice_number' => 'INV-254D47',
+            'contract_number' => 'CTR-2026-001',
+            'amount_minor' => 23600,
+            'currency' => '₼',
+        ]);
+
+        $this->assertSame('Черновик инвойса INV-254D47 изменён', $presentation['title']);
+        $this->assertSame('CTR-2026-001 · 236,00 ₼', $presentation['context']);
+        $this->assertSame('invoice', $presentation['icon']);
+        $this->assertSame('slate', $presentation['tone']);
+    }
+
+    public function test_updated_issued_invoice_uses_non_draft_wording_and_invoice_context(): void
+    {
+        $presentation = $this->present(CompanyActivityEventType::InvoiceUpdated, [
+            'invoice_number' => 'INV-254D47',
+            'status' => 'issued',
+            'contract_number' => 'CTR-2026-001',
+            'amount_minor' => 23600,
+            'currency' => '₼',
+        ]);
+
+        $this->assertSame('Инвойс INV-254D47 изменён', $presentation['title']);
+        $this->assertSame('CTR-2026-001 · 236,00 ₼', $presentation['context']);
+    }
+
     public function test_cancelled_invoice_uses_number_contract_context_and_red_icon(): void
     {
         $presentation = $this->present(CompanyActivityEventType::InvoiceCancelled, [
@@ -142,6 +171,7 @@ class CompanyActivityPresenterTest extends TestCase
     {
         foreach ([
             [CompanyActivityEventType::InvoiceCreated, 'Создан черновик инвойса'],
+            [CompanyActivityEventType::InvoiceUpdated, 'Черновик инвойса изменён'],
             [CompanyActivityEventType::InvoiceIssued, 'Инвойс выставлен'],
             [CompanyActivityEventType::InvoiceCancelled, 'Инвойс отменён'],
         ] as [$type, $title]) {

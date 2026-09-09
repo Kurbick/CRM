@@ -40,6 +40,7 @@ final class CompanyActivityPresenter
     {
         $amount = $this->amount($metadata);
         $invoiceNumber = $this->text($metadata, 'invoice_number');
+        $invoiceStatus = $this->text($metadata, 'status');
         $contractNumber = $this->text($metadata, 'contract_number');
         $subjectName = $this->text($metadata, 'subject_name');
         $contactName = $this->text($metadata, 'contact_name');
@@ -122,6 +123,18 @@ final class CompanyActivityPresenter
                 $this->joinContext($contractNumber, $amount),
                 'invoice',
                 'blue',
+            ],
+            CompanyActivityEventType::InvoiceUpdated => [
+                ($invoiceStatus === null || $invoiceStatus === 'draft')
+                    ? ($invoiceNumber === null
+                        ? __('activity.events.invoice_updated')
+                        : __('activity.events.invoice_updated_named', ['number' => $invoiceNumber]))
+                    : ($invoiceNumber === null
+                        ? __('activity.events.invoice_updated_issued')
+                        : __('activity.events.invoice_updated_issued_named', ['number' => $invoiceNumber])),
+                $this->joinContext($contractNumber, $amount),
+                'invoice',
+                'slate',
             ],
             CompanyActivityEventType::InvoiceIssued => [
                 $invoiceNumber === null

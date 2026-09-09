@@ -5,12 +5,18 @@ namespace App\Actions\Invoices;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
 use App\Models\Subscription;
+use App\Models\User;
+use App\Services\CompanyActivityRecorder;
 use App\Services\InvoiceDueDateCalculator;
 use App\Services\InvoiceEditabilityService;
 use App\Services\InvoicePaymentAvailabilityService;
 use App\Services\InvoiceNumberService;
 use App\Services\InvoiceVatCalculator;
 use App\Services\SubscriptionBillingSchedule;
+use App\Support\CompanyActivityCategory;
+use App\Support\CompanyActivityEventType;
+use App\Support\CompanyActivitySnapshot;
+use App\Support\CompanyActivityVisibilityScope;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -26,6 +32,7 @@ final class UpdateInvoice
         private readonly InvoiceNumberService $invoiceNumberService,
         private readonly SubscriptionBillingSchedule $billingSchedule,
         private readonly InvoiceVatCalculator $vatCalculator,
+        private readonly CompanyActivityRecorder $activityRecorder,
     ) {}
 
     /**
@@ -38,9 +45,10 @@ final class UpdateInvoice
         ?array $lines = null,
         bool $preserveSubjectAmounts = false,
         array $subscriptionPeriodCounts = [],
+        ?User $actor = null,
     ): Invoice {
         try {
-            return DB::transaction(function () use ($invoice, $attributes, $lines, $preserveSubjectAmounts, $subscriptionPeriodCounts): Invoice {
+            return DB::transaction(function () use ($invoice, $attributes, $lines, $preserveSubjectAmounts, $subscriptionPeriodCounts, $actor): Invoice {
             $lockedInvoice = Invoice::query()
                 ->whereKey($invoice->getKey())
                 ->lockForUpdate()
@@ -74,8 +82,13 @@ final class UpdateInvoice
                 $metadataAttributes = $this->metadataAttributes($attributes, $numbering);
                 $changes = $this->metadataChanges($lockedInvoice, $metadataAttributes, $lockedLines);
                 $changes = array_merge($changes, $numbering);
+                $changed = false;
                 if ($changes !== []) {
                     $lockedInvoice->update($changes);
+                    $changed = $lockedInvoice->wasChanged();
+                }
+                if ($changed) {
+                    $this->recordInvoiceUpdateActivity($lockedInvoice, $actor);
                 }
 
                 return $lockedInvoice->fresh();
@@ -132,6 +145,7 @@ final class UpdateInvoice
             }
 
             $processedExistingIds = [];
+            $changed = false;
             foreach ($lines as $index => $line) {
                 $lineId = ! empty($line['id']) ? (int) $line['id'] : null;
 
@@ -178,6 +192,7 @@ final class UpdateInvoice
                         'description' => $line['description'],
                         'amount' => $line['amount'],
                     ]);
+                    $changed = $existingLine->wasChanged() || $changed;
                     $processedExistingIds[] = $lineId;
 
                     continue;
@@ -193,6 +208,7 @@ final class UpdateInvoice
                         'period_end' => $line['period_end'],
                         'billing_occurrence_key' => $line['billing_occurrence_key'],
                     ]);
+                    $changed = true;
 
                     continue;
                 }
@@ -216,10 +232,12 @@ final class UpdateInvoice
                     'period_start' => null,
                     'period_end' => null,
                 ]);
+                $changed = true;
             }
 
             if (collect($lineIdsToDelete)->isNotEmpty()) {
-                $lockedInvoice->lines()->whereIn('id', collect($lineIdsToDelete)->all())->delete();
+                $deletedLines = $lockedInvoice->lines()->whereIn('id', collect($lineIdsToDelete)->all())->delete();
+                $changed = $deletedLines > 0 || $changed;
             }
 
             $remainingLinkedLines = $originalLines->only($processedExistingIds);
@@ -238,6 +256,10 @@ final class UpdateInvoice
             );
 
             $lockedInvoice->update($changes);
+            $changed = $lockedInvoice->wasChanged() || $changed;
+            if ($changed) {
+                $this->recordInvoiceUpdateActivity($lockedInvoice, $actor);
+            }
 
             return $lockedInvoice->fresh();
             });
@@ -251,6 +273,19 @@ final class UpdateInvoice
 
             throw $exception;
         }
+    }
+
+    private function recordInvoiceUpdateActivity(Invoice $invoice, ?User $actor): void
+    {
+        $this->activityRecorder->record(
+            CompanyActivitySnapshot::companyForInvoice($invoice),
+            CompanyActivityEventType::InvoiceUpdated,
+            CompanyActivityCategory::Invoices,
+            CompanyActivityVisibilityScope::Financials,
+            subject: $invoice,
+            metadata: CompanyActivitySnapshot::invoice($invoice),
+            actor: $actor,
+        );
     }
 
     /**

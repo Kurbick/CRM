@@ -1,11 +1,13 @@
 @extends('layouts.app')
 
-@section('title', __('invoices.billing_page.drafts_created'))
+@php($isIssue = $operation === 'issue')
+
+@section('title', $isIssue ? __('invoices.billing_page.invoices_issued') : __('invoices.billing_page.drafts_created'))
 
 @section('content')
     <div class="mx-auto max-w-6xl">
         <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <a href="{{ route('invoices.billing.preview', ['month' => $period->month, 'year' => $period->year]) }}"
+            <a href="{{ route('invoices.billing.preview', ['month' => $period->month, 'year' => $period->year, 'tab' => $tab]) }}"
                 class="inline-flex items-center gap-1 text-sm font-medium text-slate-500 transition hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2">
                 {{ __('invoices.billing_page.result_back_to_preview') }}
             </a>
@@ -16,16 +18,18 @@
         </div>
 
         <header class="border-b border-slate-200 pb-5">
-            <h1 class="text-2xl font-semibold text-slate-900">{{ __('invoices.billing_page.drafts_created') }}</h1>
+            <h1 class="text-2xl font-semibold text-slate-900">
+                {{ $isIssue ? __('invoices.billing_page.invoices_issued') : __('invoices.billing_page.drafts_created') }}
+            </h1>
             <p class="mt-1 text-sm text-slate-500">
-                {{ __('invoices.billing_page.result_subtitle', ['period' => $period->locale(app()->getLocale())->translatedFormat('F Y')]) }}
+                {{ __($isIssue ? 'invoices.billing_page.issued_result_subtitle' : 'invoices.billing_page.result_subtitle', ['period' => $period->locale(app()->getLocale())->translatedFormat('F Y')]) }}
             </p>
         </header>
 
         <section data-testid="billing-run-result" class="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div class="border-b border-slate-200 px-4 py-4 sm:px-5">
                 <div class="flex flex-wrap gap-x-5 gap-y-1 text-sm text-slate-600">
-                    <span>{{ __('invoices.billing_page.created') }}: <strong class="text-slate-900">{{ count($created) }}</strong></span>
+                    <span>{{ __($isIssue ? 'invoices.billing_page.issued_count' : 'invoices.billing_page.created') }}: <strong class="text-slate-900">{{ count($created) }}</strong></span>
                     <span>{{ __('invoices.billing_page.skipped') }}: <strong class="text-slate-900">{{ count($skipped) }}</strong></span>
                 </div>
             </div>
@@ -66,11 +70,11 @@
                 </div>
             @else
                 <p class="px-4 py-10 text-center text-sm text-slate-500 sm:px-5">
-                    {{ __('invoices.billing_page.result_empty') }}
+                    {{ $isIssue ? __('invoices.billing_page.issued_result_empty') : __('invoices.billing_page.result_empty') }}
                 </p>
             @endif
 
-            @if ($skipped !== [])
+            @if (! $isIssue && $skipped !== [])
                 <div class="border-t border-slate-200 px-4 py-4 sm:px-5">
                     <ul class="space-y-2 text-sm text-slate-600">
                         @foreach ($skipped as $item)

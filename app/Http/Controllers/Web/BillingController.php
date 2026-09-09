@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Web;
 
 use App\Actions\Invoices\CreateBillingRunDrafts;
+use App\Actions\Invoices\IssueBillingRunInvoices;
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
 use App\Services\ActiveOrganizationContext;
 use App\Services\BillingPeriodPreview;
 use App\Services\InvoicePaymentAvailabilityService;
+use App\Support\Access\PermissionName;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -80,6 +82,8 @@ final class BillingController extends Controller
             'period' => $period,
             'created' => $created,
             'skipped' => is_array($context['skipped'] ?? null) ? $context['skipped'] : [],
+            'operation' => ($context['operation'] ?? 'drafts') === 'issue' ? 'issue' : 'drafts',
+            'tab' => ($context['tab'] ?? 'drafts') === 'pending' ? 'pending' : 'drafts',
         ]);
     }
 
@@ -104,6 +108,7 @@ final class BillingController extends Controller
             'user_id' => (int) $request->user()->getKey(),
             'month' => $period->month,
             'year' => $period->year,
+            'tab' => 'drafts',
             'created_invoice_ids' => collect($result['created'])
                 ->pluck('id')
                 ->map(fn (mixed $id): int => (int) $id)
@@ -114,6 +119,36 @@ final class BillingController extends Controller
 
         return redirect()
             ->route('invoices.billing.result');
+    }
+
+    public function issue(
+        Request $request,
+        IssueBillingRunInvoices $issueInvoices,
+    ): \Illuminate\Http\RedirectResponse {
+        Gate::authorize(PermissionName::InvoicesIssue->value);
+
+        $period = $this->periodFromRequest($request);
+        $validated = $request->validate([
+            'selected_invoices' => ['required', 'array', 'min:1', 'max:100'],
+            'selected_invoices.*' => ['required', 'integer', 'distinct', 'min:1'],
+        ]);
+        $result = $issueInvoices->execute(
+            $period,
+            array_map('intval', array_values($validated['selected_invoices'])),
+            $request->user(),
+        );
+
+        $request->session()->put(self::RESULT_SESSION_KEY, [
+            'user_id' => (int) $request->user()->getKey(),
+            'month' => $period->month,
+            'year' => $period->year,
+            'operation' => 'issue',
+            'tab' => 'drafts',
+            'created_invoice_ids' => $result['issued'],
+            'skipped' => $result['skipped'],
+        ]);
+
+        return redirect()->route('invoices.billing.result');
     }
 
     private function render(Request $request, BillingPeriodPreview $preview): View
@@ -137,6 +172,7 @@ final class BillingController extends Controller
             'months' => $months,
             'years' => range($period->year - 5, $period->year + 5),
             'preview' => $result,
+            'canIssue' => Gate::allows(PermissionName::InvoicesIssue->value),
         ]);
     }
 
@@ -162,7 +198,7 @@ final class BillingController extends Controller
 
     private function periodFromRequest(Request $request): CarbonImmutable
     {
-        $now = CarbonImmutable::now();
+        $now = CarbonImmutable::now(config('app.display_timezone', 'Asia/Baku'));
         $month = $this->validatedInteger($request->query('month'), (int) $now->month, 1, 12);
         $year = $this->validatedInteger($request->query('year'), (int) $now->year, 2000, 2100);
 

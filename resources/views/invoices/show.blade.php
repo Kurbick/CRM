@@ -163,6 +163,9 @@
                             onsubmit="return confirm(@js(__('invoices.actions.delete_confirm')))" >
                             @csrf
                             @method('DELETE')
+                            @foreach ($billingDeleteQuery as $key => $value)
+                                <input type="hidden" name="{{ $key }}" value="{{ $value }}">
+                            @endforeach
                             <button type="submit"
                                 class="inline-flex items-center rounded px-1.5 py-1 text-xs font-semibold text-red-600 transition hover:bg-red-50 hover:text-red-700">
                                 {{ __('invoices.actions.delete') }}

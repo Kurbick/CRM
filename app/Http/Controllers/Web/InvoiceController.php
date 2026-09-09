@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Web;
 use App\Actions\Credits\ApplyCreditToInvoice;
 use App\Actions\Invoices\CreateInvoice;
 use App\Actions\Invoices\DeleteInvoice;
+use App\Actions\Invoices\IssueInvoice;
 use App\Actions\Invoices\UpdateInvoice;
 use App\Exceptions\Invoices\InvoiceDeletionException;
 use App\Http\Controllers\Controller;
@@ -44,8 +45,11 @@ use Illuminate\Validation\ValidationException;
 
 class InvoiceController extends Controller
 {
+    private const BILLING_RESULT_SESSION_KEY = 'billing_run_result';
+
     public function __construct(
         private readonly CreateInvoice $createInvoice,
+        private readonly IssueInvoice $issueInvoice,
         private readonly InvoiceDueDateCalculator $dueDateCalculator,
         private readonly InvoiceBillingPeriodPresenter $billingPeriodPresenter,
         private readonly InvoiceEditabilityService $editabilityService,
@@ -662,27 +666,19 @@ class InvoiceController extends Controller
             $invoice->unsetRelation('payments');
         }
 
-        $billingResultBackUrl = null;
-        $billingResultContext = $request->session()->get('billing_run_result');
-        if ($request->boolean('billing_result')
-            && Gate::allows('create', Invoice::class)
-            && is_array($billingResultContext)
-            && (int) ($billingResultContext['user_id'] ?? 0) === (int) $request->user()->getKey()) {
-            $billingResultBackUrl = route('invoices.billing.result');
-        }
-
-        $billingPreviewBackUrl = null;
-        if ($request->boolean('billing_preview') && Gate::allows('create', Invoice::class)) {
-            $month = filter_var($request->query('month'), FILTER_VALIDATE_INT);
-            $year = filter_var($request->query('year'), FILTER_VALIDATE_INT);
-
-            if ($month !== false && $year !== false && $month >= 1 && $month <= 12 && $year >= 2000 && $year <= 2100) {
-                $billingPreviewBackUrl = route('invoices.billing.preview', [
-                    'month' => $month,
-                    'year' => $year,
-                ]);
-            }
-        }
+        $billingResultContext = $this->billingResultContext($request, $invoice);
+        $billingResultBackUrl = $billingResultContext !== null
+            ? route('invoices.billing.result')
+            : null;
+        $billingPreviewContext = $this->billingPreviewContext($request);
+        $billingPreviewBackUrl = $billingPreviewContext !== null
+            ? route('invoices.billing.preview', $billingPreviewContext)
+            : null;
+        $billingDeleteQuery = $billingResultContext !== null
+            ? ['billing_result' => 1]
+            : ($billingPreviewContext !== null
+                ? ['billing_preview' => 1, ...$billingPreviewContext]
+                : []);
 
         $viewData = compact(
             'invoice',
@@ -695,6 +691,7 @@ class InvoiceController extends Controller
             'actionablePayments',
             'billingResultBackUrl',
             'billingPreviewBackUrl',
+            'billingDeleteQuery',
         );
         $viewData += compact(
             'canApplyCredit',
@@ -941,6 +938,7 @@ class InvoiceController extends Controller
                 $lines,
                 preserveSubjectAmounts: true,
                 subscriptionPeriodCounts: $subscriptionPeriodCounts,
+                actor: $request->user(),
             );
         } catch (ValidationException $exception) {
             $errors = $exception->errors();
@@ -964,161 +962,11 @@ class InvoiceController extends Controller
 
         $actor = auth()->user();
 
-        DB::transaction(function () use ($invoice, $applyCreditToInvoice, $actor) {
-            /*
-         * Блокируем инвойс, чтобы его нельзя было
-         * выставить одновременно двумя запросами.
-         */
-            $invoice = Invoice::query()
-                ->whereKey($invoice->id)
-                ->lockForUpdate()
-                ->firstOrFail();
-
-            if ($invoice->status !== 'draft') {
-                throw ValidationException::withMessages([
-                    'issue' => __('invoices.errors.issue_draft_only'),
-                ]);
-            }
-
-            if (
-                $invoice->payments()
-                    ->where('status', 'confirmed')
-                    ->exists()
-            ) {
-                throw ValidationException::withMessages([
-                    'issue' => __('invoices.errors.issue_confirmed_payments'),
-                ]);
-            }
-
-            $contract = $invoice->contract;
-
-            $lines = $invoice->lines()
-                ->lockForUpdate()
-                ->get();
-
-            if ($lines->isEmpty()) {
-                throw ValidationException::withMessages([
-                    'issue' => __('invoices.errors.issue_no_lines'),
-                ]);
-            }
-
-            /*
-         * Блокируем все используемые подписки.
-         */
-            $subscriptionIds = $lines
-                ->pluck('subscription_id')
-                ->filter()
-                ->unique()
-                ->sort()
-                ->values();
-
-            $subscriptions = Subscription::query()
-                ->whereIn('id', $subscriptionIds)
-                ->orderBy('id')
-                ->lockForUpdate()
-                ->get()
-                ->keyBy('id');
-
-            $nextBillingDates = [];
-            $occurrenceKeys = [];
-
-            foreach ($lines->whereNotNull('subscription_id')->groupBy('subscription_id') as $subscriptionId => $group) {
-                $subscription = $subscriptions->get($subscriptionId);
-                if (! $subscription || (int) $subscription->contract_id !== (int) $invoice->contract_id) {
-                    throw ValidationException::withMessages(['issue' => __('invoices.errors.subscription_contract_mismatch')]);
-                }
-                if ($subscription->status !== 'active' || ! $subscription->next_billing_date) {
-                    throw ValidationException::withMessages(['issue' => __('invoices.errors.subscription_unavailable', ['description' => $group->first()->description])]);
-                }
-
-                $ordered = $group->sortBy([['period_start', 'asc'], ['id', 'asc']])->values();
-                $expectedStart = CarbonImmutable::parse($subscription->next_billing_date)->startOfDay();
-                try {
-                    $expected = $this->billingSchedule->occurrenceChain($subscription, $expectedStart, $ordered->count());
-                } catch (\Throwable) {
-                    throw ValidationException::withMessages(['issue' => __('invoices.errors.subscription_billing_invalid', ['description' => $group->first()->description])]);
-                }
-
-                foreach ($ordered as $index => $line) {
-                    $occurrence = $expected[$index];
-                    if (! $line->period_start || ! $line->period_end
-                        || ! CarbonImmutable::parse($line->period_start)->startOfDay()->equalTo($occurrence['period_start'])
-                        || ! CarbonImmutable::parse($line->period_end)->startOfDay()->equalTo($occurrence['period_end'])) {
-                        throw ValidationException::withMessages(['issue' => __('invoices.errors.line_schedule_invalid', ['description' => $line->description])]);
-                    }
-                    if ($occurrence['period_start']->lt(CarbonImmutable::parse($subscription->start_date)->startOfDay())
-                        || $occurrence['period_start']->lt(CarbonImmutable::parse($contract->start_date)->startOfDay())
-                        || ($contract->end_date && $occurrence['period_end']->gt(CarbonImmutable::parse($contract->end_date)->startOfDay()))) {
-                        throw ValidationException::withMessages(['issue' => __('invoices.errors.line_outside_term', ['description' => $line->description])]);
-                    }
-                    if ($line->billing_occurrence_key !== null && $line->billing_occurrence_key !== $occurrence['billing_occurrence_key']) {
-                        throw ValidationException::withMessages(['issue' => __('invoices.errors.line_key_invalid', ['description' => $line->description])]);
-                    }
-                    if (InvoiceLine::query()->where('billing_occurrence_key', $occurrence['billing_occurrence_key'])->where('invoice_id', '!=', $invoice->id)->whereHas('invoice', fn ($query) => $query->where('status', '!=', 'cancelled'))->exists()) {
-                        throw ValidationException::withMessages(['issue' => __('invoices.errors.period_exists', ['description' => $line->description])]);
-                    }
-                    $occurrenceKeys[$line->id] = $occurrence['billing_occurrence_key'];
-                }
-
-                $nextBillingDates[$subscription->id] = $this->billingSchedule
-                    ->nextOccurrenceStart($expected[count($expected) - 1]['period_start'], CarbonImmutable::parse($subscription->start_date)->startOfDay(), $this->billingSchedule->intervalFor($subscription))
-                    ->toDateString();
-            }
-
-            $dueDate = $this->dueDateCalculator->calculate(
-                issueDate: $invoice->issue_date,
-                manualDueDate: $invoice->due_date,
-                contractId: $invoice->contract_id,
-                orderIds: $lines->pluck('order_id')->filter()->all(),
-                subscriptionIds: $lines->pluck('subscription_id')->filter()->all(),
-                contractEndDate: $contract?->end_date?->toDateString(),
-            );
-
-            /*
-         * Только после всех проверок
-         * меняем статус инвойса.
-         */
-            $invoice->update([
-                'status' => 'issued',
-                'due_date' => $dueDate,
-            ]);
-
-            foreach ($occurrenceKeys as $lineId => $key) {
-                $lines->firstWhere('id', $lineId)?->update([
-                    'billing_occurrence_key' => $key,
-                ]);
-            }
-
-            /*
-         * Переводим подписки на следующие периоды.
-         */
-            foreach ($nextBillingDates as $subscriptionId => $date) {
-                $subscription = $subscriptions->get($subscriptionId);
-                if ($subscription) {
-                    $subscription->next_billing_date = $date;
-                    $subscription->save();
-                }
-            }
-
-            /*
-         * Применяем кредитный баланс только после
-         * успешного выставления черновика.
-         */
-            $applyCreditToInvoice->execute($invoice, actor: $actor);
-
-            $this->activityRecorder->record(
-                $contract
-                    ? CompanyActivitySnapshot::companyFor($contract)
-                    : CompanyActivitySnapshot::companyForInvoice($invoice),
-                CompanyActivityEventType::InvoiceIssued,
-                CompanyActivityCategory::Invoices,
-                CompanyActivityVisibilityScope::Financials,
-                subject: $invoice,
-                metadata: CompanyActivitySnapshot::invoice($invoice, $contract),
-                actor: $actor,
-            );
-        });
-
+        $this->issueInvoice->execute(
+            $invoice,
+            actor: $actor,
+            applyCreditToInvoice: $applyCreditToInvoice,
+        );
         $invoice->refresh();
 
         $message = $invoice->status === 'paid'
@@ -1304,6 +1152,11 @@ class InvoiceController extends Controller
     {
         Gate::authorize('delete', $invoice);
 
+        $billingResultContext = $this->billingResultContext($request, $invoice);
+        $billingPreviewContext = $billingResultContext === null
+            ? $this->billingPreviewContext($request)
+            : null;
+
         // Resolve the authorized Company destination before the invoice is removed.
         $companyContext = $this->invoiceCompanyContext($request, $invoice);
         $companyRedirect = $this->authorizedCompanyRedirect($companyContext, $invoice);
@@ -1314,9 +1167,13 @@ class InvoiceController extends Controller
             return back()->withErrors(['delete' => $exception->getMessage()]);
         }
 
-        $redirect = $companyRedirect ?? (Gate::allows('viewAny', Invoice::class)
-            ? redirect()->route('invoices.index')
-            : redirect()->to($this->landingUrl()));
+        $redirect = $billingResultContext !== null
+            ? redirect()->route('invoices.billing.result')
+            : ($billingPreviewContext !== null
+                ? redirect()->route('invoices.billing.preview', $billingPreviewContext)
+                : ($companyRedirect ?? (Gate::allows('viewAny', Invoice::class)
+                    ? redirect()->route('invoices.index')
+                    : redirect()->to($this->landingUrl()))));
 
         return $redirect
             ->with(
@@ -1349,6 +1206,58 @@ class InvoiceController extends Controller
     private function landingUrl(): string
     {
         return app(AuthorizedLandingPage::class)->url(auth()->user());
+    }
+
+    /** @return array<string, mixed>|null */
+    private function billingResultContext(Request $request, ?Invoice $invoice = null): ?array
+    {
+        if (! $request->boolean('billing_result') || ! Gate::allows('create', Invoice::class)) {
+            return null;
+        }
+
+        $context = $request->session()->get(self::BILLING_RESULT_SESSION_KEY);
+        if (! is_array($context)
+            || (int) ($context['user_id'] ?? 0) !== (int) $request->user()->getKey()) {
+            return null;
+        }
+
+        if ($invoice !== null) {
+            $invoiceIds = collect($context['created_invoice_ids'] ?? [])
+                ->filter(fn (mixed $id): bool => filter_var($id, FILTER_VALIDATE_INT) !== false)
+                ->map(fn (mixed $id): int => (int) $id);
+
+            if (! $invoiceIds->contains((int) $invoice->getKey())) {
+                return null;
+            }
+        }
+
+        return $context;
+    }
+
+    /** @return array{month: int, year: int, tab?: string}|null */
+    private function billingPreviewContext(Request $request): ?array
+    {
+        if (! $request->boolean('billing_preview') || ! Gate::allows('create', Invoice::class)) {
+            return null;
+        }
+
+        $month = filter_var($request->input('month'), FILTER_VALIDATE_INT);
+        $year = filter_var($request->input('year'), FILTER_VALIDATE_INT);
+        $tab = $request->input('tab');
+
+        if ($month === false || $year === false
+            || $month < 1 || $month > 12
+            || $year < 2000 || $year > 2100) {
+            return null;
+        }
+
+        return [
+            'month' => (int) $month,
+            'year' => (int) $year,
+            ...((is_string($tab) && in_array($tab, ['pending', 'drafts'], true))
+                ? ['tab' => $tab]
+                : []),
+        ];
     }
 
     /**

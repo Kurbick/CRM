@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Company;
+use App\Models\CompanyActivityEvent;
 use App\Models\Contract;
 use App\Models\CreditBalance;
 use App\Models\CreditBalanceEntry;
@@ -15,6 +16,7 @@ use App\Services\BillingPeriodPreview;
 use App\Services\SubscriptionBillingSchedule;
 use App\Support\Access\PermissionName;
 use Carbon\Carbon;
+use App\Support\CompanyActivityEventType;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Authorization\AuthorizationTestCase;
 use Tests\Support\DomainQueryRecorder;
@@ -91,13 +93,204 @@ class BillingPeriodPreviewTest extends AuthorizationTestCase
         $response = $this->get(route('invoices.billing.preview', ['month' => 10, 'year' => 2026]))
             ->assertOk();
 
-        $this->assertSame(1, $response->viewData('preview')['count']);
+        $this->assertSame(0, $response->viewData('preview')['count']);
+        $this->assertSame(1, $response->viewData('preview')['planned_count']);
         $this->assertSame('01/10/2026 — 31/10/2026', $response->viewData('preview')['rows'][0]['period']);
 
         $subscription->contract->update(['end_date' => '2026-10-30']);
         $this->get(route('invoices.billing.preview', ['month' => 10, 'year' => 2026]))
             ->assertOk()
             ->assertSee('За октябрь 2026 счетов к выставлению нет.');
+    }
+
+    public function test_month_query_changes_the_billing_preview_period(): void
+    {
+        $subscription = $this->subscription([
+            'start_date' => '2026-09-01',
+            'next_billing_date' => '2026-09-01',
+        ]);
+        $this->actingAsPermissions([PermissionName::InvoicesCreate->value]);
+
+        $expected = [
+            2 => ['title' => 'Предварительный просмотр за февраль 2026', 'empty' => 'За февраль 2026 счетов к выставлению нет.'],
+            9 => ['title' => 'Предварительный просмотр за сентябрь 2026', 'period' => '01/09/2026 — 30/09/2026'],
+            10 => ['title' => 'Предварительный просмотр за октябрь 2026', 'period' => '01/10/2026 — 31/10/2026'],
+        ];
+
+        foreach ($expected as $month => $assertions) {
+            $response = $this->get(route('invoices.billing.preview', [
+                'month' => $month,
+                'year' => 2026,
+            ]))->assertOk();
+
+            $response
+                ->assertSee($assertions['title'])
+                ->assertSee('id="billing-period-form" method="GET" action="'.route('invoices.billing.preview').'"', false)
+                ->assertSee('onchange="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()"', false)
+                ->assertDontSee('Найти счета за период')
+                ->assertSee('option value="'.$month.'" selected', false)
+                ->assertSee('name="tab" value="pending"', false)
+                ->assertSee('href="'.htmlspecialchars(route('invoices.billing.preview', ['month' => $month, 'year' => 2026, 'tab' => 'pending']), ENT_QUOTES, 'UTF-8').'"', false)
+                ->assertSee('href="'.htmlspecialchars(route('invoices.billing.preview', ['month' => $month, 'year' => 2026, 'tab' => 'drafts']), ENT_QUOTES, 'UTF-8').'"', false)
+                ->assertDontSee('selectTab');
+            $this->assertSame(1, substr_count($response->getContent(), 'name="month"'));
+            $this->assertSame(1, substr_count($response->getContent(), 'name="year"'));
+            $this->assertSame($month, $response->viewData('period')->month);
+            $this->assertSame(2026, $response->viewData('period')->year);
+
+            if (isset($assertions['empty'])) {
+                $response->assertSee($assertions['empty']);
+                $this->assertSame(0, $response->viewData('preview')['count']);
+            } else {
+                $response->assertSee($assertions['period']);
+                $this->assertSame($assertions['period'], $response->viewData('preview')['rows'][0]['period']);
+                $this->assertSame($subscription->id, $response->viewData('preview')['rows'][0]['subscription_id']);
+            }
+        }
+    }
+
+    public function test_current_period_shows_all_occurrences_but_only_due_occurrences_are_eligible(): void
+    {
+        Carbon::setTestNow('2026-09-08 10:00:00');
+        $seventh = $this->subscription([
+            'start_date' => '2026-09-07',
+            'next_billing_date' => '2026-09-07',
+        ]);
+        $eighth = $this->subscription([
+            'start_date' => '2026-09-08',
+            'next_billing_date' => '2026-09-08',
+        ]);
+        $thirteenth = $this->subscription([
+            'start_date' => '2026-09-13',
+            'next_billing_date' => '2026-09-13',
+        ]);
+        $this->actingAsPermissions([PermissionName::InvoicesCreate->value]);
+
+        $response = $this->get(route('invoices.billing.preview', ['month' => 9, 'year' => 2026]))->assertOk();
+        $rows = collect($response->viewData('preview')['rows'])->keyBy('subscription_id');
+        $this->assertCount(3, $rows);
+        $this->assertSame(2, $response->viewData('preview')['count']);
+        $this->assertSame(3, $response->viewData('preview')['planned_count']);
+        $this->assertTrue($rows[$seventh->id]['eligible_for_draft_creation']);
+        $this->assertTrue($rows[$eighth->id]['eligible_for_draft_creation']);
+        $this->assertFalse($rows[$thirteenth->id]['eligible_for_draft_creation']);
+        $this->assertSame('scheduled', $rows[$thirteenth->id]['queue_status']);
+        $this->assertSame('2026-09-13', $rows[$thirteenth->id]['scheduled_billing_date']);
+        $response
+            ->assertSee('Всего:')
+            ->assertSee('К выставлению:')
+            ->assertSee('К выставлению с')
+            ->assertSee('13.09.2026')
+            ->assertSee('disabled', false);
+
+        $createResponse = $this->post(route('invoices.billing.drafts', ['month' => 9, 'year' => 2026]), [
+            'selected_occurrences' => [
+                $rows[$seventh->id]['identity'],
+                $rows[$eighth->id]['identity'],
+            ],
+        ])->assertRedirect(route('invoices.billing.result'));
+        $this->assertSame(2, Invoice::query()->count());
+        $this->assertSame(
+            ['2026-09-07', '2026-09-08'],
+            Invoice::query()->with('lines')->get()
+                ->flatMap(fn (Invoice $invoice) => $invoice->lines->pluck('period_start'))
+                ->map(fn ($date): string => $date->toDateString())
+                ->sort()
+                ->values()
+                ->all(),
+        );
+
+        $this->post(route('invoices.billing.drafts', ['month' => 9, 'year' => 2026]), [
+            'selected_occurrences' => [$rows[$thirteenth->id]['identity']],
+        ])->assertRedirect(route('invoices.billing.result'));
+        $this->assertSame(2, Invoice::query()->count());
+
+        Carbon::setTestNow('2026-09-13 10:00:00');
+        $boundary = $this->get(route('invoices.billing.preview', ['month' => 9, 'year' => 2026]))->assertOk();
+        $boundaryRow = collect($boundary->viewData('preview')['rows'])->firstWhere('subscription_id', $thirteenth->id);
+        $this->assertTrue($boundaryRow['eligible_for_draft_creation']);
+        $this->assertSame('pending', $boundaryRow['queue_status']);
+
+        $this->post(route('invoices.billing.drafts', ['month' => 9, 'year' => 2026]), [
+            'selected_occurrences' => [$boundaryRow['identity']],
+        ])->assertRedirect(route('invoices.billing.result'));
+        $this->assertSame(3, Invoice::query()->count());
+        $this->assertSame('2026-09-13', Invoice::query()->latest('id')->firstOrFail()->lines()->firstOrFail()->period_start->toDateString());
+    }
+
+    public function test_past_period_missing_occurrence_is_eligible_for_billing_run(): void
+    {
+        Carbon::setTestNow('2026-09-08 10:00:00');
+        $subscription = $this->subscription([
+            'start_date' => '2026-08-07',
+            'next_billing_date' => '2026-08-07',
+        ]);
+        $this->actingAsPermissions([PermissionName::InvoicesCreate->value]);
+
+        $response = $this->get(route('invoices.billing.preview', ['month' => 8, 'year' => 2026]))->assertOk();
+        $row = $response->viewData('preview')['rows'][0];
+        $this->assertTrue($row['eligible_for_draft_creation']);
+        $this->assertSame('pending', $row['queue_status']);
+
+        $this->post(route('invoices.billing.drafts', ['month' => 8, 'year' => 2026]), [
+            'selected_occurrences' => [$row['identity']],
+        ])->assertRedirect(route('invoices.billing.result'));
+        $this->assertSame('2026-08-07', Invoice::query()->with('lines')->sole()->lines->sole()->period_start->toDateString());
+    }
+
+    public function test_future_period_is_visible_but_cannot_create_a_draft(): void
+    {
+        Carbon::setTestNow('2026-09-08 10:00:00');
+        $subscription = $this->subscription([
+            'start_date' => '2026-12-07',
+            'next_billing_date' => '2026-12-07',
+        ]);
+        $this->actingAsPermissions([PermissionName::InvoicesCreate->value]);
+
+        $response = $this->get(route('invoices.billing.preview', ['month' => 12, 'year' => 2026]))->assertOk();
+        $row = $response->viewData('preview')['rows'][0];
+        $this->assertSame('scheduled', $row['queue_status']);
+        $this->assertFalse($row['eligible_for_draft_creation']);
+        $response
+            ->assertSee('К выставлению с')
+            ->assertSee('07.12.2026');
+
+        $this->post(route('invoices.billing.drafts', ['month' => 12, 'year' => 2026]), [
+            'selected_occurrences' => [$row['identity']],
+        ])->assertRedirect(route('invoices.billing.result'));
+        $this->assertSame(0, Invoice::query()->count());
+    }
+
+    public function test_due_occurrence_reports_the_number_of_earlier_unprocessed_occurrences(): void
+    {
+        Carbon::setTestNow('2026-09-08 10:00:00');
+        $oneMissed = $this->subscription([
+            'start_date' => '2026-08-01',
+            'next_billing_date' => '2026-08-01',
+        ]);
+        $threeMissed = $this->subscription([
+            'start_date' => '2026-06-01',
+            'next_billing_date' => '2026-06-01',
+        ]);
+        $this->actingAsPermissions([PermissionName::InvoicesCreate->value]);
+
+        $response = $this->get(route('invoices.billing.preview', ['month' => 9, 'year' => 2026]))->assertOk();
+        $rows = collect($response->viewData('preview')['rows'])->keyBy('subscription_id');
+
+        $this->assertSame('missed', $rows[$oneMissed->id]['queue_status']);
+        $this->assertSame(1, $rows[$oneMissed->id]['missed_count']);
+        $this->assertFalse($rows[$oneMissed->id]['eligible_for_draft_creation']);
+        $this->assertSame('missed', $rows[$threeMissed->id]['queue_status']);
+        $this->assertSame(3, $rows[$threeMissed->id]['missed_count']);
+        $this->assertFalse($rows[$threeMissed->id]['eligible_for_draft_creation']);
+        $response
+            ->assertSee('Пропущенный период')
+            ->assertSee('Пропущено периодов:');
+
+        $this->post(route('invoices.billing.drafts', ['month' => 9, 'year' => 2026]), [
+            'selected_occurrences' => [$rows[$oneMissed->id]['identity'], $rows[$threeMissed->id]['identity']],
+        ])->assertRedirect(route('invoices.billing.result'));
+        $this->assertSame(0, Invoice::query()->count());
     }
 
     public function test_existing_occurrence_is_excluded_by_source_identity_and_cancelled_invoice_is_not_a_reservation(): void
@@ -182,7 +375,8 @@ class BillingPeriodPreviewTest extends AuthorizationTestCase
             ->assertOk()
             ->viewData('preview');
 
-        $this->assertSame(3, $preview['count']);
+        $this->assertSame(1, $preview['count']);
+        $this->assertSame(3, $preview['planned_count']);
         $this->assertCount(3, collect($preview['rows'])->pluck('period')->unique());
     }
 
@@ -435,6 +629,7 @@ class BillingPeriodPreviewTest extends AuthorizationTestCase
                 'billing_preview' => 1,
                 'month' => 9,
                 'year' => 2026,
+                'tab' => 'drafts',
             ]), ENT_QUOTES, 'UTF-8').'"', false);
         $this->assertSame(2, $preview->viewData('preview')['count']);
         $this->assertCount(
@@ -456,6 +651,74 @@ class BillingPeriodPreviewTest extends AuthorizationTestCase
                 ENT_QUOTES,
                 'UTF-8'
             ), false);
+    }
+
+    public function test_deleting_a_billing_result_draft_returns_to_the_same_run_and_rebuilds_state(): void
+    {
+        $subscription = $this->subscription([
+            'start_date' => '2026-08-01',
+            'next_billing_date' => '2026-08-01',
+        ]);
+        $user = $this->actingAsPermissions([
+            PermissionName::InvoicesCreate->value,
+            PermissionName::InvoicesView->value,
+            PermissionName::InvoicesDelete->value,
+        ]);
+
+        $preview = $this->get(route('invoices.billing.preview', [
+            'month' => 8,
+            'year' => 2026,
+            'tab' => 'pending',
+        ]))->assertOk();
+        $row = $preview->viewData('preview')['rows'][0];
+
+        $this->post(route('invoices.billing.drafts', ['month' => 8, 'year' => 2026]), [
+            'selected_occurrences' => [$row['identity']],
+        ])->assertRedirect(route('invoices.billing.result'));
+
+        $invoice = Invoice::query()->sole();
+        $this->get(route('invoices.show', [
+            'invoice' => $invoice,
+            'billing_result' => 1,
+        ]))
+            ->assertOk()
+            ->assertSee('name="billing_result" value="1"', false);
+
+        $this->assertSame(8, session('billing_run_result.month'));
+        $this->assertSame(2026, session('billing_run_result.year'));
+        $this->assertSame('drafts', session('billing_run_result.tab'));
+
+        $this->delete(route('invoices.destroy', [
+            'invoice' => $invoice,
+            'billing_result' => 1,
+        ]))
+            ->assertRedirect(route('invoices.billing.result'))
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseMissing('invoices', ['id' => $invoice->id]);
+        $this->get(route('invoices.billing.result'))
+            ->assertOk()
+            ->assertDontSee($invoice->invoice_number)
+            ->assertSee(htmlspecialchars(
+                route('invoices.billing.preview', [
+                    'month' => 8,
+                    'year' => 2026,
+                    'tab' => 'drafts',
+                ]),
+                ENT_QUOTES,
+                'UTF-8'
+            ), false);
+
+        $canonical = $this->get(route('invoices.billing.preview', [
+            'month' => 8,
+            'year' => 2026,
+            'tab' => 'drafts',
+        ]))->assertOk();
+        $restored = $canonical->viewData('preview')['rows'][0];
+        $this->assertSame('pending', $restored['queue_status']);
+        $this->assertTrue($restored['eligible_for_draft_creation']);
+        $this->assertNull($restored['invoice_id']);
+        $canonical->assertSee('К выставлению');
     }
 
     public function test_billing_result_is_bound_to_the_authenticated_user(): void
@@ -530,6 +793,7 @@ class BillingPeriodPreviewTest extends AuthorizationTestCase
                 'billing_preview' => 1,
                 'month' => 9,
                 'year' => 2026,
+                'tab' => 'drafts',
             ]), ENT_QUOTES, 'UTF-8').'"', false);
         $row = $preview->viewData('preview')['rows'][0];
         $this->assertSame('draft', $row['queue_status']);
@@ -555,6 +819,117 @@ class BillingPeriodPreviewTest extends AuthorizationTestCase
         $this->get(route('invoices.billing.preview', ['month' => 9, 'year' => 2026]))
             ->assertOk()
             ->assertSee('За сентябрь 2026 счетов к выставлению нет.');
+    }
+
+    public function test_selected_drafts_can_be_issued_from_the_billing_run_and_stale_ids_are_skipped(): void
+    {
+        $first = $this->subscription(['title' => 'Первый счёт']);
+        $second = $this->subscription(['title' => 'Второй счёт']);
+        $this->actingAsPermissions([
+            PermissionName::DashboardView->value,
+            PermissionName::InvoicesCreate->value,
+            PermissionName::InvoicesView->value,
+            PermissionName::InvoicesIssue->value,
+        ]);
+
+        $this->post(route('invoices.billing.drafts', ['month' => 9, 'year' => 2026]), [
+            'selected_occurrences' => [
+                $this->previewIdentity($first),
+                $this->previewIdentity($second),
+            ],
+        ])->assertRedirect();
+
+        $invoices = Invoice::query()->orderBy('id')->get();
+        $response = $this->post(route('invoices.billing.issue', ['month' => 9, 'year' => 2026]), [
+            'selected_invoices' => [$invoices[0]->id],
+            'status' => 'paid',
+            'total_amount' => '0.01',
+            'company_id' => 999999,
+            'issue_date' => '1900-01-01',
+        ]);
+        $response->assertRedirect(route('invoices.billing.result'));
+        $this->followRedirects($response)
+            ->assertOk()
+            ->assertSee('Счета выставлены')
+            ->assertSee('Создано/выставлено:')
+            ->assertSee('Пропущено:')
+            ->assertSee($invoices[0]->invoice_number)
+            ->assertSee('Тестовая компания')
+            ->assertSee('Выставлен')
+            ->assertSee('Открыть');
+
+        $this->assertSame('issued', $invoices[0]->fresh()->status);
+        $this->assertSame('draft', $invoices[1]->fresh()->status);
+        $dashboard = $this->get(route('dashboard'))->assertOk();
+        $this->assertSame(1, $dashboard->viewData('billingSummary')['preview']['count']);
+
+        $this->post(route('invoices.billing.issue', ['month' => 9, 'year' => 2026]), [
+            'selected_invoices' => [$invoices[0]->id, $invoices[1]->id],
+        ])->assertRedirect(route('invoices.billing.result'));
+
+        $this->assertSame('issued', $invoices[1]->fresh()->status);
+        $this->get(route('dashboard'))->assertOk();
+        $this->assertSame(0, $this->get(route('dashboard'))->viewData('billingSummary')['preview']['count']);
+        $this->get(route('invoices.billing.preview', ['month' => 9, 'year' => 2026]))
+            ->assertOk()
+            ->assertSee('За сентябрь 2026 счетов к выставлению нет.');
+    }
+
+    public function test_billing_run_draft_edit_records_the_normal_invoice_update_activity(): void
+    {
+        $subscription = $this->subscription([
+            'start_date' => '2026-08-01',
+            'next_billing_date' => '2026-08-01',
+        ]);
+        $actor = $this->actingAsPermissions([
+            PermissionName::InvoicesCreate->value,
+            PermissionName::InvoicesUpdate->value,
+        ]);
+
+        $preview = $this->get(route('invoices.billing.preview', [
+            'month' => 8,
+            'year' => 2026,
+        ]))->assertOk();
+        $row = $preview->viewData('preview')['rows'][0];
+
+        $this->post(route('invoices.billing.drafts', ['month' => 8, 'year' => 2026]), [
+            'selected_occurrences' => [$row['identity']],
+        ])->assertRedirect(route('invoices.billing.result'));
+
+        $invoice = Invoice::query()->sole();
+        $line = $invoice->lines()->sole();
+
+        $this->put(route('invoices.update', $invoice), [
+            'invoice_number' => $invoice->invoice_number,
+            'issue_date' => Carbon::parse($invoice->issue_date)->toDateString(),
+            'due_date' => $invoice->due_date === null ? null : Carbon::parse($invoice->due_date)->toDateString(),
+            'comment' => 'Edited after Billing Run creation',
+            'lines' => [[
+                'id' => $line->id,
+                'description' => $line->description,
+                'amount' => (string) $line->amount,
+                'subscription_id' => $line->subscription_id,
+                'order_id' => $line->order_id,
+                'period_start' => $line->period_start?->toDateString(),
+                'period_end' => $line->period_end?->toDateString(),
+            ]],
+        ])->assertRedirect();
+
+        $this->assertSame(2, CompanyActivityEvent::query()
+            ->where('company_id', $invoice->company_id)
+            ->count());
+        $this->assertDatabaseHas('company_activity_events', [
+            'company_id' => $invoice->company_id,
+            'actor_user_id' => $actor->id,
+            'event_type' => CompanyActivityEventType::InvoiceUpdated->value,
+            'subject_type' => 'invoice',
+            'subject_id' => $invoice->id,
+            'metadata->status' => 'draft',
+        ]);
+        $this->assertDatabaseMissing('company_activity_events', [
+            'company_id' => $invoice->company_id,
+            'event_type' => CompanyActivityEventType::InvoiceIssued->value,
+        ]);
     }
 
     public function test_draft_result_is_localized_in_az(): void
@@ -585,7 +960,34 @@ class BillingPeriodPreviewTest extends AuthorizationTestCase
                 'billing_preview' => 1,
                 'month' => 9,
                 'year' => 2026,
+                'tab' => 'drafts',
             ]), ENT_QUOTES, 'UTF-8').'"', false);
+    }
+
+    public function test_billing_row_statuses_are_localized_in_az(): void
+    {
+        Carbon::setTestNow('2026-09-08 10:00:00');
+        $this->subscription([
+            'start_date' => '2026-09-07',
+            'next_billing_date' => '2026-09-07',
+        ]);
+        $this->subscription([
+            'start_date' => '2026-09-13',
+            'next_billing_date' => '2026-09-13',
+        ]);
+        $this->subscription([
+            'start_date' => '2026-08-01',
+            'next_billing_date' => '2026-08-01',
+        ]);
+        $user = $this->actingAsPermissions([PermissionName::InvoicesCreate->value]);
+
+        $this->withSession(['locale' => 'az'])
+            ->actingAs($user)
+            ->get(route('invoices.billing.preview', ['month' => 9, 'year' => 2026]))
+            ->assertOk()
+            ->assertSee('Rəsmiləşdirilə bilər')
+            ->assertSee('13.09.2026 tarixindən rəsmiləşdirilə bilər')
+            ->assertSee('Buraxılmış dövr');
     }
 
     private function organization(): Organization

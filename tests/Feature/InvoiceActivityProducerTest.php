@@ -48,6 +48,10 @@ class InvoiceActivityProducerTest extends AuthorizationTestCase
             'metadata->contract_number' => $contract->contract_number,
             'metadata->amount_minor' => 120000,
         ]);
+        $this->assertDatabaseMissing('company_activity_events', [
+            'company_id' => $company->id,
+            'event_type' => CompanyActivityEventType::InvoiceUpdated->value,
+        ]);
     }
 
     public function test_api_invoice_create_uses_the_same_shared_producer_once(): void
@@ -114,15 +118,132 @@ class InvoiceActivityProducerTest extends AuthorizationTestCase
         ]);
     }
 
-    public function test_draft_edit_creates_zero_invoice_activity_events(): void
+    public function test_changed_draft_edit_creates_one_invoice_activity_event_with_actor_and_snapshot(): void
     {
         $invoice = $this->invoice('draft', 'INV-ACT-EDIT');
-        $this->actingAsPermissions([PermissionName::InvoicesUpdate->value]);
+        $actor = $this->actingAsPermissions([
+            PermissionName::InvoicesUpdate->value,
+            PermissionName::CompaniesView->value,
+            PermissionName::CompaniesFinancialsView->value,
+            PermissionName::InvoicesView->value,
+        ]);
 
         $this->put(route('invoices.update', $invoice), [
             ...$this->invoiceUpdatePayload($invoice),
             'comment' => 'Edited draft only',
         ])->assertRedirect();
+
+        $this->assertSame(1, $this->activityCount($invoice->company));
+        $this->assertDatabaseHas('company_activity_events', [
+            'company_id' => $invoice->company_id,
+            'actor_user_id' => $actor->id,
+            'event_type' => CompanyActivityEventType::InvoiceUpdated->value,
+            'category' => 'invoices',
+            'visibility_scope' => 'financials',
+            'subject_type' => 'invoice',
+            'subject_id' => $invoice->id,
+            'metadata->invoice_number' => $invoice->invoice_number,
+            'metadata->status' => 'draft',
+            'metadata->contract_number' => $invoice->contract->contract_number,
+            'metadata->amount_minor' => 10000,
+        ]);
+
+        $this->get(route('companies.show', ['company' => $invoice->company, 'tab' => 'activity']))
+            ->assertOk()
+            ->assertSee('Черновик инвойса '.$invoice->invoice_number.' изменён')
+            ->assertSee($invoice->contract->contract_number.' · 100,00 ₼')
+            ->assertSee($actor->name);
+    }
+
+    public function test_changed_issued_invoice_creates_one_invoice_activity_event_with_issued_wording(): void
+    {
+        $invoice = $this->invoice('issued', 'INV-ACT-ISSUED-EDIT');
+        $actor = $this->actingAsPermissions([
+            PermissionName::InvoicesUpdate->value,
+            PermissionName::CompaniesView->value,
+            PermissionName::CompaniesFinancialsView->value,
+            PermissionName::InvoicesView->value,
+        ]);
+
+        $this->put(route('invoices.update', $invoice), [
+            ...$this->invoiceUpdatePayload($invoice),
+            'comment' => 'Edited issued invoice only',
+        ])->assertRedirect();
+
+        $this->assertSame(1, $this->activityCount($invoice->company));
+        $this->assertDatabaseHas('company_activity_events', [
+            'company_id' => $invoice->company_id,
+            'actor_user_id' => $actor->id,
+            'event_type' => CompanyActivityEventType::InvoiceUpdated->value,
+            'category' => 'invoices',
+            'visibility_scope' => 'financials',
+            'subject_type' => 'invoice',
+            'subject_id' => $invoice->id,
+            'metadata->invoice_number' => $invoice->invoice_number,
+            'metadata->status' => 'issued',
+        ]);
+
+        $this->get(route('companies.show', ['company' => $invoice->company, 'tab' => 'activity']))
+            ->assertOk()
+            ->assertSee('Инвойс '.$invoice->invoice_number.' изменён')
+            ->assertDontSee('Черновик инвойса '.$invoice->invoice_number.' изменён')
+            ->assertSee($actor->name);
+    }
+
+    public function test_noop_draft_edit_creates_no_invoice_activity_event(): void
+    {
+        $invoice = $this->invoice('draft', 'INV-ACT-NOOP');
+        $this->actingAsPermissions([PermissionName::InvoicesUpdate->value]);
+
+        $this->put(route('invoices.update', $invoice), $this->invoiceUpdatePayload($invoice))
+            ->assertRedirect();
+
+        $this->assertSame(0, $this->activityCount($invoice->company));
+    }
+
+    public function test_noop_issued_invoice_edit_creates_no_invoice_activity_event(): void
+    {
+        $invoice = $this->invoice('issued', 'INV-ACT-ISSUED-NOOP');
+        $this->actingAsPermissions([PermissionName::InvoicesUpdate->value]);
+
+        $this->put(route('invoices.update', $invoice), $this->invoiceUpdatePayload($invoice))
+            ->assertRedirect();
+
+        $this->assertSame(0, $this->activityCount($invoice->company));
+    }
+
+    public function test_draft_update_keeps_draft_wording_after_invoice_is_issued(): void
+    {
+        $invoice = $this->invoice('draft', 'INV-ACT-HISTORY');
+        $this->actingAsPermissions([
+            PermissionName::InvoicesUpdate->value,
+            PermissionName::InvoicesIssue->value,
+            PermissionName::CompaniesView->value,
+            PermissionName::CompaniesFinancialsView->value,
+            PermissionName::InvoicesView->value,
+        ]);
+
+        $this->put(route('invoices.update', $invoice), [
+            ...$this->invoiceUpdatePayload($invoice),
+            'comment' => 'Edited before issue',
+        ])->assertRedirect();
+        $this->post(route('invoices.issue', $invoice))->assertRedirect();
+
+        $this->get(route('companies.show', ['company' => $invoice->company, 'tab' => 'activity']))
+            ->assertOk()
+            ->assertSee('Черновик инвойса '.$invoice->invoice_number.' изменён')
+            ->assertSee('Инвойс '.$invoice->invoice_number.' выставлен');
+    }
+
+    public function test_invalid_draft_edit_creates_no_invoice_activity_event(): void
+    {
+        $invoice = $this->invoice('draft', 'INV-ACT-INVALID-EDIT');
+        $this->actingAsPermissions([PermissionName::InvoicesUpdate->value]);
+        $payload = $this->invoiceUpdatePayload($invoice);
+        $payload['lines'][0]['amount'] = '0.00';
+
+        $this->put(route('invoices.update', $invoice), $payload)
+            ->assertSessionHasErrors('lines.0.amount');
 
         $this->assertSame(0, $this->activityCount($invoice->company));
     }
@@ -144,6 +265,10 @@ class InvoiceActivityProducerTest extends AuthorizationTestCase
             'company_id' => $invoice->company_id,
             'event_type' => CompanyActivityEventType::InvoiceIssued->value,
             'metadata->invoice_number' => $invoice->invoice_number,
+        ]);
+        $this->assertDatabaseMissing('company_activity_events', [
+            'company_id' => $invoice->company_id,
+            'event_type' => CompanyActivityEventType::InvoiceUpdated->value,
         ]);
         $this->assertDatabaseHas('company_activity_events', [
             'company_id' => $invoice->company_id,
@@ -276,6 +401,38 @@ class InvoiceActivityProducerTest extends AuthorizationTestCase
         }
 
         $this->assertDatabaseHas('invoices', ['id' => $invoice->id, 'status' => 'draft']);
+        $this->assertSame(0, $this->activityCount($invoice->company));
+    }
+
+    public function test_activity_insert_failure_rolls_back_draft_update(): void
+    {
+        $invoice = $this->invoice('draft', 'INV-ACT-UPDATE-ROLLBACK');
+        $originalComment = $invoice->comment;
+        $this->actingAsPermissions([PermissionName::InvoicesUpdate->value]);
+        $exception = new RuntimeException('invoice activity update failed');
+        $eventName = 'eloquent.creating: '.CompanyActivityEvent::class;
+        Event::listen($eventName, static function () use ($exception): never {
+            throw $exception;
+        });
+
+        try {
+            $this->withoutExceptionHandling();
+            $this->put(route('invoices.update', $invoice), [
+                ...$this->invoiceUpdatePayload($invoice),
+                'comment' => 'This must roll back',
+            ]);
+            $this->fail('Invoice update should have rolled back.');
+        } catch (RuntimeException $caught) {
+            $this->assertSame($exception, $caught);
+        } finally {
+            Event::forget($eventName);
+        }
+
+        $this->assertDatabaseHas('invoices', [
+            'id' => $invoice->id,
+            'status' => 'draft',
+            'comment' => $originalComment,
+        ]);
         $this->assertSame(0, $this->activityCount($invoice->company));
     }
 

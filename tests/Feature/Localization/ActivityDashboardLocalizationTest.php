@@ -81,6 +81,8 @@ class ActivityDashboardLocalizationTest extends AuthorizationTestCase
             ->assertSeeText('Создан договор CTR-L10N-5')
             ->assertSeeText('Добавлена разовая услуга Audit service')
             ->assertSeeText('Загружен документ contract-l10n-5.pdf')
+            ->assertSeeText('Черновик инвойса INV-L10N-UPDATE изменён')
+            ->assertSeeText('Инвойс INV-L10N-ISSUED-UPDATE изменён')
             ->assertSeeText('Инвойс INV-L10N-5 выставлен')
             ->assertSeeText('Платёж 600,00 ₼ подтверждён')
             ->assertSee('class="flex h-9 w-full items-center gap-2', false);
@@ -98,6 +100,8 @@ class ActivityDashboardLocalizationTest extends AuthorizationTestCase
             ->assertSeeText('Müqavilə yaradıldı: CTR-L10N-5')
             ->assertSeeText('Müqaviləyə xidmət əlavə edildi: Audit service')
             ->assertSeeText('Sənəd əlavə edildi: contract-l10n-5.pdf')
+            ->assertSeeText('Qaralama invoysa düzəliş edildi: INV-L10N-UPDATE')
+            ->assertSeeText('İnvoys INV-L10N-ISSUED-UPDATE dəyişdirildi')
             ->assertSeeText('İnvoys INV-L10N-5 rəsmiləşdirildi')
             ->assertSeeText('Ödəniş 600,00 ₼ təsdiqləndi')
             ->assertSeeText('Balansdan ödəniş: 600,00 ₼')
@@ -131,6 +135,8 @@ class ActivityDashboardLocalizationTest extends AuthorizationTestCase
             [CompanyActivityEventType::ContractCreated, CompanyActivityCategory::Contracts, CompanyActivityVisibilityScope::Contracts, ['contract_number' => 'CTR-L10N-5']],
             [CompanyActivityEventType::ContractSubjectCreated, CompanyActivityCategory::Contracts, CompanyActivityVisibilityScope::Contracts, ['subject_type' => 'one_time', 'subject_name' => 'Audit service']],
             [CompanyActivityEventType::DocumentUploaded, CompanyActivityCategory::Documents, CompanyActivityVisibilityScope::Documents, ['document_name' => 'contract-l10n-5.pdf']],
+            [CompanyActivityEventType::InvoiceUpdated, CompanyActivityCategory::Invoices, CompanyActivityVisibilityScope::Financials, ['invoice_number' => 'INV-L10N-UPDATE', 'status' => 'draft']],
+            [CompanyActivityEventType::InvoiceUpdated, CompanyActivityCategory::Invoices, CompanyActivityVisibilityScope::Financials, ['invoice_number' => 'INV-L10N-ISSUED-UPDATE', 'status' => 'issued']],
             [CompanyActivityEventType::InvoiceIssued, CompanyActivityCategory::Invoices, CompanyActivityVisibilityScope::Financials, ['invoice_number' => 'INV-L10N-5']],
             [CompanyActivityEventType::PaymentPendingCreated, CompanyActivityCategory::Payments, CompanyActivityVisibilityScope::Financials, []],
             [CompanyActivityEventType::PaymentConfirmed, CompanyActivityCategory::Payments, CompanyActivityVisibilityScope::Financials, ['amount_minor' => 60000, 'currency' => '₼']],

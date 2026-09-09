@@ -27,6 +27,7 @@ final class CreateBillingRunDrafts
     {
         $identities = $this->normalizeIdentities($identities);
         $previewRows = $this->preview->forPeriod($period)['rows'];
+        $businessToday = $this->preview->businessToday();
         $candidates = collect($previewRows)->keyBy('identity');
         $candidateRows = $candidates->filter(
             fn (array $row, string $identity): bool => in_array($identity, $identities, true)
@@ -40,7 +41,7 @@ final class CreateBillingRunDrafts
             ->get()
             ->keyBy('id');
 
-        return DB::transaction(function () use ($identities, $candidates, $companies, $contracts, $actor): array {
+        return DB::transaction(function () use ($identities, $candidates, $companies, $contracts, $actor, $businessToday): array {
             $created = [];
             $skipped = [];
 
@@ -59,7 +60,23 @@ final class CreateBillingRunDrafts
                         'company' => $candidate['company'],
                         'contract' => $candidate['contract'],
                         'period' => $candidate['period'],
-                        'reason' => 'already_invoiced',
+                        'reason' => in_array($candidate['queue_status'] ?? null, ['scheduled', 'missed'], true)
+                            ? 'not_current'
+                            : 'already_invoiced',
+                    ];
+                    continue;
+                }
+
+                $scheduledDate = CarbonImmutable::parse(
+                    $candidate['scheduled_billing_date'] ?? $candidate['period_start'],
+                    $businessToday->getTimezone(),
+                )->startOfDay();
+                if ($scheduledDate->gt($businessToday)) {
+                    $skipped[] = [
+                        'company' => $candidate['company'],
+                        'contract' => $candidate['contract'],
+                        'period' => $candidate['period'],
+                        'reason' => 'not_current',
                     ];
                     continue;
                 }
@@ -89,7 +106,7 @@ final class CreateBillingRunDrafts
                         $company,
                         $contract,
                         [
-                            'issue_date' => now()->toDateString(),
+                            'issue_date' => $businessToday->toDateString(),
                         ],
                         [[
                             'subscription_id' => $candidate['subscription_id'],

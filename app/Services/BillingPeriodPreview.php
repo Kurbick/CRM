@@ -17,7 +17,7 @@ final class BillingPeriodPreview
     ) {}
 
     /**
-     * @return array{rows: list<array<string, mixed>>, count: int, subtotal: string, vat: string, total: string}
+     * @return array{rows: list<array<string, mixed>>, count: int, subtotal: string, vat: string, total: string, planned_count: int, planned_subtotal: string, planned_vat: string, planned_total: string, planned_subtotal_display: string, planned_vat_display: string, planned_total_display: string}
      */
     public function forPeriod(CarbonImmutable $period): array
     {
@@ -27,11 +27,16 @@ final class BillingPeriodPreview
         );
     }
 
+    public function businessToday(): CarbonImmutable
+    {
+        return CarbonImmutable::now(config('app.display_timezone', 'Asia/Baku'))->startOfDay();
+    }
+
     /**
      * One joined read is used by Dashboard and also supplies the existing
      * active subscription counter, keeping the page free of per-row queries.
      *
-     * @return array{active_subscription_count: int, preview: array{rows: list<array<string, mixed>>, count: int, subtotal: string, vat: string, total: string}}
+     * @return array{active_subscription_count: int, preview: array<string, mixed>}
      */
     public function dashboardSummary(CarbonImmutable $period): array
     {
@@ -238,6 +243,39 @@ final class BillingPeriodPreview
         return $candidate;
     }
 
+    private function missedOccurrenceCount(Subscription $subscription, string $periodStart): int
+    {
+        if (! $subscription->next_billing_date || ! $subscription->start_date) {
+            return 0;
+        }
+
+        try {
+            $nextBillingDate = CarbonImmutable::parse($subscription->next_billing_date)->startOfDay();
+            $targetDate = CarbonImmutable::parse($periodStart)->startOfDay();
+            if (! $nextBillingDate->lt($targetDate)) {
+                return 0;
+            }
+
+            $anchor = CarbonImmutable::parse($subscription->start_date)->startOfDay();
+            $interval = $this->billingSchedule->intervalFor($subscription);
+            $count = 0;
+            $guard = 0;
+
+            while ($nextBillingDate->lt($targetDate) && $guard++ < 10000) {
+                $count++;
+                $nextBillingDate = $this->billingSchedule->nextOccurrenceStart(
+                    $nextBillingDate,
+                    $anchor,
+                    $interval,
+                );
+            }
+
+            return $count;
+        } catch (\Throwable) {
+            return 0;
+        }
+    }
+
     /** @param Collection<int, object> $rows */
     private function buildPreviewFromRows(Collection $rows, CarbonImmutable $period): array
     {
@@ -251,7 +289,12 @@ final class BillingPeriodPreview
         $subtotalMinor = 0;
         $vatMinor = 0;
         $totalMinor = 0;
+        $queueCount = 0;
+        $queueSubtotalMinor = 0;
+        $queueVatMinor = 0;
+        $queueTotalMinor = 0;
         $seenKeys = [];
+        $businessToday = $this->businessToday();
 
         foreach ($groups as $subscriptionRows) {
             $subscription = $this->subscriptionFromRow($subscriptionRows->first());
@@ -295,7 +338,31 @@ final class BillingPeriodPreview
                 $source = $subscriptionRows->first();
                 $periodStart = $occurrence['period_start']->toDateString();
                 $periodEnd = $occurrence['period_end']->toDateString();
+                // Occurrences are stored/calculated as date-only values. Compare
+                // their calendar date in the business timezone, rather than
+                // comparing UTC midnight with the local business-day boundary.
+                $scheduledBusinessDate = CarbonImmutable::parse(
+                    $periodStart,
+                    $businessToday->getTimezone(),
+                )->startOfDay();
+                $isDue = $scheduledBusinessDate->lte($businessToday);
+                $isCurrentOccurrence = $subscription->next_billing_date?->toDateString() === $periodStart;
+                $missedCount = $this->missedOccurrenceCount($subscription, $periodStart);
                 $identity = (int) $subscription->id.':'.$key;
+                $queueStatus = $existing !== null
+                    ? 'draft'
+                    : (! $isDue
+                        ? 'scheduled'
+                        : ($isCurrentOccurrence ? 'pending' : 'missed'));
+                if ($queueStatus === 'missed' && $missedCount === 0) {
+                    $missedCount = 1;
+                }
+                if (in_array($queueStatus, ['pending', 'draft'], true)) {
+                    $queueCount++;
+                    $queueSubtotalMinor += $amountMinor;
+                    $queueVatMinor += $rowVatMinor;
+                    $queueTotalMinor += $rowTotalMinor;
+                }
                 $resultRows[] = [
                     'identity' => $identity,
                     'subscription_id' => (int) $subscription->id,
@@ -304,8 +371,11 @@ final class BillingPeriodPreview
                     'billing_occurrence_key' => $key,
                     'invoice_id' => $existing['invoice_id'] ?? null,
                     'invoice_number' => $existing['invoice_number'] ?? null,
-                    'queue_status' => $existing === null ? 'pending' : 'draft',
-                    'eligible_for_draft_creation' => $existing === null,
+                    'queue_status' => $queueStatus,
+                    'eligible_for_draft_creation' => $existing === null && $isDue && $isCurrentOccurrence,
+                    'scheduled_billing_date' => $periodStart,
+                    'scheduled_billing_date_display' => $scheduledBusinessDate->format('d').'.'.$scheduledBusinessDate->format('m').'.'.$scheduledBusinessDate->format('Y'),
+                    'missed_count' => $missedCount,
                     'period_start' => $periodStart,
                     'period_end' => $periodEnd,
                     'next_billing_date' => $subscription->next_billing_date?->toDateString(),
@@ -325,13 +395,20 @@ final class BillingPeriodPreview
 
         return [
             'rows' => $resultRows,
-            'count' => count($resultRows),
-            'subtotal' => $this->money->fromMinorUnits($subtotalMinor),
-            'subtotal_display' => $this->money->formatMinorUnits($subtotalMinor),
-            'vat' => $this->money->fromMinorUnits($vatMinor),
-            'vat_display' => $this->money->formatMinorUnits($vatMinor),
-            'total' => $this->money->fromMinorUnits($totalMinor),
-            'total_display' => $this->money->formatMinorUnits($totalMinor),
+            'count' => $queueCount,
+            'subtotal' => $this->money->fromMinorUnits($queueSubtotalMinor),
+            'subtotal_display' => $this->money->formatMinorUnits($queueSubtotalMinor),
+            'vat' => $this->money->fromMinorUnits($queueVatMinor),
+            'vat_display' => $this->money->formatMinorUnits($queueVatMinor),
+            'total' => $this->money->fromMinorUnits($queueTotalMinor),
+            'total_display' => $this->money->formatMinorUnits($queueTotalMinor),
+            'planned_count' => count($resultRows),
+            'planned_subtotal' => $this->money->fromMinorUnits($subtotalMinor),
+            'planned_vat' => $this->money->fromMinorUnits($vatMinor),
+            'planned_total' => $this->money->fromMinorUnits($totalMinor),
+            'planned_subtotal_display' => $this->money->formatMinorUnits($subtotalMinor),
+            'planned_vat_display' => $this->money->formatMinorUnits($vatMinor),
+            'planned_total_display' => $this->money->formatMinorUnits($totalMinor),
         ];
     }
 
@@ -347,6 +424,13 @@ final class BillingPeriodPreview
             'vat_display' => '0,00 ₼',
             'total' => '0.00',
             'total_display' => '0,00 ₼',
+            'planned_count' => 0,
+            'planned_subtotal' => '0.00',
+            'planned_vat' => '0.00',
+            'planned_total' => '0.00',
+            'planned_subtotal_display' => '0,00 ₼',
+            'planned_vat_display' => '0,00 ₼',
+            'planned_total_display' => '0,00 ₼',
         ];
     }
 }

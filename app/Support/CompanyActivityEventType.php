@@ -18,6 +18,7 @@ enum CompanyActivityEventType: string
     case DocumentUploaded = 'document.uploaded';
     case DocumentDeleted = 'document.deleted';
     case InvoiceCreated = 'invoice.created';
+    case InvoiceUpdated = 'invoice.updated';
     case InvoiceIssued = 'invoice.issued';
     case InvoiceCancelled = 'invoice.cancelled';
     case InvoiceDeleted = 'invoice.deleted';

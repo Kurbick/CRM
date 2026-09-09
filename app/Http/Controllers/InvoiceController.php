@@ -113,7 +113,7 @@ class InvoiceController extends Controller
             unset($validated['lines']);
         }
 
-        $invoice = $this->updateInvoice->execute($invoice, $validated, $lines);
+        $invoice = $this->updateInvoice->execute($invoice, $validated, $lines, actor: $request->user());
 
         return response()->json($this->detailProjectionFor($invoice));
     }

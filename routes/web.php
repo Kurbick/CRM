@@ -314,6 +314,11 @@ Route::middleware(['auth', 'active', 'password.changed', 'organization.context']
     )->name('invoices.billing.drafts');
 
     Route::post(
+        'invoices/billing/issue',
+        [BillingController::class, 'issue']
+    )->name('invoices.billing.issue');
+
+    Route::post(
         'invoices/{invoice}/issue',
         [InvoiceController::class, 'issue']
     )->name('invoices.issue');
