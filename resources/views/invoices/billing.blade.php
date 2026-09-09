@@ -164,11 +164,57 @@
                                                     {{ __('invoices.billing_page.row_status.scheduled', ['date' => $row['scheduled_billing_date_display']]) }}
                                                 </span>
                                             @elseif ($row['queue_status'] === 'missed')
-                                                <span class="mt-0.5 block whitespace-normal text-xs font-medium text-rose-700">
-                                                    {{ $row['missed_count'] > 1
-                                                        ? __('invoices.billing_page.row_status.missed_multiple', ['count' => $row['missed_count']])
-                                                        : __('invoices.billing_page.row_status.missed') }}
-                                                </span>
+                                                @php
+                                                    $missedOccurrences = $row['missed_occurrences'] ?? [];
+                                                    $firstMissedOccurrence = $missedOccurrences[0] ?? null;
+                                                    $firstMissedPeriod = $firstMissedOccurrence === null
+                                                        ? null
+                                                        : \Carbon\CarbonImmutable::parse($firstMissedOccurrence['period_start'])
+                                                            ->locale(app()->getLocale())
+                                                            ->translatedFormat('F Y');
+                                                    $firstMissedTargetPeriod = $firstMissedOccurrence === null
+                                                        ? null
+                                                        : __('invoices.billing_page.missed_popover.target_months.'.$firstMissedOccurrence['month'])
+                                                            .' '.$firstMissedOccurrence['year'];
+                                                @endphp
+                                                @if ($firstMissedOccurrence !== null)
+                                                    <span class="group relative mt-0.5 block">
+                                                        <a href="{{ route('invoices.billing.preview', ['tab' => 'pending', 'month' => $firstMissedOccurrence['month'], 'year' => $firstMissedOccurrence['year']]) }}"
+                                                            aria-describedby="missed-occurrence-{{ md5($row['identity']) }}"
+                                                            data-testid="missed-occurrence-link"
+                                                            class="block whitespace-normal text-left text-xs font-medium text-rose-700 underline decoration-dotted underline-offset-2 transition hover:text-rose-900 focus:outline-none focus:ring-2 focus:ring-rose-400 focus:ring-offset-2">
+                                                            {{ $row['missed_count'] > 1
+                                                                ? __('invoices.billing_page.row_status.missed_multiple', ['count' => $row['missed_count']])
+                                                                : __('invoices.billing_page.row_status.missed') }}
+                                                        </a>
+                                                        <span id="missed-occurrence-{{ md5($row['identity']) }}"
+                                                            role="tooltip"
+                                                            data-testid="missed-occurrence-popover"
+                                                            class="pointer-events-none invisible absolute bottom-full left-0 z-20 mb-2 w-72 rounded-md border border-slate-200 bg-white p-3 text-left text-xs font-normal text-slate-700 opacity-0 shadow-lg transition group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
+                                                            <span class="block font-semibold text-slate-900">
+                                                                {{ $row['missed_count'] > 1
+                                                                    ? __('invoices.billing_page.missed_popover.title_multiple')
+                                                                    : __('invoices.billing_page.missed_popover.title') }}
+                                                            </span>
+                                                            <span class="mt-2 block space-y-1">
+                                                                @foreach ($missedOccurrences as $missedOccurrence)
+                                                                    <span class="block whitespace-nowrap">{{ $missedOccurrence['period_display'] }}</span>
+                                                                @endforeach
+                                                            </span>
+                                                            <span class="mt-2 block font-medium text-blue-700">
+                                                                {{ $row['missed_count'] > 1
+                                                                    ? __('invoices.billing_page.missed_popover.earliest', ['period' => $firstMissedPeriod])
+                                                                    : __('invoices.billing_page.missed_popover.navigate', ['period' => $firstMissedTargetPeriod]) }}
+                                                            </span>
+                                                        </span>
+                                                    </span>
+                                                @else
+                                                    <span class="mt-0.5 block whitespace-normal text-xs font-medium text-rose-700">
+                                                        {{ $row['missed_count'] > 1
+                                                            ? __('invoices.billing_page.row_status.missed_multiple', ['count' => $row['missed_count']])
+                                                            : __('invoices.billing_page.row_status.missed') }}
+                                                    </span>
+                                                @endif
                                             @endif
                                         </td>
                                         <td class="whitespace-nowrap px-4 py-3 text-right tabular-nums">{{ $row['subtotal_display'] }}</td>

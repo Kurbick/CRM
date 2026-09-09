@@ -243,26 +243,36 @@ final class BillingPeriodPreview
         return $candidate;
     }
 
-    private function missedOccurrenceCount(Subscription $subscription, string $periodStart): int
+    /**
+     * @return list<array{period_start: string, period_end: string, period_display: string, month: int, year: int}>
+     */
+    private function missedOccurrences(Subscription $subscription, string $periodStart): array
     {
         if (! $subscription->next_billing_date || ! $subscription->start_date) {
-            return 0;
+            return [];
         }
 
         try {
             $nextBillingDate = CarbonImmutable::parse($subscription->next_billing_date)->startOfDay();
             $targetDate = CarbonImmutable::parse($periodStart)->startOfDay();
             if (! $nextBillingDate->lt($targetDate)) {
-                return 0;
+                return [];
             }
 
             $anchor = CarbonImmutable::parse($subscription->start_date)->startOfDay();
             $interval = $this->billingSchedule->intervalFor($subscription);
-            $count = 0;
+            $occurrences = [];
             $guard = 0;
 
             while ($nextBillingDate->lt($targetDate) && $guard++ < 10000) {
-                $count++;
+                $periodEnd = $this->billingSchedule->periodEnd($nextBillingDate, $anchor, $interval);
+                $occurrences[] = [
+                    'period_start' => $nextBillingDate->toDateString(),
+                    'period_end' => $periodEnd->toDateString(),
+                    'period_display' => $nextBillingDate->format('d.m.Y').' — '.$periodEnd->format('d.m.Y'),
+                    'month' => (int) $nextBillingDate->month,
+                    'year' => (int) $nextBillingDate->year,
+                ];
                 $nextBillingDate = $this->billingSchedule->nextOccurrenceStart(
                     $nextBillingDate,
                     $anchor,
@@ -270,9 +280,9 @@ final class BillingPeriodPreview
                 );
             }
 
-            return $count;
+            return $occurrences;
         } catch (\Throwable) {
-            return 0;
+            return [];
         }
     }
 
@@ -347,16 +357,25 @@ final class BillingPeriodPreview
                 )->startOfDay();
                 $isDue = $scheduledBusinessDate->lte($businessToday);
                 $isCurrentOccurrence = $subscription->next_billing_date?->toDateString() === $periodStart;
-                $missedCount = $this->missedOccurrenceCount($subscription, $periodStart);
                 $identity = (int) $subscription->id.':'.$key;
                 $queueStatus = $existing !== null
                     ? 'draft'
                     : (! $isDue
                         ? 'scheduled'
                         : ($isCurrentOccurrence ? 'pending' : 'missed'));
-                if ($queueStatus === 'missed' && $missedCount === 0) {
-                    $missedCount = 1;
+                $missedOccurrences = $queueStatus === 'missed'
+                    ? $this->missedOccurrences($subscription, $periodStart)
+                    : [];
+                if ($queueStatus === 'missed' && $missedOccurrences === []) {
+                    $missedOccurrences[] = [
+                        'period_start' => $periodStart,
+                        'period_end' => $periodEnd,
+                        'period_display' => CarbonImmutable::parse($periodStart)->format('d.m.Y').' — '.CarbonImmutable::parse($periodEnd)->format('d.m.Y'),
+                        'month' => (int) CarbonImmutable::parse($periodStart)->month,
+                        'year' => (int) CarbonImmutable::parse($periodStart)->year,
+                    ];
                 }
+                $missedCount = count($missedOccurrences);
                 if (in_array($queueStatus, ['pending', 'draft'], true)) {
                     $queueCount++;
                     $queueSubtotalMinor += $amountMinor;
@@ -376,6 +395,7 @@ final class BillingPeriodPreview
                     'scheduled_billing_date' => $periodStart,
                     'scheduled_billing_date_display' => $scheduledBusinessDate->format('d').'.'.$scheduledBusinessDate->format('m').'.'.$scheduledBusinessDate->format('Y'),
                     'missed_count' => $missedCount,
+                    'missed_occurrences' => $missedOccurrences,
                     'period_start' => $periodStart,
                     'period_end' => $periodEnd,
                     'next_billing_date' => $subscription->next_billing_date?->toDateString(),

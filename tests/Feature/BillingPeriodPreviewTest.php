@@ -181,6 +181,7 @@ class BillingPeriodPreviewTest extends AuthorizationTestCase
             ->assertSee('К выставлению:')
             ->assertSee('К выставлению с')
             ->assertSee('13.09.2026')
+            ->assertSee('class="mt-0.5 block text-xs font-medium text-blue-700"', false)
             ->assertSee('disabled', false);
 
         $createResponse = $this->post(route('invoices.billing.drafts', ['month' => 9, 'year' => 2026]), [
@@ -291,6 +292,112 @@ class BillingPeriodPreviewTest extends AuthorizationTestCase
             'selected_occurrences' => [$rows[$oneMissed->id]['identity'], $rows[$threeMissed->id]['identity']],
         ])->assertRedirect(route('invoices.billing.result'));
         $this->assertSame(0, Invoice::query()->count());
+    }
+
+    public function test_missed_occurrence_link_exposes_the_canonical_singular_period_and_target(): void
+    {
+        Carbon::setTestNow('2026-09-08 10:00:00');
+        $subscription = $this->subscription([
+            'start_date' => '2026-08-01',
+            'next_billing_date' => '2026-08-01',
+        ]);
+        $this->actingAsPermissions([PermissionName::InvoicesCreate->value]);
+
+        $response = $this->get(route('invoices.billing.preview', ['month' => 9, 'year' => 2026]))
+            ->assertOk();
+        $row = collect($response->viewData('preview')['rows'])->firstWhere('subscription_id', $subscription->id);
+
+        $this->assertSame([
+            [
+                'period_start' => '2026-08-01',
+                'period_end' => '2026-08-31',
+                'period_display' => '01.08.2026 — 31.08.2026',
+                'month' => 8,
+                'year' => 2026,
+            ],
+        ], $row['missed_occurrences']);
+        $response
+            ->assertSee('data-testid="missed-occurrence-link"', false)
+            ->assertSee('data-testid="missed-occurrence-popover"', false)
+            ->assertSee('class="group relative mt-0.5 block"', false)
+            ->assertSee('class="block whitespace-normal text-left text-xs font-medium text-rose-700', false)
+            ->assertSeeText('01.08.2026 — 31.08.2026')
+            ->assertSeeText('Перейти к августу 2026')
+            ->assertSee('href="'.htmlspecialchars(route('invoices.billing.preview', [
+                'tab' => 'pending',
+                'month' => 8,
+                'year' => 2026,
+            ]), ENT_QUOTES, 'UTF-8').'"', false);
+    }
+
+    public function test_multiple_missed_occurrences_link_to_the_earliest_canonical_period(): void
+    {
+        Carbon::setTestNow('2026-09-08 10:00:00');
+        $subscription = $this->subscription([
+            'start_date' => '2026-06-01',
+            'next_billing_date' => '2026-06-01',
+        ]);
+        $this->actingAsPermissions([PermissionName::InvoicesCreate->value]);
+
+        $response = $this->get(route('invoices.billing.preview', ['month' => 9, 'year' => 2026]))
+            ->assertOk();
+        $row = collect($response->viewData('preview')['rows'])->firstWhere('subscription_id', $subscription->id);
+
+        $this->assertSame(3, $row['missed_count']);
+        $this->assertSame([
+            '2026-06-01',
+            '2026-07-01',
+            '2026-08-01',
+        ], collect($row['missed_occurrences'])->pluck('period_start')->all());
+        $response
+            ->assertSee('Пропущено периодов: 3')
+            ->assertSeeText('01.06.2026 — 30.06.2026')
+            ->assertSeeText('01.07.2026 — 31.07.2026')
+            ->assertSeeText('01.08.2026 — 31.08.2026')
+            ->assertSeeText('Сначала к выставлению: июнь 2026')
+            ->assertSee('href="'.htmlspecialchars(route('invoices.billing.preview', [
+                'tab' => 'pending',
+                'month' => 6,
+                'year' => 2026,
+            ]), ENT_QUOTES, 'UTF-8').'"', false);
+    }
+
+    public function test_missed_occurrence_navigation_handles_a_previous_year_without_writing_state(): void
+    {
+        Carbon::setTestNow('2026-09-08 10:00:00');
+        $subscription = $this->subscription([
+            'start_date' => '2025-12-01',
+            'next_billing_date' => '2025-12-01',
+        ]);
+        $subscription->contract->update(['start_date' => '2025-12-01']);
+        $this->actingAsPermissions([PermissionName::InvoicesCreate->value]);
+        $before = [
+            'invoices' => Invoice::query()->count(),
+            'next_billing_date' => $subscription->fresh()->next_billing_date->toDateString(),
+        ];
+
+        $response = $this->get(route('invoices.billing.preview', ['month' => 1, 'year' => 2026]))
+            ->assertOk();
+        $row = collect($response->viewData('preview')['rows'])->firstWhere('subscription_id', $subscription->id);
+
+        $this->assertSame('2025-12-01', $row['missed_occurrences'][0]['period_start']);
+        $this->assertSame('2025-12-31', $row['missed_occurrences'][0]['period_end']);
+        $response->assertSee('href="'.htmlspecialchars(route('invoices.billing.preview', [
+            'tab' => 'pending',
+            'month' => 12,
+            'year' => 2025,
+        ]), ENT_QUOTES, 'UTF-8').'"', false);
+
+        $target = $this->get(route('invoices.billing.preview', [
+            'tab' => 'pending',
+            'month' => 12,
+            'year' => 2025,
+        ]))->assertOk();
+        $targetRow = collect($target->viewData('preview')['rows'])->firstWhere('subscription_id', $subscription->id);
+
+        $this->assertSame('pending', $targetRow['queue_status']);
+        $this->assertSame($before['invoices'], Invoice::query()->count());
+        $this->assertSame($before['next_billing_date'], $subscription->fresh()->next_billing_date->toDateString());
     }
 
     public function test_existing_occurrence_is_excluded_by_source_identity_and_cancelled_invoice_is_not_a_reservation(): void
@@ -994,7 +1101,9 @@ class BillingPeriodPreviewTest extends AuthorizationTestCase
             ->assertOk()
             ->assertSee('Rəsmiləşdirilə bilər')
             ->assertSee('13.09.2026 tarixindən rəsmiləşdirilə bilər')
-            ->assertSee('Buraxılmış dövr');
+            ->assertSee('Buraxılmış dövr')
+            ->assertSeeText('01.08.2026 — 31.08.2026')
+            ->assertSeeText('avqust 2026 dövrünə keç');
     }
 
     private function organization(): Organization
