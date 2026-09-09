@@ -248,10 +248,10 @@ class InvoiceActivityProducerTest extends AuthorizationTestCase
         $this->assertSame(0, $this->activityCount($invoice->company));
     }
 
-    public function test_issue_records_one_event_only_after_success_and_auto_credit_does_not_duplicate_it(): void
+    public function test_issue_records_only_the_issue_event_when_credit_is_available(): void
     {
         $invoice = $this->invoice('draft', 'INV-ACT-ISSUE');
-        CreditBalance::query()->create([
+        $balance = CreditBalance::query()->create([
             'company_id' => $invoice->company_id,
             'amount' => '100.00',
         ]);
@@ -259,8 +259,9 @@ class InvoiceActivityProducerTest extends AuthorizationTestCase
 
         $this->post(route('invoices.issue', $invoice))->assertRedirect();
 
-        $this->assertSame('paid', $invoice->fresh()->status);
-        $this->assertSame(2, $this->activityCount($invoice->company));
+        $this->assertSame('issued', $invoice->fresh()->status);
+        $this->assertSame('100.00', $balance->fresh()->getRawOriginal('amount'));
+        $this->assertSame(1, $this->activityCount($invoice->company));
         $this->assertDatabaseHas('company_activity_events', [
             'company_id' => $invoice->company_id,
             'event_type' => CompanyActivityEventType::InvoiceIssued->value,
@@ -270,10 +271,9 @@ class InvoiceActivityProducerTest extends AuthorizationTestCase
             'company_id' => $invoice->company_id,
             'event_type' => CompanyActivityEventType::InvoiceUpdated->value,
         ]);
-        $this->assertDatabaseHas('company_activity_events', [
+        $this->assertDatabaseMissing('company_activity_events', [
             'company_id' => $invoice->company_id,
             'event_type' => CompanyActivityEventType::CreditApplied->value,
-            'metadata->amount_minor' => 10000,
         ]);
         $this->assertDatabaseMissing('company_activity_events', [
             'company_id' => $invoice->company_id,

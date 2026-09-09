@@ -6,15 +6,14 @@ use App\Actions\Credits\ApplyCreditToInvoice;
 use App\Http\Controllers\Web\InvoiceController;
 use App\Models\CreditBalance;
 use App\Models\CreditBalanceEntry;
+use App\Models\CompanyActivityEvent;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
 use App\Models\Payment;
 use App\Models\Subscription;
-use App\Services\InvoicePaymentAllocationWriter;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
-use Mockery;
 use RuntimeException;
 use Tests\Support\TwoConnectionDatabaseHarness;
 
@@ -45,11 +44,11 @@ class InvoiceCreditApplicationConcurrencyTest extends FinancialTestCase
         $this->assertTrue($result['first']['ok']);
         $this->assertFalse($result['second']['ok']);
         $this->assertSame(ValidationException::class, $result['second']['exception']);
-        $this->assertSame('paid', $invoice->fresh()->status);
-        $this->assertSame('0.00', $balance->fresh()->getRawOriginal('amount'));
+        $this->assertSame('issued', $invoice->fresh()->status);
+        $this->assertSame('100.00', $balance->fresh()->getRawOriginal('amount'));
         $this->assertSame('2026-02-28', $subscription->fresh()->getRawOriginal('next_billing_date'));
         $this->assertSame(1, $invoice->lines()->whereNotNull('billing_occurrence_key')->count());
-        $this->assertExactApplicationState([$invoice], 10000);
+        $this->assertExactApplicationState([$invoice], 0);
     }
 
     public function test_two_invoices_cannot_overspend_one_locked_credit_balance(): void
@@ -138,11 +137,11 @@ class InvoiceCreditApplicationConcurrencyTest extends FinancialTestCase
         $this->assertSame(RuntimeException::class, $result['first']['exception']);
         $this->assertSame('concurrent-writer-failure', $result['first']['message']);
         $this->assertTrue($result['second']['ok']);
-        $this->assertSame('partially_paid', $invoice->fresh()->status);
-        $this->assertSame('0.00', $balance->fresh()->getRawOriginal('amount'));
+        $this->assertSame('issued', $invoice->fresh()->status);
+        $this->assertSame('30.00', $balance->fresh()->getRawOriginal('amount'));
         $this->assertSame('2026-02-28', $subscription->fresh()->getRawOriginal('next_billing_date'));
         $this->assertNotNull($line->fresh()->billing_occurrence_key);
-        $this->assertExactApplicationState([$invoice], 3000);
+        $this->assertExactApplicationState([$invoice], 0);
     }
 
     public function test_missing_balance_is_no_op_and_company_organization_index_owns_creation_race(): void
@@ -169,10 +168,7 @@ class InvoiceCreditApplicationConcurrencyTest extends FinancialTestCase
 
         return static function () use ($invoiceId, $userId): array {
             Auth::loginUsingId($userId);
-            app(InvoiceController::class)->issue(
-                Invoice::query()->findOrFail($invoiceId),
-                app(ApplyCreditToInvoice::class),
-            );
+            app(InvoiceController::class)->issue(Invoice::query()->findOrFail($invoiceId));
 
             return ['issued' => true];
         };
@@ -184,16 +180,11 @@ class InvoiceCreditApplicationConcurrencyTest extends FinancialTestCase
         $userId = (int) $this->authenticatedUser->id;
 
         return static function () use ($invoiceId, $userId): array {
-            $writer = Mockery::mock(InvoicePaymentAllocationWriter::class);
-            $writer->shouldReceive('synchronize')
-                ->once()
-                ->andThrow(new RuntimeException('concurrent-writer-failure'));
-            app()->instance(InvoicePaymentAllocationWriter::class, $writer);
+            CompanyActivityEvent::creating(static function (): never {
+                throw new RuntimeException('concurrent-writer-failure');
+            });
             Auth::loginUsingId($userId);
-            app(InvoiceController::class)->issue(
-                Invoice::query()->findOrFail($invoiceId),
-                app(ApplyCreditToInvoice::class),
-            );
+            app(InvoiceController::class)->issue(Invoice::query()->findOrFail($invoiceId));
 
             return ['issued' => true];
         };

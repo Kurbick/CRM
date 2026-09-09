@@ -954,10 +954,8 @@ class InvoiceController extends Controller
             ->with('success', __('invoices.flash.updated'));
     }
 
-    public function issue(
-        Invoice $invoice,
-        ApplyCreditToInvoice $applyCreditToInvoice
-    ) {
+    public function issue(Invoice $invoice)
+    {
         Gate::authorize('issue', $invoice);
 
         $actor = auth()->user();
@@ -965,16 +963,11 @@ class InvoiceController extends Controller
         $this->issueInvoice->execute(
             $invoice,
             actor: $actor,
-            applyCreditToInvoice: $applyCreditToInvoice,
         );
         $invoice->refresh();
 
-        $message = $invoice->status === 'paid'
-            ? __('invoices.flash.credit_applied_success')
-            : __('invoices.flash.issued');
-
         return $this->mutationRedirect($invoice)
-            ->with('success', $message);
+            ->with('success', __('invoices.flash.issued'));
     }
 
     public function cancel(Invoice $invoice)

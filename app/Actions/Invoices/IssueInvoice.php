@@ -2,7 +2,6 @@
 
 namespace App\Actions\Invoices;
 
-use App\Actions\Credits\ApplyCreditToInvoice;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
 use App\Models\Subscription;
@@ -23,7 +22,6 @@ final class IssueInvoice
     public function __construct(
         private readonly InvoiceDueDateCalculator $dueDateCalculator,
         private readonly SubscriptionBillingSchedule $billingSchedule,
-        private readonly ApplyCreditToInvoice $applyCreditToInvoice,
         private readonly CompanyActivityRecorder $activityRecorder,
     ) {}
 
@@ -31,12 +29,10 @@ final class IssueInvoice
         Invoice $invoice,
         User $actor,
         ?CarbonImmutable $billingPeriod = null,
-        ?ApplyCreditToInvoice $applyCreditToInvoice = null,
     ): Invoice {
         $issuedInvoice = null;
-        $creditAction = $applyCreditToInvoice ?? $this->applyCreditToInvoice;
 
-        DB::transaction(function () use ($invoice, $actor, $billingPeriod, $creditAction, &$issuedInvoice): void {
+        DB::transaction(function () use ($invoice, $actor, $billingPeriod, &$issuedInvoice): void {
             /* Блокируем инвойс, чтобы его нельзя было выставить одновременно. */
             $lockedInvoice = Invoice::query()
                 ->whereKey($invoice->getKey())
@@ -176,9 +172,6 @@ final class IssueInvoice
                     $subscription->save();
                 }
             }
-
-            /* Применяем кредитный баланс только после успешного выставления. */
-            $creditAction->execute($lockedInvoice, actor: $actor);
 
             $this->activityRecorder->record(
                 $contract

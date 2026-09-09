@@ -11,6 +11,28 @@ use Tests\Feature\Authorization\AuthorizationTestCase;
 
 class InvoiceManualCreditApplicationTest extends AuthorizationTestCase
 {
+    public function test_issue_keeps_manual_credit_action_available_without_auto_applying_it(): void
+    {
+        $invoice = $this->invoice('draft', 'ISSUE-MANUAL-CREDIT');
+        $balance = $invoice->company->creditBalance()->create(['amount' => '50.00']);
+        $this->actingAsPermissions([
+            PermissionName::InvoicesIssue->value,
+            ...$this->creditPermissions(),
+        ]);
+
+        $this->post(route('invoices.issue', $invoice))
+            ->assertRedirect()
+            ->assertSessionHas('success', 'Инвойс успешно выставлен.');
+
+        $this->assertSame('issued', $invoice->fresh()->status);
+        $this->assertSame('50.00', $balance->fresh()->getRawOriginal('amount'));
+        $this->assertDatabaseMissing('payments', ['invoice_id' => $invoice->id]);
+
+        $this->get(route('invoices.show', $invoice))
+            ->assertOk()
+            ->assertSee('Оплатить с баланса');
+    }
+
     public function test_permitted_operator_can_apply_exact_credit_amount_from_invoice_show(): void
     {
         $invoice = $this->invoice('issued', 'MANUAL-CREDIT');

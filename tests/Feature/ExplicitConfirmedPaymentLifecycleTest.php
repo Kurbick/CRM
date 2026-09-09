@@ -268,7 +268,7 @@ class ExplicitConfirmedPaymentLifecycleTest extends AuthorizationTestCase
         $this->assertDatabaseCount('payment_allocations', 1);
     }
 
-    public function test_invoice_issue_applies_same_company_credit_links_payment_and_runs_lifecycle(): void
+    public function test_invoice_issue_does_not_apply_same_company_credit(): void
     {
         $this->actingAsPermissions([PermissionName::InvoicesIssue->value]);
         $invoice = $this->invoiceFixture('draft', ['100.00']);
@@ -281,67 +281,14 @@ class ExplicitConfirmedPaymentLifecycleTest extends AuthorizationTestCase
             ->assertRedirect(route('home'))
             ->assertSessionDoesntHaveErrors();
 
-        $payment = $invoice->payments()->sole();
-        $this->assertSame('confirmed', $payment->status);
-        $this->assertSame('30.00', $payment->getRawOriginal('amount'));
-        $this->assertSame('partially_paid', $invoice->fresh()->status);
+        $this->assertSame('issued', $invoice->fresh()->status);
         $this->assertDatabaseHas('credit_balances', [
             'company_id' => $invoice->company_id,
-            'amount' => '0.00',
-        ]);
-        $this->assertDatabaseHas('credit_balance_entries', [
-            'type' => 'applied',
-            'invoice_id' => $invoice->id,
-            'payment_id' => $payment->id,
             'amount' => '30.00',
         ]);
+        $this->assertDatabaseMissing('payments', ['invoice_id' => $invoice->id]);
+        $this->assertDatabaseMissing('credit_balance_entries', ['invoice_id' => $invoice->id]);
         $this->assertDatabaseMissing('credit_balance_entries', ['type' => 'top_up']);
-        $this->assertDatabaseHas('payment_allocations', [
-            'payment_id' => $payment->id,
-            'amount' => '30.00',
-        ]);
-    }
-
-    public function test_invoice_issue_never_applies_another_company_credit_balance(): void
-    {
-        $this->actingAsPermissions([PermissionName::InvoicesIssue->value]);
-        $invoice = $this->invoiceFixture('draft', ['100.00']);
-        $otherInvoice = $this->invoiceFixture('draft', ['100.00']);
-        $otherBalance = CreditBalance::query()->create([
-            'company_id' => $otherInvoice->company_id,
-            'amount' => '100.00',
-        ]);
-
-        $this->post(route('invoices.issue', $invoice))->assertSessionDoesntHaveErrors();
-
-        $this->assertSame('issued', $invoice->fresh()->status);
-        $this->assertSame('100.00', $otherBalance->fresh()->getRawOriginal('amount'));
-        $this->assertDatabaseMissing('payments', ['invoice_id' => $invoice->id]);
-        $this->assertDatabaseCount('credit_balance_entries', 0);
-    }
-
-    public function test_invoice_issue_writer_failure_rolls_back_credit_entry_link_payment_and_invoice(): void
-    {
-        $this->actingAsPermissions([PermissionName::InvoicesIssue->value]);
-        $invoice = $this->invoiceFixture('draft', ['100.00']);
-        $balance = CreditBalance::query()->create([
-            'company_id' => $invoice->company_id,
-            'amount' => '30.00',
-        ]);
-        $this->bindFailingWriter('issue-writer-failure');
-        $this->withoutExceptionHandling();
-
-        try {
-            $this->post(route('invoices.issue', $invoice));
-            $this->fail('Issue writer failure must propagate.');
-        } catch (RuntimeException $exception) {
-            $this->assertSame('issue-writer-failure', $exception->getMessage());
-        }
-
-        $this->assertSame('draft', $invoice->fresh()->status);
-        $this->assertSame('30.00', $balance->fresh()->getRawOriginal('amount'));
-        $this->assertDatabaseMissing('payments', ['invoice_id' => $invoice->id]);
-        $this->assertDatabaseCount('credit_balance_entries', 0);
         $this->assertDatabaseCount('payment_allocations', 0);
     }
 
@@ -400,9 +347,9 @@ class ExplicitConfirmedPaymentLifecycleTest extends AuthorizationTestCase
             $this->assertContains('invoices', $tables);
             $this->assertContains('invoice_lines', $tables);
             $this->assertContains('payments', $tables);
-            $this->assertContains('credit_balances', $tables);
-            $this->assertContains('credit_balance_entries', $tables);
-            $this->assertContains('payment_allocations', $tables);
+            $this->assertNotContains('credit_balances', $tables);
+            $this->assertNotContains('credit_balance_entries', $tables);
+            $this->assertNotContains('payment_allocations', $tables);
             $this->assertNotContains('companies', $tables);
             $counts[] = DomainQueryRecorder::count($capture['records']);
             $this->assertLessThanOrEqual(24, end($counts));

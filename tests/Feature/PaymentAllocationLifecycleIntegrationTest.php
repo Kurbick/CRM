@@ -202,13 +202,24 @@ class PaymentAllocationLifecycleIntegrationTest extends TestCase
         ]);
     }
 
-    public function test_credit_balance_payment_created_during_issue_gets_allocation(): void
+    public function test_issue_does_not_create_credit_payment_and_manual_application_gets_allocation(): void
     {
         [$invoice, [$line]] = $this->draftInvoiceWithCredit(30);
 
         $this->post(route('invoices.issue', $invoice))
             ->assertSessionDoesntHaveErrors();
 
+        $this->assertSame('issued', $invoice->fresh()->status);
+        $this->assertDatabaseMissing('payments', ['invoice_id' => $invoice->id]);
+        $this->assertDatabaseMissing('credit_balance_entries', ['invoice_id' => $invoice->id]);
+
+        $result = app(ApplyCreditToInvoice::class)->executeManual(
+            $invoice->fresh(),
+            requestedAmountMinor: 3000,
+            expectedCreditBalanceMinor: 3000,
+            expectedAvailableMinor: 10000,
+        );
+        $this->assertTrue($result->applied);
         $payment = $invoice->payments()->where('status', 'confirmed')->firstOrFail();
         $this->assertAllocation($payment, $line, '30.00');
         $this->assertDatabaseHas('credit_balance_entries', [

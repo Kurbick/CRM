@@ -840,6 +840,9 @@ class BillingPeriodPreviewTest extends AuthorizationTestCase
         ])->assertRedirect();
 
         $invoices = Invoice::query()->orderBy('id')->get();
+        $balances = $invoices->mapWithKeys(
+            fn (Invoice $invoice): array => [$invoice->id => $invoice->company->creditBalance()->create(['amount' => '100.00'])]
+        );
         $response = $this->post(route('invoices.billing.issue', ['month' => 9, 'year' => 2026]), [
             'selected_invoices' => [$invoices[0]->id],
             'status' => 'paid',
@@ -859,6 +862,8 @@ class BillingPeriodPreviewTest extends AuthorizationTestCase
             ->assertSee('Открыть');
 
         $this->assertSame('issued', $invoices[0]->fresh()->status);
+        $this->assertSame('100.00', $balances[$invoices[0]->id]->fresh()->getRawOriginal('amount'));
+        $this->assertDatabaseMissing('payments', ['invoice_id' => $invoices[0]->id]);
         $this->assertSame('draft', $invoices[1]->fresh()->status);
         $dashboard = $this->get(route('dashboard'))->assertOk();
         $this->assertSame(1, $dashboard->viewData('billingSummary')['preview']['count']);
@@ -868,6 +873,8 @@ class BillingPeriodPreviewTest extends AuthorizationTestCase
         ])->assertRedirect(route('invoices.billing.result'));
 
         $this->assertSame('issued', $invoices[1]->fresh()->status);
+        $this->assertSame('100.00', $balances[$invoices[1]->id]->fresh()->getRawOriginal('amount'));
+        $this->assertDatabaseMissing('payments', ['invoice_id' => $invoices[1]->id]);
         $this->get(route('dashboard'))->assertOk();
         $this->assertSame(0, $this->get(route('dashboard'))->viewData('billingSummary')['preview']['count']);
         $this->get(route('invoices.billing.preview', ['month' => 9, 'year' => 2026]))

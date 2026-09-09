@@ -101,7 +101,7 @@ class PaymentCreditActivityProducerTest extends AuthorizationTestCase
         ]);
     }
 
-    public function test_automatic_credit_during_issue_has_credit_and_issue_events_without_payment_status_events(): void
+    public function test_issue_with_credit_records_only_the_issue_event(): void
     {
         $invoice = $this->invoice('draft', 'ACT-2C-AUTO-CREDIT');
         $invoice->company->creditBalance()->create(['amount' => '100.00']);
@@ -109,14 +109,14 @@ class PaymentCreditActivityProducerTest extends AuthorizationTestCase
         $this->actingAsPermissions([PermissionName::InvoicesIssue->value]);
         $this->post(route('invoices.issue', $invoice))->assertRedirect();
 
-        $this->assertSame(2, $this->activityCount($invoice));
+        $this->assertSame('issued', $invoice->fresh()->status);
+        $this->assertSame(1, $this->activityCount($invoice));
+        $this->assertSame('100.00', $invoice->company->creditBalance->fresh()->getRawOriginal('amount'));
+        $this->assertDatabaseMissing('payments', ['invoice_id' => $invoice->id]);
+        $this->assertDatabaseMissing('credit_balance_entries', ['invoice_id' => $invoice->id]);
         $this->assertDatabaseHas('company_activity_events', [
             'company_id' => $invoice->company_id,
             'event_type' => CompanyActivityEventType::InvoiceIssued->value,
-        ]);
-        $this->assertDatabaseHas('company_activity_events', [
-            'company_id' => $invoice->company_id,
-            'event_type' => CompanyActivityEventType::CreditApplied->value,
         ]);
         foreach ([
             'payment.confirmed',

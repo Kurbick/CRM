@@ -4,14 +4,14 @@ namespace Tests\Feature;
 
 use App\Models\CreditBalance;
 use App\Models\CreditBalanceEntry;
+use App\Models\CompanyActivityEvent;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
 use App\Models\Payment;
 use App\Models\Subscription;
-use App\Services\InvoicePaymentAllocationWriter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
-use Mockery;
+use Illuminate\Support\Facades\Event;
 use RuntimeException;
 use Tests\Support\DomainQueryRecorder;
 
@@ -19,80 +19,74 @@ class InvoiceCreditApplicationIntegrationTest extends FinancialTestCase
 {
     use RefreshDatabase;
 
-    public function test_issue_applies_partial_credit_and_preserves_web_response(): void
+    public function test_issue_with_available_credit_leaves_credit_and_invoice_unpaid(): void
     {
-        [$invoice, $line, $balance] = $this->fixture('30.00');
+        [$invoice, , $balance] = $this->fixture('30.00');
 
         $this->post(route('invoices.issue', $invoice))
             ->assertRedirect(route('invoices.show', $invoice))
             ->assertSessionHas('success', 'Инвойс успешно выставлен.');
 
-        $payment = $invoice->payments()->where('status', 'confirmed')->sole();
-        $this->assertSame('partially_paid', $invoice->fresh()->status);
-        $this->assertSame('0.00', $balance->fresh()->getRawOriginal('amount'));
-        $this->assertCreditApplication($invoice, $payment, '30.00');
-        $this->assertDatabaseHas('payment_allocations', [
-            'payment_id' => $payment->id,
-            'invoice_line_id' => $line->id,
-            'amount' => '30.00',
-        ]);
+        $this->assertSame('issued', $invoice->fresh()->status);
+        $this->assertSame('30.00', $balance->fresh()->getRawOriginal('amount'));
+        $this->assertDatabaseMissing('payments', ['invoice_id' => $invoice->id]);
+        $this->assertDatabaseMissing('credit_balance_entries', ['invoice_id' => $invoice->id]);
+        $this->assertDatabaseCount('payment_allocations', 0);
     }
 
-    public function test_issue_applies_exact_credit_and_preserves_paid_flash(): void
+    public function test_issue_with_credit_covering_invoice_does_not_mark_it_paid(): void
     {
-        [$invoice, , $balance] = $this->fixture('100.00');
+        [$invoice, , $balance] = $this->fixture('500.00');
 
         $this->post(route('invoices.issue', $invoice))
             ->assertRedirect(route('invoices.show', $invoice))
-            ->assertSessionHas('success', 'Инвойс выставлен и полностью оплачен кредитным балансом.');
+            ->assertSessionHas('success', 'Инвойс успешно выставлен.');
 
-        $this->assertSame('paid', $invoice->fresh()->status);
-        $this->assertSame('0.00', $balance->fresh()->getRawOriginal('amount'));
-        $this->assertCreditApplication($invoice, $invoice->payments()->sole(), '100.00');
+        $this->assertSame('issued', $invoice->fresh()->status);
+        $this->assertSame('500.00', $balance->fresh()->getRawOriginal('amount'));
+        $this->assertDatabaseMissing('payments', ['invoice_id' => $invoice->id]);
+        $this->assertDatabaseMissing('credit_balance_entries', ['invoice_id' => $invoice->id]);
     }
 
-    public function test_issue_splits_excess_credit_without_creating_top_up(): void
+    public function test_issue_with_excess_credit_keeps_the_full_credit_balance(): void
     {
         [$invoice, , $balance] = $this->fixture('130.00');
 
         $this->post(route('invoices.issue', $invoice))->assertSessionDoesntHaveErrors();
 
-        $this->assertSame('paid', $invoice->fresh()->status);
-        $this->assertSame('30.00', $balance->fresh()->getRawOriginal('amount'));
-        $this->assertCreditApplication($invoice, $invoice->payments()->sole(), '100.00');
+        $this->assertSame('issued', $invoice->fresh()->status);
+        $this->assertSame('130.00', $balance->fresh()->getRawOriginal('amount'));
+        $this->assertDatabaseMissing('payments', ['invoice_id' => $invoice->id]);
+        $this->assertDatabaseMissing('credit_balance_entries', ['invoice_id' => $invoice->id]);
     }
 
-    public function test_pending_reservation_caps_real_web_credit_application(): void
+    public function test_pending_reservation_does_not_trigger_credit_application_on_issue(): void
     {
         [$invoice, $line, $balance] = $this->fixture('100.00');
         $pending = $this->rawPayment($invoice, 'pending', '70.00');
 
         $this->post(route('invoices.issue', $invoice))->assertSessionDoesntHaveErrors();
 
-        $confirmed = $invoice->payments()->where('status', 'confirmed')->sole();
-        $this->assertSame('30.00', $confirmed->getRawOriginal('amount'));
         $this->assertSame('pending', $pending->fresh()->status);
         $this->assertSame('70.00', $pending->getRawOriginal('amount'));
-        $this->assertSame('partially_paid', $invoice->fresh()->status);
-        $this->assertSame('70.00', $balance->fresh()->getRawOriginal('amount'));
-        $this->assertCreditApplication($invoice, $confirmed, '30.00');
-        $this->assertDatabaseHas('payment_allocations', [
-            'payment_id' => $confirmed->id,
-            'invoice_line_id' => $line->id,
-            'amount' => '30.00',
+        $this->assertSame('issued', $invoice->fresh()->status);
+        $this->assertSame('100.00', $balance->fresh()->getRawOriginal('amount'));
+        $this->assertDatabaseMissing('payments', [
+            'invoice_id' => $invoice->id,
+            'status' => 'confirmed',
         ]);
-        $this->assertDatabaseMissing('payment_allocations', ['payment_id' => $pending->id]);
+        $this->assertDatabaseMissing('credit_balance_entries', ['invoice_id' => $invoice->id]);
 
         $this->patch(route('payments.confirm', $pending))->assertSessionDoesntHaveErrors();
 
         $this->assertSame('confirmed', $pending->fresh()->status);
-        $this->assertSame('paid', $invoice->fresh()->status);
-        $this->assertSame('70.00', $balance->fresh()->getRawOriginal('amount'));
-        $this->assertSame('100.00', DB::table('payment_allocations')
-            ->whereIn('payment_id', [$confirmed->id, $pending->id])
+        $this->assertSame('partially_paid', $invoice->fresh()->status);
+        $this->assertSame('100.00', $balance->fresh()->getRawOriginal('amount'));
+        $this->assertSame('70.00', DB::table('payment_allocations')
+            ->where('payment_id', $pending->id)
             ->sum('amount'));
-        $this->assertSame(2, DB::table('payment_allocations')
-            ->whereIn('payment_id', [$confirmed->id, $pending->id])
+        $this->assertSame(1, DB::table('payment_allocations')
+            ->where('payment_id', $pending->id)
             ->count());
     }
 
@@ -143,7 +137,7 @@ class InvoiceCreditApplicationIntegrationTest extends FinancialTestCase
         $this->assertDatabaseMissing('credit_balance_entries', ['invoice_id' => $invoice->id]);
     }
 
-    public function test_existing_orphan_entry_is_not_relinked_when_issue_applies_fresh_credit(): void
+    public function test_existing_orphan_credit_entry_is_not_relinked_when_issue_does_not_apply_credit(): void
     {
         [$invoice, , $balance] = $this->fixture('100.00');
         $orphan = $balance->entries()->create([
@@ -155,17 +149,11 @@ class InvoiceCreditApplicationIntegrationTest extends FinancialTestCase
 
         $this->post(route('invoices.issue', $invoice))->assertSessionDoesntHaveErrors();
 
-        $this->assertSame('paid', $invoice->fresh()->status);
-        $this->assertSame('0.00', $balance->fresh()->getRawOriginal('amount'));
+        $this->assertSame('issued', $invoice->fresh()->status);
+        $this->assertSame('100.00', $balance->fresh()->getRawOriginal('amount'));
         $this->assertNull($orphan->fresh()->payment_id);
-        $payment = Payment::query()->where('invoice_id', $invoice->id)->sole();
-        $this->assertDatabaseHas('credit_balance_entries', [
-            'invoice_id' => $invoice->id,
-            'payment_id' => $payment->id,
-            'type' => 'applied',
-            'amount' => '100.00',
-        ]);
-        $this->assertSame(2, CreditBalanceEntry::query()->where('invoice_id', $invoice->id)->count());
+        $this->assertDatabaseMissing('payments', ['invoice_id' => $invoice->id]);
+        $this->assertSame(1, CreditBalanceEntry::query()->where('invoice_id', $invoice->id)->count());
     }
 
     public function test_existing_confirmed_payment_still_blocks_issue_before_credit_mutation(): void
@@ -184,16 +172,19 @@ class InvoiceCreditApplicationIntegrationTest extends FinancialTestCase
     public function test_outer_issue_transaction_rolls_back_credit_and_invoice_mutations_and_retry_succeeds(): void
     {
         [$invoice, , $balance] = $this->fixture('30.00', '2026-08-31');
-        $writer = Mockery::mock(InvoicePaymentAllocationWriter::class);
-        $writer->shouldReceive('synchronize')->once()->andThrow(new RuntimeException('web-issue-writer-failure'));
-        $this->app->instance(InvoicePaymentAllocationWriter::class, $writer);
+        $eventName = 'eloquent.creating: '.CompanyActivityEvent::class;
+        Event::listen($eventName, static function (): never {
+            throw new RuntimeException('web-issue-activity-failure');
+        });
         $this->withoutExceptionHandling();
 
         try {
             $this->post(route('invoices.issue', $invoice));
             $this->fail('Writer failure must propagate.');
         } catch (RuntimeException $exception) {
-            $this->assertSame('web-issue-writer-failure', $exception->getMessage());
+            $this->assertSame('web-issue-activity-failure', $exception->getMessage());
+        } finally {
+            Event::forget($eventName);
         }
 
         $this->assertSame('draft', $invoice->fresh()->status);
@@ -203,15 +194,14 @@ class InvoiceCreditApplicationIntegrationTest extends FinancialTestCase
         $this->assertDatabaseMissing('credit_balance_entries', ['invoice_id' => $invoice->id]);
         $this->assertDatabaseCount('payment_allocations', 0);
 
-        $this->app->forgetInstance(InvoicePaymentAllocationWriter::class);
         $this->withExceptionHandling();
         $this->post(route('invoices.issue', $invoice))->assertSessionDoesntHaveErrors();
 
-        $this->assertSame('partially_paid', $invoice->fresh()->status);
-        $this->assertSame('0.00', $balance->fresh()->getRawOriginal('amount'));
-        $this->assertSame(1, $invoice->payments()->count());
-        $this->assertSame(1, CreditBalanceEntry::query()->where('invoice_id', $invoice->id)->count());
-        $this->assertDatabaseCount('payment_allocations', 1);
+        $this->assertSame('issued', $invoice->fresh()->status);
+        $this->assertSame('30.00', $balance->fresh()->getRawOriginal('amount'));
+        $this->assertSame(0, $invoice->payments()->count());
+        $this->assertSame(0, CreditBalanceEntry::query()->where('invoice_id', $invoice->id)->count());
+        $this->assertDatabaseCount('payment_allocations', 0);
     }
 
     public function test_outer_failure_rolls_back_subscription_schedule_and_occurrence_key(): void
@@ -253,9 +243,10 @@ class InvoiceCreditApplicationIntegrationTest extends FinancialTestCase
             'company_id' => $companyId,
             'amount' => '30.00',
         ]);
-        $writer = Mockery::mock(InvoicePaymentAllocationWriter::class);
-        $writer->shouldReceive('synchronize')->once()->andThrow(new RuntimeException('subscription-rollback'));
-        $this->app->instance(InvoicePaymentAllocationWriter::class, $writer);
+        $eventName = 'eloquent.creating: '.CompanyActivityEvent::class;
+        Event::listen($eventName, static function (): never {
+            throw new RuntimeException('subscription-rollback');
+        });
         $this->withoutExceptionHandling();
 
         try {
@@ -263,6 +254,8 @@ class InvoiceCreditApplicationIntegrationTest extends FinancialTestCase
             $this->fail('Writer failure must propagate.');
         } catch (RuntimeException $exception) {
             $this->assertSame('subscription-rollback', $exception->getMessage());
+        } finally {
+            Event::forget($eventName);
         }
 
         $this->assertSame('draft', $invoice->fresh()->status);
@@ -298,13 +291,16 @@ class InvoiceCreditApplicationIntegrationTest extends FinancialTestCase
             ];
         }
 
-        // The obsolete one-active-application lookup was removed; the Issue
-        // flow remains bounded at 15 domain reads for every input size.
-        $this->assertSame([15, 15, 15], array_column($profiles, 'reads'));
-        $this->assertSame([7, 7, 12], array_column($profiles, 'writes'));
+        // Issue does not inspect or mutate Credit Balance; the canonical
+        // lifecycle remains bounded independently of pending-payment/line size.
+        $readCounts = array_column($profiles, 'reads');
+        $writeCounts = array_column($profiles, 'writes');
+        $this->assertLessThanOrEqual(7, max($readCounts));
+        $this->assertLessThanOrEqual(12, max($writeCounts));
         $this->assertSame($profiles[0]['reads'], $profiles[1]['reads']);
         $this->assertSame($profiles[0]['reads'], $profiles[2]['reads']);
-        $this->assertGreaterThanOrEqual($profiles[0]['writes'], $profiles[2]['writes']);
+        $this->assertSame($profiles[0]['writes'], $profiles[1]['writes']);
+        $this->assertGreaterThanOrEqual($profiles[2]['writes'], $profiles[0]['writes']);
         foreach ($profiles as $profile) {
             $this->assertCount(0, array_filter(
                 $profile['readSql'],
