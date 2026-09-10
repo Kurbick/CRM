@@ -81,11 +81,59 @@
                     <p class="mt-1 text-xl font-semibold text-slate-900">{{ number_format($overview['total_invoiced'], 2) }} ₼</p>
                 </div>
 
-                <div data-testid="dashboard-financial-overdue" class="px-4 py-4 sm:px-5">
-                    <p class="text-xs font-medium uppercase tracking-wide text-slate-500">{{ __('dashboard.metrics.overdue') }}</p>
-                    <p class="mt-1 text-xl font-semibold {{ $overview['overdue_count'] > 0 ? 'text-red-600' : 'text-slate-900' }}">{{ $overview['overdue_count'] }}</p>
-                    <p class="mt-1 text-xs text-slate-400">{{ number_format($overview['overdue_amount'], 2) }} ₼</p>
-                </div>
+                @if ($abilities['company_debt'] && (int) $overview['overdue_count'] > 0 && $overdueBreakdown->isNotEmpty())
+                    <div data-testid="dashboard-financial-overdue" class="relative px-4 py-4 sm:px-5">
+                        <div class="group relative inline-block">
+                            <button type="button"
+                                data-testid="dashboard-financial-overdue-trigger"
+                                aria-describedby="dashboard-overdue-popover"
+                                class="block text-left focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2">
+                                <span class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-slate-500">
+                                    {{ __('dashboard.metrics.overdue') }}
+                                    <span aria-hidden="true" class="text-sm leading-none text-slate-400">⌄</span>
+                                </span>
+                                <span class="mt-1 block text-xl font-semibold text-red-600">{{ $overview['overdue_count'] }}</span>
+                                <span class="mt-1 block text-xs text-slate-400">{{ number_format($overview['overdue_amount'], 2) }} ₼</span>
+                            </button>
+
+                            <div id="dashboard-overdue-popover"
+                                role="dialog"
+                                aria-labelledby="dashboard-overdue-popover-title"
+                                data-testid="dashboard-overdue-popover"
+                                class="invisible absolute left-0 top-full z-30 w-[26rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-md border border-slate-200 bg-white opacity-0 shadow-xl transition group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
+                                <div class="border-b border-slate-200 px-4 py-3">
+                                    <h3 id="dashboard-overdue-popover-title" class="text-sm font-semibold text-slate-900">
+                                        {{ __('dashboard.overdue_breakdown.title') }}
+                                    </h3>
+                                </div>
+
+                                <div class="py-1">
+                                    @foreach ($overdueBreakdown as $overdueCompany)
+                                        <a href="{{ route('companies.show', $overdueCompany['model']) }}"
+                                            class="group/overdue-row flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
+                                            aria-label="{{ __('dashboard.overdue_breakdown.open_company', ['name' => $overdueCompany['name']]) }}">
+                                            <span class="min-w-0 flex-1 truncate font-medium">{{ $overdueCompany['name'] }}</span>
+                                            <span class="shrink-0 font-semibold tabular-nums text-slate-800">{{ number_format($overdueCompany['overdue_amount'], 2) }} ₼</span>
+                                            <span aria-hidden="true" class="shrink-0 text-lg leading-none text-slate-400 transition group-hover/overdue-row:translate-x-0.5 group-hover/overdue-row:text-slate-600">›</span>
+                                        </a>
+                                    @endforeach
+                                </div>
+
+                                <a href="{{ route('invoices.index', ['overdue' => 1]) }}"
+                                    class="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-sm font-medium text-blue-700 transition hover:bg-slate-50 hover:text-blue-800 focus:bg-slate-50 focus:outline-none">
+                                    <span>{{ __('dashboard.overdue_breakdown.show_all') }}</span>
+                                    <span aria-hidden="true" class="text-lg leading-none">→</span>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                @else
+                    <div data-testid="dashboard-financial-overdue" class="px-4 py-4 sm:px-5">
+                        <p class="text-xs font-medium uppercase tracking-wide text-slate-500">{{ __('dashboard.metrics.overdue') }}</p>
+                        <p class="mt-1 text-xl font-semibold {{ $overview['overdue_count'] > 0 ? 'text-red-600' : 'text-slate-900' }}">{{ $overview['overdue_count'] }}</p>
+                        <p class="mt-1 text-xs text-slate-400">{{ number_format($overview['overdue_amount'], 2) }} ₼</p>
+                    </div>
+                @endif
             @endif
 
             @if ($abilities['payments'])

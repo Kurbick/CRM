@@ -58,4 +58,19 @@ class DashboardSummaryViewTest extends TestCase
         $this->assertStringContainsString('w-[26rem]', $source);
         $this->assertStringContainsString('border-t border-slate-200', $source);
     }
+
+    public function test_dashboard_overdue_kpi_reuses_the_financial_popover_pattern(): void
+    {
+        $source = file_get_contents(resource_path('views/dashboard.blade.php'));
+
+        $this->assertStringContainsString('data-testid="dashboard-financial-overdue-trigger"', $source);
+        $this->assertStringContainsString('data-testid="dashboard-overdue-popover"', $source);
+        $this->assertStringContainsString("__('dashboard.overdue_breakdown.title')", $source);
+        $this->assertStringContainsString("route('companies.show', \$overdueCompany['model'])", $source);
+        $this->assertStringContainsString("route('invoices.index', ['overdue' => 1])", $source);
+        $this->assertStringNotContainsString('oldest_overdue_days', $source);
+        $this->assertStringNotContainsString('dashboard.overdue_breakdown.days', $source);
+        $this->assertStringContainsString('group-focus-within:visible', $source);
+        $this->assertStringContainsString('w-[26rem]', $source);
+    }
 }

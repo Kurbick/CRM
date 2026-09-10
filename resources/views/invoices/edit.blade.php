@@ -59,7 +59,7 @@
         : '—';
 @endphp
 <div class="mb-5">
-    <a href="{{ route('invoices.show', ['invoice' => $invoice, ...$companyContext['query']]) }}" class="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-900">
+    <a href="{{ route('invoices.show', ['invoice' => $invoice, ...$editQuery]) }}" class="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-900">
         <span aria-hidden="true">←</span>
         {{ __('invoices.actions.back_to_invoice') }}
     </a>
@@ -78,7 +78,7 @@
     </div>
 @endif
 
-<form method="POST" action="{{ route('invoices.update', $invoice) }}" x-data="{
+<form method="POST" action="{{ route('invoices.update', ['invoice' => $invoice, ...$editQuery]) }}" x-data="{
     lines: @js($editLines),
     issueDate: @js(old('issue_date', \Illuminate\Support\Carbon::parse($invoice->issue_date)->toDateString())),
     invoiceSequence: @js(old('invoice_number_sequence', $invoice->invoice_number_sequence)),
@@ -276,7 +276,7 @@
             </div>
             <div class="flex flex-wrap items-center gap-3">
                 <button type="submit" :disabled="!lines.length" class="bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50">{{ __('invoices.actions.save') }}</button>
-                <a href="{{ route('invoices.show', ['invoice' => $invoice, ...$companyContext['query']]) }}" class="border border-gray-200">{{ __('invoices.actions.cancel') }}</a>
+                <a href="{{ route('invoices.show', ['invoice' => $invoice, ...$editQuery]) }}" class="border border-gray-200">{{ __('invoices.actions.cancel') }}</a>
             </div>
         </div>
     </div>

@@ -30,6 +30,11 @@ return [
         'no_debt' => 'Borc yoxdur',
         'open_company' => ':name şirkətinin borcunu aç',
     ],
+    'overdue_breakdown' => [
+        'title' => 'Vaxtı keçmiş borcun strukturu',
+        'show_all' => 'Bütün vaxtı keçmiş borclara bax',
+        'open_company' => ':name şirkətinin gecikmiş borcunu aç',
+    ],
     'table' => [
         'company' => 'Şirkət',
         'status' => 'Status',

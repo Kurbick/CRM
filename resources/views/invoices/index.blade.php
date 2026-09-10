@@ -43,6 +43,9 @@
 
             return number_format($value, 2, ',', ' ') . ' ₼';
         };
+        $invoiceIndexReturnQuery = request()->getQueryString() !== null
+            ? ['return_to' => request()->getRequestUri()]
+            : [];
     @endphp
 
     <div class="mb-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
@@ -374,11 +377,11 @@
                             $pendingAmount = (float) ($invoice->pending_amount ?? 0);
                             $paymentSource = $invoicePaymentSources->get($invoice->id);
                         @endphp
-                        <x-tables.clickable-row :url="route('invoices.show', $invoice)" :label="__('invoices.index.open', ['number' => $invoice->invoice_number])">
+                        <x-tables.clickable-row :url="route('invoices.show', ['invoice' => $invoice, ...$invoiceIndexReturnQuery])" :label="__('invoices.index.open', ['number' => $invoice->invoice_number])">
 
                             {{-- Номер --}}
                             <td>
-                                <a href="{{ route('invoices.show', $invoice) }}"
+                                <a href="{{ route('invoices.show', ['invoice' => $invoice, ...$invoiceIndexReturnQuery]) }}"
                                     class="crm-table-primary-link crm-table-number focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
                                     {{ $invoice->invoice_number }}
                                 </a>

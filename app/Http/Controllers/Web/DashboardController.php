@@ -18,7 +18,7 @@ use Illuminate\View\View;
 
 final class DashboardController extends Controller
 {
-    private const MAX_DEBT_BREAKDOWN_COMPANIES = 7;
+    private const MAX_FINANCIAL_BREAKDOWN_COMPANIES = 7;
 
     public function index(
         DashboardFinancials $financials,
@@ -46,13 +46,14 @@ final class DashboardController extends Controller
 
         $overview = [];
         $billingSummary = null;
+        $financialDate = now()->toDateString();
 
         if ($abilities['billing']) {
             $billingSummary = $billingPreview->dashboardSummary(CarbonImmutable::now()->startOfMonth());
         }
 
         if ($abilities['invoices'] || $abilities['payments']) {
-            $financialOverview = $financials->overview(now()->toDateString());
+            $financialOverview = $financials->overview($financialDate);
 
             if ($abilities['invoices']) {
                 $overview['total_invoiced'] = $financialOverview['total_invoiced'];
@@ -92,6 +93,7 @@ final class DashboardController extends Controller
 
         $companies = collect();
         $debtBreakdown = collect();
+        $overdueBreakdown = collect();
 
         if ($abilities['companies']) {
             $companyQuery = Company::query()
@@ -132,7 +134,7 @@ final class DashboardController extends Controller
 
             $companyModels = $companyQuery->get();
             $companyFinancials = ($abilities['company_debt'] || $abilities['company_invoices'])
-                ? $financials->byCompany($companyModels->pluck('id'), now()->toDateString())
+                ? $financials->byCompany($companyModels->pluck('id'), $financialDate)
                 : collect();
 
             $companies = $companyModels->map(function (Company $company) use ($abilities, $companyFinancials): array {
@@ -143,7 +145,9 @@ final class DashboardController extends Controller
                 ];
 
                 if ($abilities['company_debt']) {
-                    $row['total_debt'] = $companyFinancials->get($company->id)?->total_debt ?? '0.00';
+                    $financialRow = $companyFinancials->get($company->id);
+                    $row['total_debt'] = $financialRow?->total_debt ?? '0.00';
+                    $row['overdue_amount'] = $financialRow?->overdue_amount ?? '0.00';
                 }
 
                 if ($abilities['company_invoices']) {
@@ -165,12 +169,32 @@ final class DashboardController extends Controller
                     ->filter(fn (array $company): bool => (float) ($company['total_debt'] ?? 0) > 0
                         && Gate::allows('view', $company['model']))
                     ->sortByDesc(fn (array $company): float => (float) $company['total_debt'])
-                    ->take(self::MAX_DEBT_BREAKDOWN_COMPANIES)
+                    ->take(self::MAX_FINANCIAL_BREAKDOWN_COMPANIES)
                     ->values()
                     ->map(fn (array $company): array => [
                         'model' => $company['model'],
                         'name' => $company['name'],
                         'total_debt' => $company['total_debt'],
+                    ]);
+            }
+
+            if ($abilities['company_debt']) {
+                $overdueBreakdown = $companies
+                    ->filter(fn (array $company): bool => (float) ($company['overdue_amount'] ?? 0) > 0
+                        && Gate::allows('view', $company['model']))
+                    ->sort(function (array $left, array $right): int {
+                        $amountComparison = (float) $right['overdue_amount'] <=> (float) $left['overdue_amount'];
+
+                        return $amountComparison !== 0
+                            ? $amountComparison
+                            : strcasecmp($left['name'], $right['name']);
+                    })
+                    ->take(self::MAX_FINANCIAL_BREAKDOWN_COMPANIES)
+                    ->values()
+                    ->map(fn (array $company): array => [
+                        'model' => $company['model'],
+                        'name' => $company['name'],
+                        'overdue_amount' => $company['overdue_amount'],
                     ]);
             }
         }
@@ -186,6 +210,7 @@ final class DashboardController extends Controller
             'overview',
             'companies',
             'debtBreakdown',
+            'overdueBreakdown',
             'hasDomainBlocks',
             'billingSummary'
         ));

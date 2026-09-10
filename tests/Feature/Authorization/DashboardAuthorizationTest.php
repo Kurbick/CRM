@@ -144,6 +144,8 @@ class DashboardAuthorizationTest extends AuthorizationTestCase
             ->assertSee('Просрочено')
             ->assertDontSee('Оплачено')
             ->assertDontSee('Общий долг')
+            ->assertDontSee('data-testid="dashboard-financial-overdue-trigger"', false)
+            ->assertDontSee('data-testid="dashboard-overdue-popover"', false)
             ->assertDontSee(self::COMPANY_NAME);
         $this->assertContains('payments', DomainQueryRecorder::tables($invoiceCapture['records']));
 

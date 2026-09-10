@@ -45,7 +45,7 @@ class ClickableTableRowTest extends TestCase
 
         $this->assertStringContainsString('<x-tables.clickable-row', $invoices);
         $this->assertStringNotContainsString('aria-label="Открыть счёт', $invoices);
-        $this->assertStringContainsString("route('invoices.show', \$invoice)", $invoices);
+        $this->assertStringContainsString("route('invoices.show', ['invoice' => \$invoice, ...\$invoiceIndexReturnQuery])", $invoices);
         $this->assertStringContainsString("route('companies.show'", $invoices);
         $this->assertStringNotContainsString("route('invoices.edit'", $invoices);
     }

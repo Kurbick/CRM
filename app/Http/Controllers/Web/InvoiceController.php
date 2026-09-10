@@ -151,8 +151,7 @@ class InvoiceController extends Controller
             $query->whereIn('status', ['issued', 'partially_paid']);
         }
         if ($activeOverdue) {
-            $query->whereIn('status', ['issued'.'', 'partially_paid'])
-                ->where('due_date', '<', now()->toDateString());
+            $this->dashboardFinancials->constrainOverdue($query, now()->toDateString());
         }
 
         $sort = $request->input('sort', 'issue_date');
@@ -689,6 +688,10 @@ class InvoiceController extends Controller
             : ($billingPreviewContext !== null
                 ? ['billing_preview' => 1, ...$billingPreviewContext]
                 : []);
+        $invoiceIndexReturnUrl = $this->invoiceIndexReturnUrl($request);
+        $invoiceIndexReturnQuery = $invoiceIndexReturnUrl !== null
+            ? ['return_to' => $invoiceIndexReturnUrl]
+            : [];
 
         $viewData = compact(
             'invoice',
@@ -702,6 +705,8 @@ class InvoiceController extends Controller
             'billingResultBackUrl',
             'billingPreviewBackUrl',
             'billingDeleteQuery',
+            'invoiceIndexReturnUrl',
+            'invoiceIndexReturnQuery',
         );
         $viewData += compact(
             'canApplyCredit',
@@ -883,11 +888,15 @@ class InvoiceController extends Controller
         Gate::authorize('update', $invoice);
 
         $companyContext = $this->invoiceCompanyContext($request, $invoice);
+        $invoiceIndexReturnQuery = $this->invoiceIndexReturnQuery($request);
+        $editQuery = $companyContext['active']
+            ? $companyContext['query']
+            : $invoiceIndexReturnQuery;
         $invoice->loadMissing('payments:id,invoice_id,status');
         $editability = $this->editabilityService->evaluate($invoice);
 
         if (! $editability['editable']) {
-            return $this->mutationRedirect($invoice, $companyContext['query'])
+            return $this->mutationRedirect($invoice, $editQuery)
                 ->with('error', $this->editabilityMessage($editability['reason']));
         }
 
@@ -900,7 +909,7 @@ class InvoiceController extends Controller
         ]);
 
         $invoice->loadMissing('issuerOrganization');
-        return view('invoices.edit', compact('invoice', 'companyContext', 'editability'));
+        return view('invoices.edit', compact('invoice', 'companyContext', 'editability', 'editQuery'));
     }
 
     /**
@@ -913,6 +922,9 @@ class InvoiceController extends Controller
         Gate::authorize('update', $invoice);
 
         $companyContext = $this->invoiceCompanyContext($request, $invoice);
+        $returnQuery = $companyContext['active']
+            ? $companyContext['query']
+            : $this->invoiceIndexReturnQuery($request);
         $validated = $request->validate([
             'invoice_number' => ['nullable', 'string', 'max:50', 'unique:invoices,invoice_number,'.$invoice->id],
             'invoice_number_sequence' => ['nullable', 'integer', 'min:1'],
@@ -953,14 +965,14 @@ class InvoiceController extends Controller
         } catch (ValidationException $exception) {
             $errors = $exception->errors();
             if (array_key_exists('invoice', $errors)) {
-                return $this->mutationRedirect($invoice, $companyContext['query'])
+                return $this->mutationRedirect($invoice, $returnQuery)
                     ->with('error', (string) ($errors['invoice'][0] ?? __('invoices.errors.edit_forbidden')));
             }
 
             throw $exception;
         }
 
-        return $this->mutationRedirect($invoice, $companyContext['query'])
+        return $this->mutationRedirect($invoice, $returnQuery)
             ->with('success', __('invoices.flash.updated'));
     }
 
@@ -1159,6 +1171,7 @@ class InvoiceController extends Controller
         $billingPreviewContext = $billingResultContext === null
             ? $this->billingPreviewContext($request)
             : null;
+        $invoiceIndexReturnUrl = $this->invoiceIndexReturnUrl($request);
 
         // Resolve the authorized Company destination before the invoice is removed.
         $companyContext = $this->invoiceCompanyContext($request, $invoice);
@@ -1174,9 +1187,11 @@ class InvoiceController extends Controller
             ? redirect()->route('invoices.billing.result')
             : ($billingPreviewContext !== null
                 ? redirect()->route('invoices.billing.preview', $billingPreviewContext)
-                : ($companyRedirect ?? (Gate::allows('viewAny', Invoice::class)
-                    ? redirect()->route('invoices.index')
-                    : redirect()->to($this->landingUrl()))));
+                : ($companyRedirect ?? ($invoiceIndexReturnUrl !== null
+                    ? redirect()->to($invoiceIndexReturnUrl)
+                    : (Gate::allows('viewAny', Invoice::class)
+                        ? redirect()->route('invoices.index')
+                        : redirect()->to($this->landingUrl())))));
 
         return $redirect
             ->with(
@@ -1261,6 +1276,32 @@ class InvoiceController extends Controller
                 ? ['tab' => $tab]
                 : []),
         ];
+    }
+
+    private function invoiceIndexReturnUrl(Request $request): ?string
+    {
+        $returnTo = $request->query('return_to');
+        if (! is_string($returnTo) || $returnTo === '') {
+            return null;
+        }
+
+        $parts = parse_url($returnTo);
+        $invoiceIndexPath = parse_url(route('invoices.index'), PHP_URL_PATH);
+        if (! is_array($parts)
+            || ($parts['path'] ?? null) !== $invoiceIndexPath
+            || isset($parts['scheme'], $parts['host'], $parts['port'], $parts['user'], $parts['pass'], $parts['fragment'])) {
+            return null;
+        }
+
+        return $parts['path'].(array_key_exists('query', $parts) ? '?'.$parts['query'] : '');
+    }
+
+    /** @return array<string, string> */
+    private function invoiceIndexReturnQuery(Request $request): array
+    {
+        $returnTo = $this->invoiceIndexReturnUrl($request);
+
+        return $returnTo !== null ? ['return_to' => $returnTo] : [];
     }
 
     /**

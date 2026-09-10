@@ -39,7 +39,9 @@
         @php
             $billingBackUrl = $billingPreviewBackUrl
                 ?? $billingResultBackUrl
-                ?? ($canReturnToCompany ? $companyContext['company_url'] : route('invoices.index'));
+                ?? ($canReturnToCompany
+                    ? $companyContext['company_url']
+                    : ($invoiceIndexReturnUrl ?? route('invoices.index')));
             $billingBackLabel = $billingPreviewBackUrl
                 ? __('invoices.actions.back_to_billing_preview')
                 : ($billingResultBackUrl
@@ -150,7 +152,7 @@
 
                 @can('update', $invoice)
                     @if ($editability['editable'])
-                        <a href="{{ route('invoices.edit', $invoice) }}{{ $companyContext['active'] ? '?'.http_build_query($companyContext['query']) : '' }}"
+                        <a href="{{ route('invoices.edit', ['invoice' => $invoice, ...($companyContext['active'] ? $companyContext['query'] : $invoiceIndexReturnQuery)]) }}"
                             class="crm-light-action">
                             {{ __('invoices.actions.edit') }}
                         </a>
@@ -164,6 +166,9 @@
                             @csrf
                             @method('DELETE')
                             @foreach ($billingDeleteQuery as $key => $value)
+                                <input type="hidden" name="{{ $key }}" value="{{ $value }}">
+                            @endforeach
+                            @foreach ($invoiceIndexReturnQuery as $key => $value)
                                 <input type="hidden" name="{{ $key }}" value="{{ $value }}">
                             @endforeach
                             <button type="submit"

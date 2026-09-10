@@ -24,9 +24,11 @@ class InvoiceIndexViewTest extends TestCase
         $source = file_get_contents(resource_path('views/invoices/index.blade.php'));
 
         $this->assertStringContainsString(
-            '<x-tables.clickable-row :url="route(\'invoices.show\', $invoice)"',
+            '<x-tables.clickable-row :url="route(\'invoices.show\', [\'invoice\' => $invoice, ...$invoiceIndexReturnQuery])"',
             $source
         );
+        $this->assertStringContainsString("request()->getRequestUri()", $source);
+        $this->assertStringContainsString("'return_to'", $source);
         $this->assertStringNotContainsString('aria-label="Открыть счёт', $source);
         $this->assertStringNotContainsString('h-[18px] w-[18px]', $source);
         $this->assertStringNotContainsString('Открыть →', $source);

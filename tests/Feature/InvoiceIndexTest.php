@@ -254,6 +254,48 @@ class InvoiceIndexTest extends TestCase
             ->assertDontSee('INV-CURRENT-ISSUED');
     }
 
+    public function test_overdue_filter_uses_outstanding_amount_and_canonical_invoice_statuses(): void
+    {
+        $issued = $this->invoice([
+            'status' => 'issued',
+            'due_date' => now()->subDay()->toDateString(),
+            'invoice_number' => 'INV-OVERDUE-OUTSTANDING',
+        ]);
+        $partial = $this->invoice([
+            'status' => 'partially_paid',
+            'due_date' => now()->subDays(2)->toDateString(),
+            'invoice_number' => 'INV-OVERDUE-PARTIAL',
+        ]);
+        $paidStatusWithBalance = $this->invoice([
+            'status' => 'paid',
+            'due_date' => now()->subDays(3)->toDateString(),
+            'invoice_number' => 'INV-OVERDUE-PAID-BALANCE',
+        ]);
+        $fullyPaid = $this->invoice([
+            'status' => 'issued',
+            'due_date' => now()->subDays(4)->toDateString(),
+            'invoice_number' => 'INV-OVERDUE-FULLY-PAID',
+        ]);
+        $future = $this->invoice([
+            'status' => 'issued',
+            'due_date' => now()->addDay()->toDateString(),
+            'invoice_number' => 'INV-FUTURE-OUTSTANDING',
+        ]);
+
+        Payment::query()->create(['invoice_id' => $partial->id, 'company_id' => $partial->company_id, 'payment_date' => now()->toDateString(), 'amount' => '25.00', 'payment_method' => 'transfer', 'status' => 'confirmed']);
+        Payment::query()->create(['invoice_id' => $paidStatusWithBalance->id, 'company_id' => $paidStatusWithBalance->company_id, 'payment_date' => now()->toDateString(), 'amount' => '40.00', 'payment_method' => 'transfer', 'status' => 'confirmed']);
+        Payment::query()->create(['invoice_id' => $fullyPaid->id, 'company_id' => $fullyPaid->company_id, 'payment_date' => now()->toDateString(), 'amount' => '100.00', 'payment_method' => 'transfer', 'status' => 'confirmed']);
+
+        $response = $this->get(route('invoices.index', ['overdue' => 1]))->assertOk();
+
+        $response
+            ->assertSee($issued->invoice_number)
+            ->assertSee($partial->invoice_number)
+            ->assertSee($paidStatusWithBalance->invoice_number)
+            ->assertDontSee($fullyPaid->invoice_number)
+            ->assertDontSee($future->invoice_number);
+    }
+
     public function test_debt_filter_uses_outstanding_amount_and_canonical_invoice_statuses(): void
     {
         $issued = $this->invoice(['status' => 'issued', 'invoice_number' => 'INV-DEBT-ISSUED']);
@@ -274,6 +316,80 @@ class InvoiceIndexTest extends TestCase
             ->assertDontSee('INV-DEBT-FULLY-PAID')
             ->assertDontSee('INV-DEBT-DRAFT')
             ->assertDontSee('INV-DEBT-CANCELLED');
+    }
+
+    public function test_invoice_show_preserves_the_exact_filtered_index_context(): void
+    {
+        $companyId = $this->company('Return Context Company');
+        $invoice = $this->invoice([
+            'company_id' => $companyId,
+            'status' => 'issued',
+            'due_date' => now()->subDay()->toDateString(),
+            'invoice_number' => 'INV-RETURN-CONTEXT',
+        ]);
+        $invoice->lines()->create(['description' => 'Return context line', 'amount' => '100.00']);
+        foreach (range(1, 10) as $number) {
+            $this->invoice([
+                'company_id' => $companyId,
+                'status' => 'issued',
+                'due_date' => now()->subDay()->toDateString(),
+                'invoice_number' => 'INV-RETURN-CONTEXT-'.$number,
+            ]);
+        }
+        $indexUrl = route('invoices.index', [
+            'overdue' => 1,
+            'debt' => 1,
+            'company_id' => $companyId,
+            'search' => 'Return Context Company',
+            'statuses' => ['issued'],
+            'sort' => 'due_date',
+            'direction' => 'asc',
+            'page' => 2,
+        ]);
+        $indexReturnUrl = parse_url($indexUrl, PHP_URL_PATH).'?'.parse_url($indexUrl, PHP_URL_QUERY);
+        $showUrl = route('invoices.show', ['invoice' => $invoice, 'return_to' => $indexReturnUrl]);
+
+        $this->get($indexUrl)
+            ->assertOk()
+            ->assertSee($showUrl, false);
+
+        $this->get($showUrl)
+            ->assertOk()
+            ->assertSee('href="'.htmlspecialchars($indexReturnUrl, ENT_QUOTES, 'UTF-8').'"', false)
+            ->assertSee('Назад к инвойсам');
+    }
+
+    public function test_invoice_index_return_context_rejects_external_and_other_local_paths(): void
+    {
+        $invoice = $this->invoice(['status' => 'draft', 'total_amount' => '0.00', 'invoice_number' => 'INV-SAFE-RETURN']);
+        $fallback = route('invoices.index');
+
+        foreach (['https://example.com', '/admin/users'] as $returnTo) {
+            $response = $this->get(route('invoices.show', [
+                'invoice' => $invoice,
+                'return_to' => $returnTo,
+            ]))->assertOk();
+
+            $response
+                ->assertSee('href="'.$fallback.'"', false)
+                ->assertDontSee($returnTo, false);
+        }
+    }
+
+    public function test_draft_delete_preserves_a_valid_filtered_index_context(): void
+    {
+        $invoice = $this->invoice(['status' => 'draft', 'invoice_number' => 'INV-DELETE-RETURN']);
+        $indexUrl = route('invoices.index', [
+            'statuses' => ['draft'],
+            'search' => $invoice->invoice_number,
+            'page' => 2,
+        ]);
+        $indexReturnUrl = parse_url($indexUrl, PHP_URL_PATH).'?'.parse_url($indexUrl, PHP_URL_QUERY);
+
+        $this->delete(route('invoices.destroy', [
+            'invoice' => $invoice,
+            'return_to' => $indexReturnUrl,
+        ]))->assertRedirect($indexReturnUrl);
     }
 
     public function test_sorts_issue_date_descending(): void

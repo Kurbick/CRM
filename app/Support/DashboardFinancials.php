@@ -81,6 +81,10 @@ final class DashboardFinancials
                 'SUM(CASE WHEN invoices.due_date < ? AND '.self::REMAINING.' > 0 THEN 1 ELSE 0 END) AS overdue_count',
                 [$today]
             )
+            ->selectRaw(
+                'COALESCE(SUM(CASE WHEN invoices.due_date < ? AND '.self::REMAINING.' > 0 THEN '.self::REMAINING.' ELSE 0 END), 0) AS overdue_amount',
+                [$today]
+            )
             ->get()
             ->keyBy('company_id');
     }
@@ -104,6 +108,12 @@ final class DashboardFinancials
             ->tap(fn ($query) => $this->scopeInvoices($query))
             ->whereIn('invoices.status', self::ELIGIBLE_STATUSES)
             ->whereRaw(self::REMAINING.' > 0');
+    }
+
+    public function constrainOverdue(Builder|Relation $query, string $today): Builder|Relation
+    {
+        return $this->constrainOutstanding($query)
+            ->where('invoices.due_date', '<', $today);
     }
 
     public function addRemainingAmount(Builder|Relation $query): Builder|Relation

@@ -149,6 +149,59 @@ class DashboardFinancialCorrectnessTest extends FinancialTestCase
         $this->assertSame('998.00', number_format((float) $invoiceIndex->getCollection()->sum(fn (Invoice $invoice): float => $invoice->remaining_amount), 2, '.', ''));
     }
 
+    public function test_web_dashboard_overdue_breakdown_matches_the_canonical_overdue_filter(): void
+    {
+        $skyCell = $this->company('SkyCell');
+        $teleqraf = $this->company('Teleqraf Informasiya Agentliyi MMC');
+        $abc = $this->company('ABC');
+
+        $this->invoice($skyCell, '400.00', 'issued', now()->subDays(18)->toDateString());
+        $this->invoice($skyCell, '182.00', 'issued', now()->subDays(5)->toDateString());
+        $this->invoice($teleqraf, '416.00', 'issued', now()->subDays(7)->toDateString());
+        $this->invoice($abc, '242.00', 'issued', now()->subDays(3)->toDateString());
+
+        $dashboard = $this->get(route('dashboard'))->assertOk();
+        $breakdown = $dashboard->viewData('overdueBreakdown');
+
+        $this->assertSame(4, $dashboard->viewData('overview')['overdue_count']);
+        $this->assertSame('1240.00', number_format((float) $dashboard->viewData('overview')['overdue_amount'], 2, '.', ''));
+        $this->assertSame(['SkyCell', 'Teleqraf Informasiya Agentliyi MMC', 'ABC'], $breakdown->pluck('name')->all());
+        $this->assertSame(['582.00', '416.00', '242.00'], $breakdown->pluck('overdue_amount')->map(fn ($amount): string => number_format((float) $amount, 2, '.', ''))->all());
+        $this->assertSame('1240.00', number_format((float) $breakdown->sum('overdue_amount'), 2, '.', ''));
+
+        $dashboard
+            ->assertSee('Структура просрочки')
+            ->assertSee('Показать все просроченные')
+            ->assertSee('href="'.htmlspecialchars(route('companies.show', $skyCell), ENT_QUOTES, 'UTF-8').'"', false)
+            ->assertSee('href="'.htmlspecialchars(route('companies.show', $teleqraf), ENT_QUOTES, 'UTF-8').'"', false)
+            ->assertSee('href="'.htmlspecialchars(route('invoices.index', ['overdue' => 1]), ENT_QUOTES, 'UTF-8').'"', false);
+
+        $invoiceIndex = $this->get(route('invoices.index', ['overdue' => 1]))
+            ->assertOk()
+            ->viewData('invoices');
+        $this->assertSame(4, $invoiceIndex->total());
+        $this->assertSame('1240.00', number_format((float) $invoiceIndex->getCollection()->sum(fn (Invoice $invoice): float => $invoice->remaining_amount), 2, '.', ''));
+    }
+
+    public function test_overdue_breakdown_is_limited_to_the_seven_largest_companies(): void
+    {
+        foreach (range(1, 8) as $amount) {
+            $this->invoice(
+                $this->company(sprintf('Overdue Company %02d', $amount)),
+                number_format($amount * 100, 2, '.', ''),
+                'issued',
+                now()->subDay()->toDateString(),
+            );
+        }
+
+        $breakdown = $this->get(route('dashboard'))->assertOk()->viewData('overdueBreakdown');
+
+        $this->assertCount(7, $breakdown);
+        $this->assertSame('Overdue Company 08', $breakdown->first()['name']);
+        $this->assertSame('Overdue Company 02', $breakdown->last()['name']);
+        $this->assertFalse($breakdown->contains('name', 'Overdue Company 01'));
+    }
+
     public function test_zero_dashboard_debt_does_not_render_an_interactive_breakdown(): void
     {
         $dashboard = $this->get(route('dashboard'))->assertOk();
@@ -158,7 +211,10 @@ class DashboardFinancialCorrectnessTest extends FinancialTestCase
             ->assertSee('0.00 ₼')
             ->assertDontSee('data-testid="dashboard-financial-debt-trigger"', false)
             ->assertDontSee('data-testid="dashboard-debt-popover"', false)
-            ->assertDontSee('Структура долга');
+            ->assertDontSee('Структура долга')
+            ->assertDontSee('data-testid="dashboard-financial-overdue-trigger"', false)
+            ->assertDontSee('data-testid="dashboard-overdue-popover"', false)
+            ->assertDontSee('Структура просрочки');
     }
 
     public function test_company_financial_queries_remain_bounded_as_fixtures_grow(): void
