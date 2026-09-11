@@ -22,12 +22,14 @@ use App\Services\SubscriptionPeriodDebtCalculator;
 use App\Support\Access\PermissionName;
 use App\Support\CompanyActivityCategory;
 use App\Support\CompanyPageContext;
+use App\Support\DashboardFinancials;
 use App\Support\Navigation\AuthorizedLandingPage;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class CompanyController extends Controller
 {
@@ -226,6 +228,7 @@ class CompanyController extends Controller
         CompanyActivityQuery $activityQuery,
         CompanyActivityPresenter $activityPresenter,
         ActiveOrganizationContext $organizationContext,
+        DashboardFinancials $financials,
     ) {
         Gate::authorize('view', $company);
 
@@ -283,6 +286,36 @@ class CompanyController extends Controller
             $activeTab = 'contacts';
         }
 
+        $period = null;
+        $periodRouteParameters = ['company' => $company];
+        if ($canViewFinancials) {
+            $requestedPeriod = (string) $request->query('period', DashboardFinancials::PERIOD_THIS_MONTH);
+            $validatedPeriod = $request->validate([
+                'period' => ['nullable', Rule::in(DashboardFinancials::PERIOD_KEYS)],
+                'date_from' => [
+                    'nullable',
+                    'date',
+                    Rule::requiredIf($requestedPeriod === 'custom'),
+                ],
+                'date_to' => [
+                    'nullable',
+                    'date',
+                    Rule::requiredIf($requestedPeriod === 'custom'),
+                    'after_or_equal:date_from',
+                ],
+            ]);
+            $period = $financials->periodRange(
+                $validatedPeriod['period'] ?? DashboardFinancials::PERIOD_THIS_MONTH,
+                $validatedPeriod['date_from'] ?? null,
+                $validatedPeriod['date_to'] ?? null,
+                CarbonImmutable::today(),
+            );
+
+            if ($request->has('tab')) {
+                $periodRouteParameters['tab'] = $activeTab;
+            }
+        }
+
         $returnContext = $this->companyReturnContext($request);
 
         $activityCategory = null;
@@ -322,6 +355,9 @@ class CompanyController extends Controller
                 $canViewInvoices ? $company->invoices : null,
                 $organization,
             )->get($company->id);
+            $periodStats = $financials->periodOverview($period['from'], $period['to'], $company->id);
+            $stats['total_invoiced'] = round((float) $periodStats['total_invoiced'], 2);
+            $stats['total_paid'] = round((float) $periodStats['total_paid'], 2);
             $invoiceLines = InvoiceLine::query()
                 ->whereHas(
                     'invoice',
@@ -345,7 +381,7 @@ class CompanyController extends Controller
                 $oneTimeServiceDebts['totals']['overdue_remaining']
             );
 
-            $viewData += compact('stats', 'overdueRemaining');
+            $viewData += compact('stats', 'overdueRemaining', 'period', 'periodRouteParameters');
         }
 
         if ($canViewInvoices) {

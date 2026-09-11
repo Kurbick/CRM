@@ -13,7 +13,9 @@ use App\Services\BillingPeriodPreview;
 use App\Support\Access\PermissionName;
 use App\Support\DashboardFinancials;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 final class DashboardController extends Controller
@@ -21,6 +23,7 @@ final class DashboardController extends Controller
     private const MAX_FINANCIAL_BREAKDOWN_COMPANIES = 7;
 
     public function index(
+        Request $request,
         DashboardFinancials $financials,
         ActiveOrganizationContext $organizationContext,
         BillingPeriodPreview $billingPreview,
@@ -44,6 +47,28 @@ final class DashboardController extends Controller
         $abilities['company_invoices'] = $abilities['companies'] && $abilities['invoices'];
         $abilities['company_payments'] = $abilities['companies'] && $abilities['payments'];
 
+        $requestedPeriod = (string) $request->query('period', DashboardFinancials::PERIOD_THIS_MONTH);
+        $validatedPeriod = $request->validate([
+            'period' => ['nullable', Rule::in(DashboardFinancials::PERIOD_KEYS)],
+            'date_from' => [
+                'nullable',
+                'date',
+                Rule::requiredIf($requestedPeriod === 'custom'),
+            ],
+            'date_to' => [
+                'nullable',
+                'date',
+                Rule::requiredIf($requestedPeriod === 'custom'),
+                'after_or_equal:date_from',
+            ],
+        ]);
+        $period = $financials->periodRange(
+            $validatedPeriod['period'] ?? DashboardFinancials::PERIOD_THIS_MONTH,
+            $validatedPeriod['date_from'] ?? null,
+            $validatedPeriod['date_to'] ?? null,
+            CarbonImmutable::today(),
+        );
+
         $overview = [];
         $billingSummary = null;
         $financialDate = now()->toDateString();
@@ -54,15 +79,16 @@ final class DashboardController extends Controller
 
         if ($abilities['invoices'] || $abilities['payments']) {
             $financialOverview = $financials->overview($financialDate);
+            $periodOverview = $financials->periodOverview($period['from'], $period['to']);
 
             if ($abilities['invoices']) {
-                $overview['total_invoiced'] = $financialOverview['total_invoiced'];
+                $overview['total_invoiced'] = $periodOverview['total_invoiced'];
                 $overview['overdue_count'] = $financialOverview['overdue_count'];
                 $overview['overdue_amount'] = $financialOverview['overdue_amount'];
             }
 
             if ($abilities['payments']) {
-                $overview['total_paid'] = $financialOverview['total_paid'];
+                $overview['total_paid'] = $periodOverview['total_paid'];
             }
 
             if ($abilities['global_debt']) {
@@ -212,7 +238,8 @@ final class DashboardController extends Controller
             'debtBreakdown',
             'overdueBreakdown',
             'hasDomainBlocks',
-            'billingSummary'
+            'billingSummary',
+            'period'
         ));
     }
 }

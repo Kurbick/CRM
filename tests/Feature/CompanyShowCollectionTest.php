@@ -29,7 +29,7 @@ class CompanyShowCollectionTest extends CompanyFinancialTestCase
         $issued = $this->invoice($company, 'INV-ISSUED-COMPANY', 'issued', '250.00');
         $otherCompanyDraft = $this->invoice($this->company('Other Invoice Company'), 'INV-OTHER-DRAFT', 'draft', '999.00');
 
-        $response = $this->get(route('companies.show', ['company' => $company, 'tab' => 'invoices']))
+        $response = $this->get(route('companies.show', ['company' => $company, 'tab' => 'invoices', 'period' => 'all']))
             ->assertOk()
             ->assertSee($draft->invoice_number)
             ->assertSee($issued->invoice_number)

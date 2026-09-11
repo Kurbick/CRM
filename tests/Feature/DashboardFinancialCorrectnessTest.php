@@ -65,9 +65,9 @@ class DashboardFinancialCorrectnessTest extends FinancialTestCase
         $this->assertSame(2, $api['overdue_count']);
         $this->assertMoney('170.00', $api['overdue_amount']);
 
-        $web = $this->get(route('dashboard'))->assertOk()->viewData('overview');
+        $web = $this->get(route('dashboard', ['period' => 'all']))->assertOk()->viewData('overview');
         $this->assertMoney('800.00', $web['total_invoiced']);
-        $this->assertMoney('330.00', $web['total_paid']);
+        $this->assertMoney('340.00', $web['total_paid']);
         $this->assertMoney('470.00', $web['total_debt']);
         $this->assertSame(2, $web['overdue_count']);
         $this->assertMoney('170.00', $web['overdue_amount']);

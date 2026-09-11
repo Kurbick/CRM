@@ -182,7 +182,7 @@ class CompanySubscriptionPeriodDebtTest extends TestCase
         $this->allocate($period, '100.00', 'confirmed');
         $oneTime = $this->manualLine($company, 'Разработка сайта', '1200.00', '2099-08-20');
 
-        $this->get(route('companies.show', $company))
+        $this->get(route('companies.show', ['company' => $company, 'period' => 'all']))
             ->assertOk()
             ->assertSee('1,300.00 ₼')
             ->assertSee('100.00 ₼')

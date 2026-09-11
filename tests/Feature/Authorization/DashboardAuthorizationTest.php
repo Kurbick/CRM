@@ -198,7 +198,7 @@ class DashboardAuthorizationTest extends AuthorizationTestCase
         $administrator->assignRole(SystemRole::Administrator->value);
         $this->actingAs($administrator);
 
-        $oneCompanyCapture = $this->captureDashboardRequest();
+        $oneCompanyCapture = $this->captureDashboardRequest(['period' => 'all']);
         $oneCompanyCount = DomainQueryRecorder::count($oneCompanyCapture['records']);
         foreach (range(1, 9) as $number) {
             $company = $this->company('Dashboard query bound '.$number);
@@ -215,7 +215,7 @@ class DashboardAuthorizationTest extends AuthorizationTestCase
                 $this->dashboardPayment($invoice, 'confirmed', '10.00', now()->subDays($invoiceNumber)->toDateString());
             }
         }
-        $tenCompanyCount = DomainQueryRecorder::count($this->captureDashboardRequest()['records']);
+        $tenCompanyCount = DomainQueryRecorder::count($this->captureDashboardRequest(['period' => 'all'])['records']);
 
         $response = $oneCompanyCapture['result']->assertOk();
         $response
@@ -226,8 +226,8 @@ class DashboardAuthorizationTest extends AuthorizationTestCase
             ->assertSee('125.00')
             ->assertSee('Общий долг')
             ->assertSee('375.00');
-        $this->assertSame(7, $oneCompanyCount);
-        $this->assertSame(7, $tenCompanyCount);
+        $this->assertSame(9, $oneCompanyCount);
+        $this->assertSame(9, $tenCompanyCount);
     }
 
     public function test_global_financial_values_follow_canonical_invoice_settlement_semantics(): void
@@ -257,11 +257,11 @@ class DashboardAuthorizationTest extends AuthorizationTestCase
 
         $administrator = User::factory()->create();
         $administrator->assignRole(SystemRole::Administrator->value);
-        $response = $this->actingAs($administrator)->get(route('dashboard'))->assertOk();
+        $response = $this->actingAs($administrator)->get(route('dashboard', ['period' => 'all']))->assertOk();
         $overview = $response->viewData('overview');
 
         $this->assertSame('1500.00', number_format((float) $overview['total_invoiced'], 2, '.', ''));
-        $this->assertSame('600.00', number_format((float) $overview['total_paid'], 2, '.', ''));
+        $this->assertSame('1275.00', number_format((float) $overview['total_paid'], 2, '.', ''));
         $this->assertSame('900.00', number_format((float) $overview['total_debt'], 2, '.', ''));
         $this->assertSame(0, $overview['overdue_count']);
         $this->assertSame('0.00', number_format((float) $overview['overdue_amount'], 2, '.', ''));
@@ -391,10 +391,11 @@ class DashboardAuthorizationTest extends AuthorizationTestCase
     }
 
     /** @return array{result: mixed, records: list<array{sql: string, tables: list<string>}>} */
-    private function captureDashboardRequest(): array
+    /** @param array<string, scalar> $query */
+    private function captureDashboardRequest(array $query = []): array
     {
         return (new DomainQueryRecorder)->capture(
-            fn () => $this->get(route('dashboard'))
+            fn () => $this->get(route('dashboard', $query))
         );
     }
 }

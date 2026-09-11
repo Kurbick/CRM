@@ -3,7 +3,9 @@
 namespace App\Support;
 
 use App\Models\Invoice;
+use App\Models\Payment;
 use App\Services\ActiveOrganizationContext;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Collection;
@@ -14,6 +16,11 @@ final class DashboardFinancials
 
     /** @var list<string> */
     public const ELIGIBLE_STATUSES = ['issued', 'partially_paid', 'paid'];
+
+    public const PERIOD_THIS_MONTH = 'this_month';
+
+    /** @var list<string> */
+    public const PERIOD_KEYS = [self::PERIOD_THIS_MONTH, '3m', '6m', '1y', 'all', 'custom'];
 
     private const CONFIRMED_SETTLEMENT = "(
         SELECT COALESCE(SUM(dashboard_payments.amount), 0)
@@ -57,6 +64,82 @@ final class DashboardFinancials
             'total_debt' => $row->total_debt,
             'overdue_count' => (int) $row->overdue_count,
             'overdue_amount' => $row->overdue_amount,
+        ];
+    }
+
+    /**
+     * Resolve a dashboard period into inclusive calendar dates.
+     *
+     * @return array{key: string, from: ?string, to: ?string}
+     */
+    public function periodRange(
+        string $key,
+        ?string $dateFrom = null,
+        ?string $dateTo = null,
+        ?CarbonImmutable $today = null,
+    ): array {
+        $today ??= CarbonImmutable::today();
+
+        return match ($key) {
+            self::PERIOD_THIS_MONTH => [
+                'key' => self::PERIOD_THIS_MONTH,
+                'from' => $today->startOfMonth()->toDateString(),
+                'to' => $today->endOfMonth()->toDateString(),
+            ],
+            '3m' => $this->rollingMonthRange($key, $today, 3),
+            '6m' => $this->rollingMonthRange($key, $today, 6),
+            '1y' => $this->rollingMonthRange($key, $today, 12),
+            'all' => [
+                'key' => 'all',
+                'from' => null,
+                'to' => null,
+            ],
+            'custom' => [
+                'key' => 'custom',
+                'from' => CarbonImmutable::parse($dateFrom)->toDateString(),
+                'to' => CarbonImmutable::parse($dateTo)->toDateString(),
+            ],
+        };
+    }
+
+    /**
+     * Period-based totals intentionally remain separate from current-state debt metrics.
+     *
+     * @return array{total_invoiced: mixed, total_paid: mixed}
+     */
+    public function periodOverview(?string $dateFrom, ?string $dateTo, ?int $companyId = null): array
+    {
+        $invoiced = Invoice::query()
+            ->tap(fn ($query) => $this->scopeInvoices($query))
+            ->whereIn('invoices.status', self::ELIGIBLE_STATUSES)
+            ->when($companyId !== null, fn ($query) => $query->where('invoices.company_id', $companyId))
+            ->when($dateFrom !== null, fn ($query) => $query->whereDate('invoices.issue_date', '>=', $dateFrom))
+            ->when($dateTo !== null, fn ($query) => $query->whereDate('invoices.issue_date', '<=', $dateTo))
+            ->sum('invoices.total_amount');
+
+        $paid = Payment::query()
+            ->join('invoices', 'invoices.id', '=', 'payments.invoice_id')
+            ->tap(fn ($query) => $this->scopeInvoices($query))
+            ->whereIn('invoices.status', self::ELIGIBLE_STATUSES)
+            ->when($companyId !== null, fn ($query) => $query->where('invoices.company_id', $companyId))
+            ->where('payments.status', 'confirmed')
+            ->when($dateFrom !== null, fn ($query) => $query->whereDate('payments.payment_date', '>=', $dateFrom))
+            ->when($dateTo !== null, fn ($query) => $query->whereDate('payments.payment_date', '<=', $dateTo))
+            ->sum('payments.amount');
+
+        return [
+            'total_invoiced' => $invoiced,
+            'total_paid' => $paid,
+        ];
+    }
+
+    /** @return array{key: string, from: string, to: string} */
+    private function rollingMonthRange(string $key, CarbonImmutable $today, int $months): array
+    {
+        return [
+            'key' => $key,
+            'from' => $today->startOfMonth()->subMonths($months - 1)->toDateString(),
+            'to' => $today->endOfMonth()->toDateString(),
         ];
     }
 

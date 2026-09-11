@@ -59,7 +59,7 @@ class CompanyFinancialSummaryTest extends TestCase
         $summary = $this->showSummary($company);
 
         $this->assertSame(100.0, $summary['total_invoiced']);
-        $this->assertSame(100.0, $summary['total_paid']);
+        $this->assertSame(110.0, $summary['total_paid']);
         $this->assertSame(0.0, $summary['total_debt']);
         $this->assertSame(10.0, $summary['credit_balance']);
     }
@@ -72,7 +72,7 @@ class CompanyFinancialSummaryTest extends TestCase
         $this->payment($first, 'confirmed', 40);
         $this->payment($second, 'confirmed', 100);
 
-        $this->assertSummary($company, 180, 120, 60);
+        $this->assertSummary($company, 180, 140, 60);
     }
 
     public function test_companies_are_isolated_and_index_matches_show(): void
@@ -115,7 +115,7 @@ class CompanyFinancialSummaryTest extends TestCase
 
     private function showSummary(Company $company): array
     {
-        return $this->get(route('companies.show', $company))
+        return $this->get(route('companies.show', ['company' => $company, 'period' => 'all']))
             ->assertOk()
             ->viewData('stats');
     }

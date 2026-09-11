@@ -77,7 +77,15 @@
     @can('viewFinancials', $company)
     <section data-testid="company-financial-summary" class="mb-5 overflow-hidden border-y border-slate-200 bg-white">
         <div class="border-b border-slate-200 px-4 py-3">
-            <h2 class="text-sm font-semibold text-slate-900">{{ __('companies.financial.title') }}</h2>
+            <div class="flex items-start justify-between gap-4">
+                <h2 class="pt-0.5 text-sm font-semibold text-slate-900">{{ __('companies.financial.title') }}</h2>
+                @include('partials.period-selector', [
+                    'period' => $period,
+                    'routeName' => 'companies.show',
+                    'routeParameters' => $periodRouteParameters,
+                    'testIdPrefix' => 'company',
+                ])
+            </div>
         </div>
         <div>
             <dl class="grid divide-x divide-slate-200 {{ $stats['credit_balance'] > 0 ? 'grid-cols-2 sm:grid-cols-4 xl:grid-cols-5' : 'grid-cols-2 sm:grid-cols-4' }}">

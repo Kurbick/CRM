@@ -10,6 +10,20 @@ return [
         'companies' => 'Şirkətlər',
         'attention' => 'Diqqət tələb edir',
     ],
+    'period' => [
+        'trigger' => 'Dövr',
+        'options' => [
+            'this_month' => 'Bu ay',
+            '3m' => '3 ay',
+            '6m' => '6 ay',
+            '1y' => 'İl',
+            'all' => 'Bütün vaxt',
+            'custom' => 'Fərdi dövr',
+        ],
+        'from' => 'Başlanğıc',
+        'to' => 'Son',
+        'apply' => 'Tətbiq et',
+    ],
     'billing' => [
         'title' => 'Rəsmiləşdirilməlidir',
         'count' => ':count hesab :period üçün',

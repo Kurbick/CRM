@@ -18,7 +18,15 @@
     @if ($hasDomainBlocks)
         <div data-testid="dashboard-financial-summary" class="mb-8 overflow-visible border-y border-slate-200 bg-white">
             <div class="border-b border-slate-200 px-4 py-3 sm:px-5">
-                <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">{{ __('dashboard.sections.financial') }}</h2>
+                <div class="flex items-start justify-between gap-4">
+                    <h2 class="pt-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">{{ __('dashboard.sections.financial') }}</h2>
+                    @include('partials.period-selector', [
+                        'period' => $period,
+                        'routeName' => 'dashboard',
+                        'routeParameters' => [],
+                        'testIdPrefix' => 'dashboard',
+                    ])
+                </div>
             </div>
 
             <div class="grid grid-cols-1 divide-y divide-slate-200 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">

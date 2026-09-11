@@ -10,6 +10,20 @@ return [
         'companies' => 'Компании',
         'attention' => 'Требует внимания',
     ],
+    'period' => [
+        'trigger' => 'Период',
+        'options' => [
+            'this_month' => 'Этот месяц',
+            '3m' => '3 месяца',
+            '6m' => '6 месяцев',
+            '1y' => 'Год',
+            'all' => 'Всё время',
+            'custom' => 'Свой период',
+        ],
+        'from' => 'С даты',
+        'to' => 'По дату',
+        'apply' => 'Применить',
+    ],
     'billing' => [
         'title' => 'К выставлению',
         'count' => ':count счет за :period|:count счета за :period|:count счетов за :period',
